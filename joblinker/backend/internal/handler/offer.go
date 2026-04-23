@@ -18,7 +18,7 @@ func NewOfferHandler(svc *service.OfferService) *OfferHandler {
 }
 
 func (h *OfferHandler) Get(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	offer, err := h.svc.GetOffer(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Offer not found"})
@@ -28,7 +28,7 @@ func (h *OfferHandler) Get(c *gin.Context) {
 }
 
 func (h *OfferHandler) Respond(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	var req struct {
 		Response string `json:"response" binding:"required,oneof=accept decline negotiate"`
 	}

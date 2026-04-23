@@ -66,10 +66,11 @@ func main() {
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
 	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo)
 	messageSvc := service.NewMessageService(messageRepo, matchRepo, agentRepo)
-	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc)
-	offerSvc := service.NewOfferService(offerRepo, matchRepo)
 	securitySvc := service.NewSecurityService(securityRepo)
+	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)
+	offerSvc := service.NewOfferService(offerRepo, matchRepo, jobRepo, securitySvc)
 	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo)
+	adminHandler := handler.NewAdminHandler()
 
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
@@ -116,6 +117,9 @@ func main() {
 
 		api.POST("/privacy/export", privacyHandler.Export)
 		api.DELETE("/privacy/account", privacyHandler.DeleteAccount)
+
+		// Admin endpoints
+		api.GET("/admin/dashboard", adminHandler.GetDashboard)
 
 		// Messages WebSocket and REST
 		api.GET("/messages/:matchId/ws", messageHandler.HandleWebSocket)

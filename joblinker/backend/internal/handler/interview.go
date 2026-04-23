@@ -43,7 +43,7 @@ func (h *InterviewHandler) Create(c *gin.Context) {
 }
 
 func (h *InterviewHandler) Update(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

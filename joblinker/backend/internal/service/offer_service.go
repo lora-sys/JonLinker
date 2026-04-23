@@ -9,14 +9,23 @@ import (
 )
 
 type OfferService struct {
-	offerRepo *repository.OfferRepository
-	matchRepo *repository.MatchRepository
+	offerRepo   *repository.OfferRepository
+	matchRepo   *repository.MatchRepository
+	jobRepo     *repository.JobRepository
+	securitySvc *SecurityService
 }
 
-func NewOfferService(offerRepo *repository.OfferRepository, matchRepo *repository.MatchRepository) *OfferService {
+func NewOfferService(
+	offerRepo *repository.OfferRepository,
+	matchRepo *repository.MatchRepository,
+	jobRepo *repository.JobRepository,
+	securitySvc *SecurityService,
+) *OfferService {
 	return &OfferService{
-		offerRepo: offerRepo,
-		matchRepo: matchRepo,
+		offerRepo:   offerRepo,
+		matchRepo:   matchRepo,
+		jobRepo:     jobRepo,
+		securitySvc: securitySvc,
 	}
 }
 
@@ -35,6 +44,15 @@ func (s *OfferService) GenerateOffer(matchID uuid.UUID, compensationJSON string,
 		match.Status = model.MatchStatusOffered
 		s.matchRepo.Update(match)
 	}
+
+	if s.securitySvc != nil {
+		s.securitySvc.LogEvent(matchID, "offer_sent", map[string]interface{}{
+			"offer_id":     offer.ID.String(),
+			"compensation": compensationJSON,
+			"start_date":   startDate,
+		}, "")
+	}
+
 	return offer, nil
 }
 
@@ -52,6 +70,7 @@ func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Off
 	switch response {
 	case "accept":
 		offer.Status = model.OfferStatusAccepted
+		s.handleOfferAccepted(offer)
 	case "decline":
 		offer.Status = model.OfferStatusDeclined
 	case "negotiate":
@@ -60,7 +79,32 @@ func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Off
 	if err := s.offerRepo.Update(offer); err != nil {
 		return nil, err
 	}
+
+	if s.securitySvc != nil {
+		actionType := "offer_" + response
+		s.securitySvc.LogEvent(offer.MatchID, actionType, map[string]interface{}{
+			"offer_id": id.String(),
+			"response": response,
+		}, "")
+	}
+
 	return offer, nil
+}
+
+func (s *OfferService) handleOfferAccepted(offer *model.Offer) {
+	if s.jobRepo == nil {
+		return
+	}
+	match, err := s.matchRepo.GetByID(offer.MatchID)
+	if err != nil {
+		return
+	}
+	job, err := s.jobRepo.GetByID(match.JobID)
+	if err != nil {
+		return
+	}
+	job.Status = model.JobStatusFilled
+	s.jobRepo.Update(job)
 }
 
 func (s *OfferService) UpdateStatus(id uuid.UUID, status model.OfferStatus) (*model.Offer, error) {

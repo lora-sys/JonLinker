@@ -19,20 +19,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], headless: true },
     },
   ],
-  webServer: [
-    {
-      command: 'cd ../backend && ./server',
-      port: 8080,
-      reuse: true,
-      timeout: 30000,
-      reuseExistingServer: true,
-    },
-    {
+  webServer: {
       command: 'npm run dev',
       port: 3000,
-      reuse: true,
       timeout: 30000,
       reuseExistingServer: true,
-    },
-  ],
+  },
 });

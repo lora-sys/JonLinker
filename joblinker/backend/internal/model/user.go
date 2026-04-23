@@ -138,16 +138,17 @@ const (
 )
 
 type Interview struct {
-	ID          uuid.UUID        `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	MatchID     uuid.UUID        `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
-	ScheduledAt time.Time        `json:"scheduled_at" gorm:"not null"`
-	Format      InterviewFormat  `json:"format" gorm:"type:varchar(20);not null"`
-	Location    string           `json:"location" gorm:"size:500"`
-	Status      InterviewStatus `json:"status" gorm:"type:varchar(20);not null"`
-	Feedback    string           `json:"feedback" gorm:"type:jsonb"`
-	CreatedAt   time.Time        `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time        `json:"updated_at" gorm:"autoUpdateTime"`
-	Match       *Match           `json:"match,omitempty" gorm:"foreignKey:MatchID"`
+	ID           uuid.UUID        `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	MatchID      uuid.UUID        `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
+	ScheduledAt  time.Time        `json:"scheduled_at" gorm:"not null"`
+	Format       InterviewFormat  `json:"format" gorm:"type:varchar(20);not null"`
+	Location     string           `json:"location" gorm:"size:500"`
+	Status       InterviewStatus `json:"status" gorm:"type:varchar(20);not null"`
+	Feedback     string           `json:"feedback" gorm:"type:jsonb"`
+	ReminderSent bool             `json:"reminder_sent" gorm:"default:false"`
+	CreatedAt    time.Time        `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt    time.Time        `json:"updated_at" gorm:"autoUpdateTime"`
+	Match        *Match           `json:"match,omitempty" gorm:"foreignKey:MatchID"`
 }
 
 type OfferStatus string

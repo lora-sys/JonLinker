@@ -12,20 +12,27 @@ type InterviewService struct {
 	interviewRepo *repository.InterviewRepository
 	matchRepo     *repository.MatchRepository
 	messageSvc    *MessageService
+	securitySvc   *SecurityService
 }
 
-func NewInterviewService(interviewRepo *repository.InterviewRepository, matchRepo *repository.MatchRepository, messageSvc *MessageService) *InterviewService {
+func NewInterviewService(
+	interviewRepo *repository.InterviewRepository,
+	matchRepo *repository.MatchRepository,
+	messageSvc *MessageService,
+	securitySvc *SecurityService,
+) *InterviewService {
 	return &InterviewService{
 		interviewRepo: interviewRepo,
 		matchRepo:     matchRepo,
 		messageSvc:    messageSvc,
+		securitySvc:   securitySvc,
 	}
 }
 
 func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt string, format model.InterviewFormat, location string) (*model.Interview, error) {
 	interview := &model.Interview{
 		MatchID:     matchID,
-		ScheduledAt: parseTime(scheduledAt),
+		ScheduledAt: parseTimeStr(scheduledAt),
 		Format:      format,
 		Location:    location,
 		Status:      model.InterviewStatusScheduled,
@@ -33,6 +40,15 @@ func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt stri
 	if err := s.interviewRepo.Create(interview); err != nil {
 		return nil, err
 	}
+
+	if s.securitySvc != nil {
+		s.securitySvc.LogEvent(matchID, "interview_scheduled", map[string]interface{}{
+			"interview_id": interview.ID.String(),
+			"format":       format,
+			"location":     location,
+		}, "")
+	}
+
 	return interview, nil
 }
 
@@ -57,7 +73,7 @@ func (s *InterviewService) UpdateInterview(id uuid.UUID, updates map[string]inte
 	return interview, nil
 }
 
-func parseTime(s string) time.Time {
+func parseTimeStr(s string) time.Time {
 	t, _ := time.Parse(time.RFC3339, s)
 	return t
 }

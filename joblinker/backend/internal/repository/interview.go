@@ -2,6 +2,7 @@ package repository
 
 import (
 	"joblinker/internal/model"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -56,4 +57,21 @@ func (r *InterviewRepository) ListAll(limit, offset int) ([]*model.Interview, in
 
 func (r *InterviewRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Interview{}, "id = ?", id).Error
+}
+
+func (r *InterviewRepository) GetUpcomingReminders() ([]model.Interview, error) {
+	var interviews []model.Interview
+	now := time.Now()
+	reminderWindow := now.Add(24 * time.Hour)
+	if err := r.db.Where("status = ? AND scheduled_at BETWEEN ? AND ? AND reminder_sent = ?",
+		model.InterviewStatusScheduled, now, reminderWindow, false).
+		Preload("Match").
+		Find(&interviews).Error; err != nil {
+		return nil, err
+	}
+	return interviews, nil
+}
+
+func (r *InterviewRepository) MarkReminderSent(id uuid.UUID) error {
+	return r.db.Model(&model.Interview{}).Where("id = ?", id).Update("reminder_sent", true).Error
 }
