@@ -1,0 +1,148 @@
+package agent
+
+import (
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type State string
+
+const (
+	StateIdle          State = "idle"
+	StateSearching     State = "searching"
+	StateNegotiating   State = "negotiating"
+	StateInterviewing  State = "interviewing"
+	StateOfferReceived State = "offer_received"
+	StateHired         State = "hired"
+	StateRejected      State = "rejected"
+	StatePaused        State = "paused"
+)
+
+type Event string
+
+const (
+	EventStartSearch           Event = "START_SEARCH"
+	EventMatchFound           Event = "MATCH_FOUND"
+	EventInterestExpressed    Event = "INTEREST_EXPRESSED"
+	EventNegotiate            Event = "NEGOTIATE"
+	EventScheduleInterview    Event = "SCHEDULE_INTERVIEW"
+	EventInterviewComplete    Event = "INTERVIEW_COMPLETE"
+	EventOfferReceived        Event = "OFFER_RECEIVED"
+	EventOfferAccepted        Event = "OFFER_ACCEPTED"
+	EventOfferDeclined        Event = "OFFER_DECLINED"
+	EventPause                Event = "PAUSE"
+	EventResume               Event = "RESUME"
+	EventTimeout              Event = "TIMEOUT"
+	EventRejected             Event = "REJECTED"
+)
+
+type FSM struct {
+	agentID uuid.UUID
+	state   State
+	history []State
+}
+
+func NewFSM(agentID uuid.UUID) *FSM {
+	return &FSM{
+		agentID: agentID,
+		state:   StateIdle,
+		history: []State{StateIdle},
+	}
+}
+
+func (f *FSM) CurrentState() State {
+	return f.state
+}
+
+func (f *FSM) CanHandle(event Event) bool {
+	transitions := f.getTransitions()
+	_, exists := transitions[event]
+	return exists
+}
+
+func (f *FSM) Handle(event Event) error {
+	transitions := f.getTransitions()
+	nextState, exists := transitions[event]
+	if !exists {
+		return errors.New("invalid transition")
+	}
+
+	f.state = nextState
+	f.history = append(f.history, nextState)
+	return nil
+}
+
+func (f *FSM) getTransitions() map[Event]State {
+	switch f.state {
+	case StateIdle:
+		return map[Event]State{
+			EventStartSearch: StateSearching,
+			EventPause:      StatePaused,
+		}
+	case StateSearching:
+		return map[Event]State{
+			EventMatchFound:        StateNegotiating,
+			EventInterestExpressed: StateNegotiating,
+			EventPause:            StatePaused,
+			EventTimeout:          StateIdle,
+		}
+	case StateNegotiating:
+		return map[Event]State{
+			EventScheduleInterview: StateInterviewing,
+			EventOfferReceived:     StateOfferReceived,
+			EventRejected:          StateRejected,
+			EventPause:             StatePaused,
+			EventTimeout:           StateIdle,
+		}
+	case StateInterviewing:
+		return map[Event]State{
+			EventInterviewComplete: StateNegotiating,
+			EventOfferReceived:     StateOfferReceived,
+			EventRejected:          StateRejected,
+			EventPause:             StatePaused,
+			EventTimeout:           StateNegotiating,
+		}
+	case StateOfferReceived:
+		return map[Event]State{
+			EventOfferAccepted: StateHired,
+			EventOfferDeclined: StateRejected,
+			EventNegotiate:     StateNegotiating,
+		}
+	case StatePaused:
+		return map[Event]State{
+			EventResume: f.getPreviousState(),
+		}
+	default:
+		return map[Event]State{}
+	}
+}
+
+func (f *FSM) getPreviousState() State {
+	if len(f.history) < 2 {
+		return StateIdle
+	}
+	return f.history[len(f.history)-2]
+}
+
+type StateInfo struct {
+	State     State
+	EnteredAt time.Time
+	ExitedAt  time.Time
+	Event     Event
+}
+
+func (f *FSM) GetHistory() []StateInfo {
+	history := make([]StateInfo, 0, len(f.history))
+	for i, state := range f.history {
+		info := StateInfo{
+			State: state,
+		}
+		if i > 0 {
+			info.ExitedAt = time.Now()
+		}
+		history = append(history, info)
+	}
+	return history
+}
