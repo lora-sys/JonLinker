@@ -1,22 +1,31 @@
 package agent
 
 import (
+	"fmt"
+	"joblinker/pkg/ai"
 	"math/rand"
+	"strings"
 	"time"
 )
 
 type DecisionMaker struct {
 	confidence float64
+	aiClient   *ai.Client
 }
 
 func NewDecisionMaker() *DecisionMaker {
 	return &DecisionMaker{confidence: 0.8}
 }
 
+func NewDecisionMakerWithAI(client *ai.Client) *DecisionMaker {
+	return &DecisionMaker{confidence: 0.85, aiClient: client}
+}
+
 type Decision struct {
-	Action    string
-	Reason    string
+	Action     string
+	Reason     string
 	Confidence float64
+	AIUsed     bool
 }
 
 const (
@@ -98,6 +107,26 @@ func (dm *DecisionMaker) EvaluateOffer(msg *Message) Decision {
 }
 
 func (dm *DecisionMaker) EvaluateNegotiation(msg *Message) Decision {
+	if dm.aiClient != nil {
+		context := fmt.Sprintf("Negotiation for match ID: %s, Intent: %s", msg.Payload.Parameters.MatchID, msg.Payload.Intent)
+		if msg.Payload.Negotiation != nil && msg.Payload.Negotiation.Compensation != nil {
+			context += fmt.Sprintf(", Salary: %d", msg.Payload.Negotiation.Compensation.BaseSalary)
+		}
+		agentType := "recruiter"
+		if msg.Payload.Parameters.Role == "employer" {
+			agentType = "job_seeker"
+		}
+		response, err := dm.aiClient.GenerateAgentResponse(context, agentType)
+		if err == nil && response != "" {
+			return Decision{
+				Action:     dm.parseAIResponseAction(response),
+				Reason:     response,
+				Confidence: 0.85,
+				AIUsed:     true,
+			}
+		}
+	}
+
 	r := rand.Float64()
 	if r < 0.3 {
 		return Decision{
@@ -118,6 +147,23 @@ func (dm *DecisionMaker) EvaluateNegotiation(msg *Message) Decision {
 		Reason:    "Waiting for updated offer",
 		Confidence: 0.5,
 	}
+}
+
+func (dm *DecisionMaker) parseAIResponseAction(response string) string {
+	lower := strings.ToLower(response)
+	if strings.Contains(lower, "accept") || strings.Contains(lower, "agree") {
+		return ActionAccept
+	}
+	if strings.Contains(lower, "counter") || strings.Contains(lower, "negotiate") {
+		return ActionNegotiate
+	}
+	if strings.Contains(lower, "decline") || strings.Contains(lower, "reject") {
+		return ActionDecline
+	}
+	if strings.Contains(lower, "wait") || strings.Contains(lower, "delay") {
+		return ActionWait
+	}
+	return ActionNegotiate
 }
 
 func (dm *DecisionMaker) MakeDecision(msg *Message) Decision {
@@ -147,4 +193,11 @@ func (dm *DecisionMaker) MakeDecision(msg *Message) Decision {
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+func (dm *DecisionMaker) EvaluateMatchWithAI(seekerProfile, jobDescription string) (float64, string, error) {
+	if dm.aiClient == nil {
+		return 0.5, "AI client not available", nil
+	}
+	return dm.aiClient.EvaluateMatch(seekerProfile, jobDescription)
 }

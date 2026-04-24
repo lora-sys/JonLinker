@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"joblinker/internal/handler"
@@ -22,6 +23,9 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
+	// Load .env file if present (parent dir where .env lives)
+	godotenv.Load("../.env")
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(os.Stdout)
 

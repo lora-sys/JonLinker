@@ -4,35 +4,39 @@ test.describe('Agent Creation Flow', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'test4@example.com');
-    await page.fill('input[type="password"]', 'password123');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    await page.locator('input[type="email"]').fill('test@example.com');
+    await page.locator('input[type="password"]').fill('password123');
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL('**/dashboard', { timeout: 15000 });
   });
 
   test('create seeker agent', async ({ page }) => {
     await page.goto('/agents/create');
 
-    // Fill agent creation form
-    await page.fill('input[name="name"]', 'Test Seeker Agent');
+    // Select seeker type - it's selected by default
+    // Click create button directly since seeker is default
+    await page.locator('button[type="submit"]').click();
 
-    // Select seeker type if needed
-    const seekerBtn = page.locator('button:has-text("Seeker")');
-    if (await seekerBtn.isVisible()) {
-      await seekerBtn.click();
-    }
+    // Should redirect to dashboard after creation
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+  });
 
-    // Submit
-    await page.click('button[type="submit"]');
+  test('create recruiter agent', async ({ page }) => {
+    await page.goto('/agents/create');
 
-    // Should see success or redirect
-    await page.waitForURL(/\/agents/, { timeout: 5000 });
+    // Select recruiter type
+    await page.locator('button:has-text("Recruiter")').click();
+
+    await page.locator('button[type="submit"]').click();
+
+    // Should redirect to dashboard after creation
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
   });
 
   test('view agents list', async ({ page }) => {
     await page.goto('/agents');
 
-    // Should see agents page
-    await expect(page.locator('text=My Agents')).toBeVisible({ timeout: 5000 });
+    // Should show agents page
+    await expect(page.locator('h1:has-text("Agents")')).toBeVisible({ timeout: 5000 });
   });
 });

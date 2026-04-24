@@ -1,20 +1,21 @@
 'use client';
 
-import { HTMLAttributes, forwardRef } from 'react';
+import React, { HTMLAttributes, forwardRef, memo } from 'react';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'outlined' | 'elevated';
   padding?: 'none' | 'sm' | 'md' | 'lg';
+  hover?: boolean;
 }
 
-export const Card = forwardRef<HTMLDivElement, CardProps>(
+const CardComponent = forwardRef<HTMLDivElement, CardProps>(
   (
-    { className = '', variant = 'default', padding = 'md', children, ...props },
+    { className = '', variant = 'default', padding = 'md', hover = true, children, ...props },
     ref
   ) => {
     const variants = {
-      default: 'bg-white border border-gray-200',
-      outlined: 'bg-white border-2 border-gray-300',
+      default: 'bg-white border border-slate-200',
+      outlined: 'bg-white border-2 border-slate-300',
       elevated: 'bg-white shadow-lg',
     };
 
@@ -25,10 +26,14 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       lg: 'p-6',
     };
 
+    const hoverClasses = hover
+      ? 'cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]'
+      : '';
+
     return (
       <div
         ref={ref}
-        className={`rounded-xl ${variants[variant]} ${paddings[padding]} ${className}`}
+        className={`rounded-xl ${variants[variant]} ${paddings[padding]} ${hoverClasses} ${className}`}
         {...props}
       >
         {children}
@@ -37,4 +42,9 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
   }
 );
 
-Card.displayName = 'Card';
+CardComponent.displayName = 'Card';
+
+const Card = memo(CardComponent);
+
+export { Card };
+export default Card;
