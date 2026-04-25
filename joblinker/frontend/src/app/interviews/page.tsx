@@ -63,62 +63,64 @@ export default function InterviewsPage() {
   const scheduledInterviews = MOCK_INTERVIEWS.filter(i => i.status === 'scheduled');
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6" style={{ fontFamily: 'Plus Jakarta Sans, sans-serif' }}>Interviews</h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold text-slate-900 mb-6">Interviews</h1>
 
-      {scheduledInterviews.length === 0 ? (
-        <Card className="p-10 text-center">
-          <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">No interviews scheduled</h2>
-          <p className="text-slate-500">Interviews will appear here once matches progress to that stage</p>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {/* Timeline View */}
-          <div className="relative">
-            <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-slate-200" />
-            <div className="space-y-6">
-              {scheduledInterviews.map((interview, index) => (
-                <div key={interview.id} className="relative flex gap-4">
-                  {/* Timeline Dot */}
-                  <div className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center ${typeColors[interview.type]}`}>
-                    {typeIcons[interview.type]}
-                  </div>
-
-                  {/* Content Card */}
-                  <Card hover className="flex-1 p-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h3 className="font-semibold text-slate-900">{interview.role}</h3>
-                        <p className="text-sm text-slate-600">{interview.company}</p>
-                      </div>
-                      <Badge status="pending">{interview.status}</Badge>
-                    </div>
-
-                    {/* Countdown Timer */}
-                    <div className="flex items-center gap-2 text-sm text-slate-500 mb-3">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <Countdown targetDate={interview.scheduledAt} showLabels />
-                    </div>
-
-                    {/* Interview Type Label */}
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600 capitalize">
+        {scheduledInterviews.length === 0 ? (
+          <Card className="p-10 text-center bg-white/80 backdrop-blur-xl border border-white/20">
+            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">No interviews scheduled</h2>
+            <p className="text-slate-500">Interviews will appear here once matches progress to that stage</p>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {/* Timeline View */}
+            <div className="relative">
+              <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-slate-200" />
+              <div className="space-y-6">
+                {scheduledInterviews.map((interview, index) => (
+                  <div key={interview.id} className="relative flex gap-4">
+                    {/* Timeline Dot */}
+                    <div className={`relative z-10 w-12 h-12 rounded-full flex items-center justify-center ${typeColors[interview.type]}`}>
                       {typeIcons[interview.type]}
-                      {interview.type} Interview
-                    </span>
-                  </Card>
-                </div>
-              ))}
+                    </div>
+
+                    {/* Content Card */}
+                    <Card hover className="flex-1 p-5 bg-white/80 backdrop-blur-xl border border-white/20">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-slate-900">{interview.role}</h3>
+                          <p className="text-sm text-slate-600">{interview.company}</p>
+                        </div>
+                        <Badge status="pending">{interview.status}</Badge>
+                      </div>
+
+                      {/* Countdown Timer */}
+                      <div className="flex items-center gap-2 text-sm text-slate-500 mb-3">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <Countdown targetDate={interview.scheduledAt} showLabels />
+                      </div>
+
+                      {/* Interview Type Label */}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-600 capitalize">
+                        {typeIcons[interview.type]}
+                        {interview.type} Interview
+                      </span>
+                    </Card>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

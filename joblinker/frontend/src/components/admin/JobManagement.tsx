@@ -29,7 +29,7 @@ export function JobManagement({
   onUpdateRequirements,
 }: JobManagementProps) {
   const statusColors: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-800',
+    draft: 'bg-slate-100 text-slate-800',
     active: 'bg-green-100 text-green-800',
     paused: 'bg-yellow-100 text-yellow-800',
     filled: 'bg-blue-100 text-blue-800',
@@ -50,26 +50,26 @@ export function JobManagement({
 
   return (
     <Card variant="outlined" padding="none">
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Job Management</h3>
+      <div className="p-4 border-b border-slate-200">
+        <h3 className="text-lg font-semibold text-slate-900">Job Management</h3>
       </div>
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-slate-100">
         {jobs.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-slate-500">
             No jobs found
           </div>
         ) : (
           jobs.map((job) => (
-            <div key={job.id} className="p-4 hover:bg-gray-50 transition-colors">
+            <div key={job.id} className="p-4 hover:bg-slate-50 transition-colors">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-medium text-gray-900">{job.title}</h4>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColors[job.status] || 'bg-gray-100 text-gray-800'}`}>
+                    <h4 className="font-medium text-slate-900">{job.title}</h4>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColors[job.status] || 'bg-slate-100 text-slate-800'}`}>
                       {job.status}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-slate-500 mt-1">
                     Created {formatDate(job.created_at)}
                   </p>
                 </div>

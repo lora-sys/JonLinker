@@ -42,27 +42,27 @@ export default function AdminPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
+      <header className="bg-white/80 backdrop-blur-xl border-b border-white/20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         <section className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Overview</h2>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Overview</h2>
           <MetricsPanel metrics={data.metrics} />
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Jobs</h2>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Jobs</h2>
             <JobManagement jobs={data.jobs} />
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Agents</h2>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Agents</h2>
             <AgentManagement agents={data.agents} />
           </section>
         </div>
