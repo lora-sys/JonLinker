@@ -56,3 +56,5 @@ coverage/
 
 # Chroma
 chroma/
+
+./test-results

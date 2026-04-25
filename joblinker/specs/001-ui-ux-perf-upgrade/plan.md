@@ -1,174 +1,104 @@
-# Implementation Plan: JobLinker UI/UX Upgrade + Performance
+# Implementation Plan: [FEATURE]
 
-**Branch**: `001-ui-ux-perf-upgrade`
-**Date**: 2026-04-23
-**Spec**: specs/001-ui-ux-perf-upgrade/spec.md
-**Type**: Frontend-only enhancement
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Upgrade JobLinker frontend UI/UX with polished flat design, animated interactions, and performance optimizations targeting Lighthouse UI >95, FCP <1.5s, CLS <0.05.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-| Aspect | Value |
-|--------|-------|
-| **Language** | TypeScript (Next.js 16) |
-| **Framework** | Next.js 16 + React 19 |
-| **Styling** | Tailwind CSS v4 |
-| **State** | Zustand v5 |
-| **Icons** | Heroicons (inline SVG) |
-| **Virtualization** | @tanstack/react-virtual |
-| **Performance** | FCP <1.5s, CLS <0.05, FID <100ms |
-| **Accessibility** | WCAG AA, Lighthouse >90 |
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
 
-### Design System
-- **Primary**: #0369A1 (blue-600)
-- **Background**: #F0F9FF (sky-50)
-- **Surface**: #FFFFFF
-- **Border**: #E2E8F0 (slate-200)
-- **Text**: #0C4A6E (blue-800)
-- **Font**: Plus Jakarta Sans
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
-## Phase 1: Shared UI Components (P1)
+## Constitution Check
 
-### New Files: `frontend/src/components/ui/`
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-| Component | File | Features |
-|-----------|------|----------|
-| Card | Card.tsx | Hover lift (translate-y-0.5, shadow-md), active scale, cursor-pointer |
-| Button | Button.tsx | Variants: primary, secondary, ghost, destructive |
-| Badge | Badge.tsx | Status: active(green), paused(gray), pending(yellow), negotiating(blue), hired |
-| Skeleton | Skeleton.tsx | Pulse animation for loading |
-| Avatar | Avatar.tsx | Agent type icon (bot/person) |
-| StatusDot | StatusDot.tsx | Animated pulse for active status |
-| SkillTag | SkillTag.tsx | Colored skill pills |
-| ScoreBar | ScoreBar.tsx | Progress bar with color thresholds (>80% green, 50-80% yellow, <50% red) |
+[Gates determined based on constitution file]
 
-## Phase 2: Dashboard (P1)
+## Project Structure
 
-**File**: `frontend/src/app/dashboard/page.tsx`
+### Documentation (this feature)
 
-- Animated stat counters (CSS animation, 500ms ease-out)
-- FAB (Floating Action Button) for quick actions
-- Status pulse indicator for active agents
-
-## Phase 3: Agents Page (P1)
-
-**File**: `frontend/src/app/agents/page.tsx`
-
-- Skill tags as colored pills
-- Agent type avatars
-- Status dot with pulse animation
-- Hover lift effect on cards
-
-## Phase 4: Matches Page (P1)
-
-**File**: `frontend/src/app/matches/page.tsx`
-
-- Match score progress bar with color coding
-- Confirm/Decline action buttons on hover
-
-## Phase 5: Jobs Page (P2)
-
-**File**: `frontend/src/app/jobs/page.tsx`
-
-- Sticky search + filter bar
-- Client-side filtering (no API call)
-- Sort dropdown
-
-## Phase 6: Messages Page (P2)
-
-**File**: `frontend/src/app/messages/page.tsx`
-
-- Unread count badge
-- WebSocket connection status indicator
-- Typing indicator
-
-## Phase 7: Interviews Page (P2)
-
-**File**: `frontend/src/app/interviews/page.tsx`
-
-- Interview type icons (video/phone/onsite)
-- Countdown timer for upcoming
-- Timeline view with status progression
-
-## Phase 8: Offers Page (P2)
-
-**File**: `frontend/src/app/offers/page.tsx`
-
-- Compensation breakdown card
-- Accept/Negotiate/Decline three-button group
-- Expiration countdown
-
-## Phase 9: Performance (P1)
-
-| Optimization | Implementation |
-|--------------|----------------|
-| Suspense | Wrap page content with skeleton fallback |
-| React.memo | Memoize card components |
-| Virtualization | @tanstack/react-virtual for lists >20 items |
-| Dynamic imports | `dynamic()` for heavy components |
-
-## Implementation Order
-
-```
-Phase 1 (Shared Components) → Phase 2 (Dashboard) → Phase 3 (Agents)
-    → Phase 4 (Matches) → Phase 5 (Jobs) → Phase 6 (Messages)
-    → Phase 7 (Interviews) → Phase 8 (Offers) → Phase 9 (Performance)
+```text
+specs/[###-feature]/
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
-## Files to Create
+### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
+```text
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
+
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
-frontend/src/components/ui/
-├── Card.tsx
-├── Button.tsx
-├── Badge.tsx
-├── Skeleton.tsx
-├── Avatar.tsx
-├── StatusDot.tsx
-├── SkillTag.tsx
-├── ScoreBar.tsx
-├── FAB.tsx
-├── UnreadBadge.tsx
-├── ConnectionStatus.tsx
-├── TypingIndicator.tsx
-├── Countdown.tsx
-├── CompensationCard.tsx
-├── NegotiateSlider.tsx
-└── VirtualList.tsx
-```
 
-## Files to Modify
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
-```
-frontend/src/app/
-├── dashboard/page.tsx
-├── agents/page.tsx
-├── matches/page.tsx
-├── jobs/page.tsx
-├── messages/page.tsx
-├── interviews/page.tsx
-└── offers/page.tsx
-```
+## Complexity Tracking
 
-## Dependencies
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-```json
-{
-  "@tanstack/react-virtual": "^3.x"
-}
-```
-
-## Success Metrics
-
-| Metric | Target |
-|--------|--------|
-| Lighthouse UI | > 95 |
-| FCP | < 1.5s |
-| CLS | < 0.05 |
-| FID | < 100ms |
-| Accessibility | > 90 |
-| cursor-pointer | 100% of interactive elements |
-| Focus states | Visible on all inputs |
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

@@ -13,9 +13,12 @@
   "dependencies": {
     "@tanstack/react-query": "^5.60.0",
     "@tanstack/react-virtual": "^3.13.24",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
