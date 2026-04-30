@@ -16,12 +16,12 @@ import (
 )
 
 type MessageQueueService struct {
-	rmq          *rabbitmq.RabbitMQ
-	messageRepo  *repository.MessageRepository
-	matchRepo    *repository.MatchRepository
-	agentRepo    *repository.AgentRepository
-	jobRepo      *repository.JobRepository
-	aiClient     *ai.Client
+	rmq         *rabbitmq.RabbitMQ
+	messageRepo *repository.MessageRepository
+	matchRepo   *repository.MatchRepository
+	agentRepo   *repository.AgentRepository
+	jobRepo     *repository.JobRepository
+	aiClient    *ai.Client
 }
 
 func NewMessageQueueService(
@@ -113,59 +113,105 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 }
 
 type AutoResponse struct {
-	Intent   string
-	Payload  map[string]interface{}
+	Intent  string
+	Payload map[string]interface{}
 }
 
 func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
 	// Get job and agent details for context
-	var jobDesc string
-	var seekerSkills []string
+	var jobTitle, jobLocation string
+	var salaryMin, salaryMax int
+	var jobSkills []string
 
 	if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
-		jobDesc = job.StructuredJSON
-	}
-	if seeker, err := s.agentRepo.GetByID(match.SeekerAgentID); err == nil {
-		var config map[string]interface{}
-		if json.Unmarshal([]byte(seeker.ConfigJSON), &config) == nil {
-			if skills, ok := config["skills"].([]interface{}); ok {
-				for _, s := range skills {
-					seekerSkills = append(seekerSkills, fmt.Sprintf("%v", s))
+		// Parse structured job data
+		var jobData map[string]interface{}
+		if json.Unmarshal([]byte(job.StructuredJSON), &jobData) == nil {
+			if title, ok := jobData["title"].(string); ok {
+				jobTitle = title
+			}
+			if location, ok := jobData["location"].(string); ok {
+				jobLocation = location
+			}
+			if min, ok := jobData["salary_min"].(float64); ok {
+				salaryMin = int(min)
+			}
+			if max, ok := jobData["salary_max"].(float64); ok {
+				salaryMax = int(max)
+			}
+			if skills, ok := jobData["skills"].([]interface{}); ok {
+				for _, skill := range skills {
+					if s, ok := skill.(string); ok {
+						jobSkills = append(jobSkills, s)
+					}
 				}
 			}
 		}
 	}
-	// Generate AI response
-	log.Printf("DEBUG: Calling AI client with BaseURL=%s, APIKeyLen=%d", s.aiClient.BaseURL, len(s.aiClient.APIKey))
+
+	var seekerSkills []string
+	if seeker, err := s.agentRepo.GetByID(match.SeekerAgentID); err == nil {
+		var config map[string]interface{}
+		if json.Unmarshal([]byte(seeker.ConfigJSON), &config) == nil {
+			if skills, ok := config["skills"].([]interface{}); ok {
+				for _, skill := range skills {
+					if s, ok := skill.(string); ok {
+						seekerSkills = append(seekerSkills, s)
+					}
+				}
+			}
+		}
+	}
 
 	// Get conversation context for better responses
 	conversationContext := s.buildAgentContext(msg, match)
 
-	prompt := fmt.Sprintf(`You are an AI recruitment agent in an A2A (Agent-to-Agent) recruitment platform.
-Current intent from incoming message: %s
+	// Enhanced prompt with professional tone and job details
+	prompt := fmt.Sprintf(`You are a professional AI recruitment agent in an A2A (Agent-to-Agent) recruitment platform.
 
+## Current Conversation State
+- Incoming intent: %s
+- Your role: %s
+
+## Conversation History
 %s
 
-Job details (use these to personalize your response):
-%s
+## Job Details (include in response when relevant)
+- Position: %s
+- Location: %s
+- Salary Range: $%d - $%d
+- Required Skills: %v
 
-Your role: %s
+## Candidate Profile
+- Skills: %v
 
-IMPORTANT: You must respond with ONLY a valid JSON object in this exact format (no markdown, no explanation):
-{"intent":"ONE_OF:[INTRODUCTION,INTEREST,NEGOTIATION,OFFER,CONFIRM,SCHEDULE,INQUIRY],"message":"Your professional response message here","data":{"title":"Job title if relevant","location":"Job location if relevant","salary_min":number,"salary_max":number,"skills":["skill1","skill2"],"message":"Short message for display"}}
+## Response Requirements
+You MUST respond with ONLY a valid JSON object (no markdown, no explanation):
+{"intent":"ONE_OF:[INTRODUCTION,INTEREST,NEGOTIATION,OFFER,CONFIRM,SCHEDULE,INQUIRY]","message":"Your professional response message here","data":{"title":"Job title if relevant","location":"Job location if relevant","salary_min":number,"salary_max":number,"skills":["skill1","skill2"],"message":"Short message for display"}}
 
-The intent should progress the conversation naturally. For example:
-- If intent is INQUIRY -> respond with INTRODUCTION and include job details
-- If intent is INTRODUCTION -> respond with INTEREST
-- If intent is INTEREST -> respond with NEGOTIATION and include salary details
-- If intent is NEGOTIATION -> respond with OFFER
-- If intent is OFFER -> respond with CONFIRM
-- If intent is SCHEDULE -> respond with CONFIRM
+## Intent Progression Rules
+- INQUIRY -> respond with INTRODUCTION, include job details (title, salary, location, skills)
+- INTRODUCTION -> respond with INTEREST, acknowledge candidate background
+- INTEREST -> respond with NEGOTIATION, discuss salary/benefits if appropriate
+- NEGOTIATION -> respond with OFFER, present formal offer terms
+- OFFER -> respond with CONFIRM or DECLINE
+- SCHEDULE -> respond with CONFIRM with interview details
+
+## Professional Tone Guidelines
+- Be concise but informative
+- Use natural language, avoid robotic phrasing
+- Include specific details (salary numbers, location, skills) when relevant
+- For off-hours messages, acknowledge timing professionally
 `,
 		msg.Intent,
+		senderAgent.Type,
 		conversationContext,
-		jobDesc,
-		senderAgent.Type)
+		jobTitle,
+		jobLocation,
+		salaryMin,
+		salaryMax,
+		jobSkills,
+		seekerSkills)
 
 	response, err := s.aiClient.Chat(
 		"You are a professional AI recruitment agent.",

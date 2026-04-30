@@ -22,6 +22,7 @@ export function useChat({ matchId, enabled = true }: UseChatOptions) {
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttempts = useRef(0);
 
   // Fetch conversation history
   const fetchMessages = async () => {
@@ -106,9 +107,15 @@ export function useChat({ matchId, enabled = true }: UseChatOptions) {
 
     ws.onclose = () => {
       setIsConnected(false);
-      // Auto reconnect after 3 seconds
+      // Auto reconnect with exponential backoff (max 30s)
       if (enabled) {
-        reconnectTimeoutRef.current = setTimeout(connect, 3000);
+        const baseDelay = 1000;
+        const maxDelay = 30000;
+        const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.current), maxDelay);
+        reconnectAttempts.current++;
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, delay) as unknown as NodeJS.Timeout;
       }
     };
 
@@ -158,6 +165,7 @@ export function useChat({ matchId, enabled = true }: UseChatOptions) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    reconnectAttempts.current = 0;
     setIsConnected(false);
   };
 
