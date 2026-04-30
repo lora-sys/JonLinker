@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Plus } from 'lucide-react';
 
 interface FABProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
@@ -9,8 +10,8 @@ interface FABProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const positionClasses = {
-  'bottom-right': 'bottom-6 right-6',
-  'bottom-left': 'bottom-6 left-6',
+  'bottom-right': 'bottom-6 right-6 md:bottom-8 md:right-8',
+  'bottom-left': 'bottom-6 left-6 md:bottom-8 md:left-8',
   'bottom-center': 'bottom-6 left-1/2 -translate-x-1/2',
 };
 
@@ -38,11 +39,7 @@ export default function FAB({
       aria-label={label || 'Floating action button'}
       {...props}
     >
-      {icon || (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-      )}
+      {icon || <Plus className="w-6 h-6" />}
     </button>
   );
 }

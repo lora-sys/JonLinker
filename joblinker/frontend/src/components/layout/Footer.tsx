@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+
 export function Footer() {
   const currentYear = new Date().getFullYear();
 
@@ -7,8 +9,13 @@ export function Footer() {
     <footer className="bg-white border-t border-gray-200 py-6">
       <div className="px-6 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm text-gray-500">
-          <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center">
-            <span className="text-white font-bold text-xs">JL</span>
+          <div className="relative w-6 h-6">
+            <Image
+              src="/logo.png"
+              alt="JobLinker"
+              fill
+              className="object-contain"
+            />
           </div>
           <span>JobLinker {currentYear}</span>
         </div>

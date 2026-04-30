@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 interface Beam {
   x: number;
@@ -12,16 +12,21 @@ interface Beam {
 
 export function BackgroundBeams() {
   const [beams, setBeams] = useState<Beam[]>([]);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    const newBeams = Array.from({ length: 6 }, () => ({
+    const newBeams = Array.from({ length: prefersReducedMotion ? 2 : 6 }, () => ({
       x: Math.random() * 100,
       delay: Math.random() * 5,
       duration: 10 + Math.random() * 10,
       height: 100 + Math.random() * 200,
     }));
     setBeams(newBeams);
-  }, []);
+  }, [prefersReducedMotion]);
+
+  if (prefersReducedMotion) {
+    return null; // Skip animation entirely
+  }
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">

@@ -1,5 +1,3 @@
-'use client';
-
 import React, { HTMLAttributes, forwardRef, memo } from 'react';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {

@@ -7,11 +7,16 @@ interface Interview {
   match_id: string;
   scheduled_at: string;
   format: string;
-  location: string;
+  location?: string;
   status: string;
   match?: {
     job?: {
       title?: string;
+      agent?: {
+        user?: {
+          email?: string;
+        };
+      };
     };
     seeker_agent?: {
       user?: {
@@ -110,6 +115,27 @@ export function InterviewCard({
                   {interview.location}
                 </span>
               )}
+            </div>
+            {/* Participant names */}
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="text-xs text-gray-600">
+                  <span className="font-medium">Seeker:</span>{' '}
+                  {interview.match?.seeker_agent?.user?.email || 'Unknown'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <span className="text-xs text-gray-600">
+                  <span className="font-medium">Recruiter:</span>{' '}
+                  {interview.match?.job?.agent?.user?.email || 'Unknown'}
+                </span>
+              </div>
             </div>
           </div>
         </div>

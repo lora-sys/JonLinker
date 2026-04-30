@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 
@@ -19,12 +21,17 @@ export function Header() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">JL</span>
+        <Link href="/" className="flex items-center gap-2">
+          <div className="relative w-8 h-8">
+            <Image
+              src="/logo.png"
+              alt="JobLinker"
+              fill
+              className="object-contain"
+            />
           </div>
           <span className="font-semibold text-gray-900">JobLinker</span>
-        </div>
+        </Link>
       </div>
 
       <div className="flex items-center gap-4">

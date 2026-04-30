@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'error';
+type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'error' | 'reconnecting' | 'failed';
 
 interface ConnectionStatusProps extends React.HTMLAttributes<HTMLDivElement> {
   state?: ConnectionState;
@@ -14,6 +14,8 @@ const stateConfig: Record<ConnectionState, { color: string; label: string; anima
   connecting: { color: 'bg-yellow-500', label: 'Connecting...', animate: true },
   disconnected: { color: 'bg-slate-400', label: 'Disconnected' },
   error: { color: 'bg-red-500', label: 'Connection error' },
+  reconnecting: { color: 'bg-amber-500', label: 'Reconnecting...', animate: true },
+  failed: { color: 'bg-red-500', label: 'Connection failed' },
 };
 
 export default function ConnectionStatus({

@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 
 type AgentType = 'bot' | 'person' | 'seeker' | 'recruiter';
