@@ -9,7 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte(getEnv("JWT_SECRET", "joblinker-dev-secret-change-in-production"))
+var JwtSecret = []byte(getEnv("JWT_SECRET", "joblinker-dev-secret-change-in-production"))
 
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -30,7 +30,7 @@ func Auth() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return jwtSecret, nil
+			return JwtSecret, nil
 		})
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})

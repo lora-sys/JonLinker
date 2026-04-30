@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 
@@ -13,6 +14,7 @@ import (
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/internal/service"
+	"joblinker/pkg/rabbitmq"
 )
 
 func getEnv(key, fallback string) string {
@@ -23,8 +25,12 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
-	// Load .env file if present (parent dir where .env lives)
-	godotenv.Load("../.env")
+	// Load .env file if present (from same directory as binary)
+	godotenv.Load()
+
+	// Log environment for debugging
+	log.Printf("AI_API_KEY length: %d", len(os.Getenv("AI_API_KEY")))
+	log.Printf("AI_BASE_URL: %s", os.Getenv("AI_BASE_URL"))
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(os.Stdout)
@@ -67,6 +73,17 @@ func main() {
 	offerRepo := repository.NewOfferRepository().WithDB(db)
 	securityRepo := repository.NewSecurityEventRepository().WithDB(db)
 
+	// Initialize RabbitMQ
+	var rmq *rabbitmq.RabbitMQ
+	var mqSvc *service.MessageQueueService
+	rmq, err = rabbitmq.New(nil)
+	if err != nil {
+		log.Printf("RabbitMQ not available: %v (continuing without queue)", err)
+	} else {
+		log.Printf("Connected to RabbitMQ")
+		mqSvc = service.NewMessageQueueService(rmq, messageRepo, matchRepo, agentRepo, jobRepo)
+	}
+
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
 	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo)
 	messageSvc := service.NewMessageService(messageRepo, matchRepo, agentRepo)
@@ -83,7 +100,7 @@ func main() {
 	interviewHandler := handler.NewInterviewHandler(interviewSvc)
 	offerHandler := handler.NewOfferHandler(offerSvc)
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
-	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo)
+	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq)
 	healthHandler := handler.NewHealthHandler()
 
 	r.GET("/health", healthHandler.Health)
@@ -110,14 +127,21 @@ func main() {
 		api.PATCH("/jobs/:id", jobHandler.Update)
 
 		api.GET("/matches", matchHandler.List)
+		api.GET("/matches/:id", matchHandler.Get)
+		api.POST("/matches/auto", matchHandler.AutoCreate)
 		api.POST("/matches/:id/confirm", matchHandler.Confirm)
 
 		api.GET("/interviews", interviewHandler.List)
 		api.POST("/interviews", interviewHandler.Create)
 		api.PATCH("/interviews/:id", interviewHandler.Update)
+		api.GET("/interviews/:matchId", interviewHandler.GetByMatchID)
+		api.POST("/interviews/:matchId/confirm", interviewHandler.Confirm)
+		api.POST("/interviews/:matchId/cancel", interviewHandler.Cancel)
 
-		api.GET("/offers/:id", offerHandler.Get)
-		api.POST("/offers/:id/respond", offerHandler.Respond)
+		api.GET("/offers/:matchId", offerHandler.GetByMatchID)
+		api.POST("/offers", offerHandler.Create)
+		api.POST("/offers/:matchId/accept", offerHandler.Accept)
+		api.POST("/offers/:matchId/decline", offerHandler.Decline)
 
 		api.POST("/privacy/export", privacyHandler.Export)
 		api.DELETE("/privacy/account", privacyHandler.DeleteAccount)
@@ -125,16 +149,27 @@ func main() {
 		// Admin endpoints
 		api.GET("/admin/dashboard", adminHandler.GetDashboard)
 
-		// Messages WebSocket and REST
-		api.GET("/messages/:matchId/ws", messageHandler.HandleWebSocket)
+		// Messages REST (auth required)
 		api.GET("/messages/:matchId", messageHandler.GetConversation)
 		api.POST("/messages/:matchId", messageHandler.SendMessage)
 	}
+
+	// Messages WebSocket (token in query param, no auth middleware)
+	r.GET("/api/messages/:matchId/ws", messageHandler.HandleWebSocket)
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+
+	// Start message queue consumer
+	if mqSvc != nil {
+		ctx := context.Background()
+		if err := mqSvc.StartConsuming(ctx); err != nil {
+			log.Printf("Failed to start message queue consumer: %v", err)
+		}
+	}
+
 	log.Printf("Server starting on :%s", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

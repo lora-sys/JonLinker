@@ -1,14 +1,19 @@
 package handler
 
 import (
+	"context"
 	"encoding/xml"
+	"fmt"
 	"net/http"
 	"sync"
 
+	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/rabbitmq"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/google/uuid"
 )
@@ -25,15 +30,17 @@ type MessageHandler struct {
 	messageRepo *repository.MessageRepository
 	matchRepo   *repository.MatchRepository
 	agentRepo   *repository.AgentRepository
+	rmq         *rabbitmq.RabbitMQ
 	clients     map[string]*websocket.Conn
 	mu          sync.RWMutex
 }
 
-func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository) *MessageHandler {
+func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, rmq *rabbitmq.RabbitMQ) *MessageHandler {
 	return &MessageHandler{
 		messageRepo: messageRepo,
 		matchRepo:   matchRepo,
 		agentRepo:   agentRepo,
+		rmq:         rmq,
 		clients:     make(map[string]*websocket.Conn),
 	}
 }
@@ -117,7 +124,18 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	userID := uuid.MustParse(c.GetString("userID"))
+	// Get userID from query param token (WebSocket can't use headers)
+	tokenStr := c.Query("token")
+	if tokenStr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "token required"})
+		return
+	}
+
+	userID, err := extractUserIDFromToken(tokenStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
 
 	// Verify user has access to this match
 	match, err := h.matchRepo.GetByID(uuid.MustParse(matchID))
@@ -303,6 +321,23 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
+	// Publish to RabbitMQ for auto-response (async)
+	if h.rmq != nil {
+		go func() {
+			agentMsg := &rabbitmq.AgentMessage{
+				MessageID:  message.ID.String(),
+				SenderID:   agent.ID.String(),
+				ReceiverID: "",
+				Intent:     req.IntentType,
+				MatchID:    matchID,
+				Payload:    nil,
+				Timestamp:  message.CreatedAt,
+			}
+			// Fire and forget - log error only
+			_ = h.rmq.PublishAgentMessage(context.Background(), agentMsg)
+		}()
+	}
+
 	c.JSON(http.StatusCreated, message)
 }
 
@@ -429,4 +464,25 @@ func (n *SalaryNegotiator) SimulateNegotiation(initialOffer int) *NegotiationRes
 		result.Reached = false
 	}
 	return result
+}
+
+func extractUserIDFromToken(tokenStr string) (uuid.UUID, error) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return middleware.JwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, err
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("invalid claims")
+	}
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return uuid.Nil, fmt.Errorf("invalid sub claim")
+	}
+	return uuid.Parse(sub)
 }

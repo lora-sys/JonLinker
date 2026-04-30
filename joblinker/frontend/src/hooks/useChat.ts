@@ -56,8 +56,8 @@ export function useChat({ matchId, enabled = true }: UseChatOptions) {
     const parsed = JSON.parse(token);
     const authToken = parsed.state?.token || parsed.token;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/messages/${matchId}/ws`);
+    const wsHost = process.env.NEXT_PUBLIC_API_WS_URL || 'ws://localhost:8080';
+    const ws = new WebSocket(`${wsHost}/api/messages/${matchId}/ws?token=${authToken}`);
 
     ws.onopen = () => {
       setIsConnected(true);
@@ -65,18 +65,36 @@ export function useChat({ matchId, enabled = true }: UseChatOptions) {
     };
 
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'connected') {
-        setIsConnected(true);
-      } else if (data.type === 'message' || data.payload?.content_xml) {
-        // Handle incoming XML message
-        const xmlMsg = data.payload || data;
+      try {
+        // Try to parse as JSON first
+        const data = JSON.parse(event.data);
+        if (data.type === 'connected') {
+          setIsConnected(true);
+        } else if (data.type === 'message' || data.payload?.content_xml) {
+          // Handle incoming XML message
+          const xmlMsg = data.payload || data;
+          setMessages(prev => [...prev, {
+            id: xmlMsg.header?.message_id || Date.now().toString(),
+            sender_id: xmlMsg.header?.sender_id || 'remote',
+            content_xml: typeof xmlMsg === 'string' ? xmlMsg : JSON.stringify(xmlMsg),
+            intent_type: xmlMsg.payload?.intent || 'INQUIRY',
+            created_at: xmlMsg.header?.timestamp || new Date().toISOString(),
+          }]);
+        }
+      } catch {
+        // Not JSON - treat as XML message from WebSocket
+        const xmlData = event.data;
+        const intentMatch = xmlData.match(/<intent>([^<]+)<\/intent>/);
+        const msgIdMatch = xmlData.match(/<message_id>([^<]+)<\/message_id>/);
+        const senderMatch = xmlData.match(/<sender_id>([^<]+)<\/sender_id>/);
+        const timestampMatch = xmlData.match(/<timestamp>([^<]+)<\/timestamp>/);
+
         setMessages(prev => [...prev, {
-          id: xmlMsg.header?.message_id || Date.now().toString(),
-          sender_id: xmlMsg.header?.sender_id || 'remote',
-          content_xml: typeof xmlMsg === 'string' ? xmlMsg : JSON.stringify(xmlMsg),
-          intent_type: xmlMsg.payload?.intent || 'INQUIRY',
-          created_at: xmlMsg.header?.timestamp || new Date().toISOString(),
+          id: msgIdMatch?.[1] || Date.now().toString(),
+          sender_id: senderMatch?.[1] || 'remote',
+          content_xml: xmlData,
+          intent_type: intentMatch?.[1] || 'UNKNOWN',
+          created_at: timestampMatch?.[1] || new Date().toISOString(),
         }]);
       }
     };
