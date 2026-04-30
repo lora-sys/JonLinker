@@ -151,7 +151,11 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		// Upgrade failed and response is in indeterminate state - log and return
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upgrade connection"})
 		return
