@@ -69,7 +69,7 @@ func (h *AgentHandler) Create(c *gin.Context) {
 }
 
 func (h *AgentHandler) Get(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	agent, err := h.svc.GetAgent(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Agent not found"})
@@ -89,7 +89,7 @@ func (h *AgentHandler) List(c *gin.Context) {
 }
 
 func (h *AgentHandler) Update(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -104,7 +104,7 @@ func (h *AgentHandler) Update(c *gin.Context) {
 }
 
 func (h *AgentHandler) Delete(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	if err := h.svc.DeleteAgent(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete agent"})
 		return

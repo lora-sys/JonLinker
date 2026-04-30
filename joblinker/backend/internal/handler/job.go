@@ -57,7 +57,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 }
 
 func (h *JobHandler) Get(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	job, err := h.jobRepo.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
@@ -76,7 +76,7 @@ func (h *JobHandler) List(c *gin.Context) {
 }
 
 func (h *JobHandler) Update(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	job, err := h.jobRepo.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Job not found"})
@@ -98,7 +98,7 @@ func (h *JobHandler) Update(c *gin.Context) {
 }
 
 func (h *JobHandler) Delete(c *gin.Context) {
-	id := uuid.MustParse(c.GetString("id"))
+	id := uuid.MustParse(c.Param("id"))
 	if err := h.jobRepo.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete job"})
 		return

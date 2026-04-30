@@ -1,4 +1,5 @@
 import type { ApiError } from '@/types';
+import { getAuthToken } from '@/lib/api-utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -11,6 +12,11 @@ class ApiClient {
 
   setToken(token: string | null) {
     this.token = token;
+  }
+
+  private getToken(): string | null {
+    // Fallback to localStorage if token not set on instance
+    return this.token || getAuthToken();
   }
 
   private async request<T>(
@@ -31,12 +37,13 @@ class ApiClient {
       if (query) url += `?${query}`;
     }
 
+    const token = this.getToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const response = await fetch(url, {

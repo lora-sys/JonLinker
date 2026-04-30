@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { useRole } from '@/hooks/useRole';
@@ -10,19 +10,19 @@ import { BackgroundBeams } from '@/components/ui/background-beams';
 export default function NewJobPage() {
   const router = useRouter();
   const role = useRole();
-  const [isReady, setIsReady] = useState(false);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    // Auth is now handled by middleware via cookie
-    // Only need role check client-side
-    setIsReady(true);
-
+    if (!isAuthenticated) {
+      router.replace('/login');
+      return;
+    }
     if (role !== 'recruiter') {
       router.replace('/dashboard');
     }
-  }, [role, router]);
+  }, [isAuthenticated, role, router]);
 
-  if (!isReady) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="animate-pulse text-cyan-400">Loading...</div>

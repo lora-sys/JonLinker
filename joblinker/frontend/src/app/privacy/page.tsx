@@ -1,9 +1,7 @@
-'use client';
-
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-slate-900 mb-6">Privacy Settings</h1>
         <div className="bg-white/80 backdrop-blur-xl border border-white/20 rounded-xl shadow-lg p-6 space-y-6">
           <div>

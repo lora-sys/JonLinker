@@ -56,3 +56,33 @@ func (h *InterviewHandler) Update(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, interview)
 }
+
+func (h *InterviewHandler) GetByMatchID(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	interview, err := h.svc.GetInterviewByMatchID(matchID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Interview not found"})
+		return
+	}
+	c.JSON(http.StatusOK, interview)
+}
+
+func (h *InterviewHandler) Confirm(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	interview, err := h.svc.ConfirmInterview(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm interview"})
+		return
+	}
+	c.JSON(http.StatusOK, interview)
+}
+
+func (h *InterviewHandler) Cancel(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	interview, err := h.svc.CancelInterview(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel interview"})
+		return
+	}
+	c.JSON(http.StatusOK, interview)
+}

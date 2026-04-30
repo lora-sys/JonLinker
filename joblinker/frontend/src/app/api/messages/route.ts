@@ -6,12 +6,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 export async function GET() {
   try {
     const authHeader = await getAuthHeaderFromCookie();
-    const response = await fetch(`${API_BASE}/api/matches`, {
+    const response = await fetch(`${API_BASE}/api/messages`, {
       headers: { ...authHeader },
     });
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
   }
 }

@@ -3,31 +3,42 @@ import { getAuthHeaderFromCookie } from '@/lib/api-cookies';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-export async function GET() {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ matchId: string }> }
+) {
   try {
+    const { matchId } = await params;
     const authHeader = await getAuthHeaderFromCookie();
-    const response = await fetch(`${API_BASE}/api/jobs`, {
+    const response = await fetch(`${API_BASE}/api/interviews/${matchId}`, {
       headers: { ...authHeader },
     });
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ matchId: string }> }
+) {
   try {
+    const { matchId } = await params;
     const body = await request.json();
     const authHeader = await getAuthHeaderFromCookie();
-    const response = await fetch(`${API_BASE}/api/jobs`, {
+    const headers = { 'Content-Type': 'application/json', ...authHeader };
+    // Route: /api/interviews/:matchId/confirm or /api/interviews/:matchId/cancel
+    const action = body.action || '';
+    const response = await fetch(`${API_BASE}/api/interviews/${matchId}${action ? `/${action}` : ''}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader },
+      headers,
       body: JSON.stringify(body),
     });
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
   }
 }

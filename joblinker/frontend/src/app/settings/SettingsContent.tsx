@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, Shield, Trash2, User } from 'lucide-react';
+import { Bell, Cpu, Shield, Trash2, User } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -112,6 +112,105 @@ function NotificationSettings() {
   );
 }
 
+function AISettings() {
+  const [aiConfig, setAiConfig] = useState({
+    api_key: '',
+    base_url: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    temperature: '0.7',
+    max_tokens: '4000',
+  });
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    // Save to localStorage for now (backend would persist this)
+    localStorage.setItem('ai_config', JSON.stringify(aiConfig));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <Card className="p-6 bg-white/80 backdrop-blur-xl border border-white/20">
+      <h2 className="text-lg font-semibold text-slate-900 mb-6 flex items-center gap-2">
+        <Cpu className="w-5 h-5 text-purple-600" />
+        AI Configuration
+      </h2>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">API Key</label>
+          <input
+            type="password"
+            value={aiConfig.api_key}
+            onChange={(e) => setAiConfig({ ...aiConfig, api_key: e.target.value })}
+            placeholder="sk-..."
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Base URL</label>
+          <input
+            type="text"
+            value={aiConfig.base_url}
+            onChange={(e) => setAiConfig({ ...aiConfig, base_url: e.target.value })}
+            placeholder="https://api.openai.com/v1"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Model</label>
+            <select
+              value={aiConfig.model}
+              onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Temperature</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="2"
+              value={aiConfig.temperature}
+              onChange={(e) => setAiConfig({ ...aiConfig, temperature: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Max Tokens</label>
+          <input
+            type="number"
+            min="100"
+            max="128000"
+            value={aiConfig.max_tokens}
+            onChange={(e) => setAiConfig({ ...aiConfig, max_tokens: e.target.value })}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 pt-2">
+          <Button onClick={handleSave} className="cursor-pointer">
+            {saved ? 'Saved!' : 'Save AI Config'}
+          </Button>
+          {saved && <span className="text-sm text-green-600">Configuration saved successfully</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function DangerZone() {
   return (
     <Card className="p-6 bg-white/80 backdrop-blur-xl border border-red-200">
@@ -131,8 +230,8 @@ function DangerZone() {
 }
 
 export function SettingsContent({ initialUser }: { initialUser: UserType | null }) {
-  const { user: storeUser } = useAuthStore();
-  const [user] = useState<UserType | null>(initialUser || storeUser);
+  const storeUser = useAuthStore((state) => state.user);
+  const user = initialUser || storeUser;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -144,6 +243,7 @@ export function SettingsContent({ initialUser }: { initialUser: UserType | null 
         {user ? (
           <div className="space-y-6">
             <AccountSettings user={user} onRefresh={() => {}} />
+            <AISettings />
             <NotificationSettings />
             <DangerZone />
           </div>

@@ -135,6 +135,15 @@ export interface Message {
   match?: Match;
 }
 
+// Conversation thread for messages page
+export interface Conversation {
+  MatchID: string;
+  JobTitle: string;
+  LastMessage?: Message;
+  UnreadCount: number;
+  UpdatedAt: string;
+}
+
 // Interview
 export type InterviewFormat = 'video' | 'phone' | 'onsite';
 export type InterviewStatus = 'scheduled' | 'completed' | 'cancelled' | 'rescheduled';
@@ -150,6 +159,9 @@ export interface Interview {
   created_at: string;
   updated_at: string;
   match?: Match;
+  // Participant names for display
+  seeker_name?: string;
+  recruiter_name?: string;
 }
 
 export interface InterviewFeedback {
@@ -159,7 +171,7 @@ export interface InterviewFeedback {
 }
 
 // Offer
-export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'negotiating' | 'withdrawn';
+export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'negotiating' | 'withdrawn' | 'expired';
 
 export interface Offer {
   id: string;
@@ -167,6 +179,7 @@ export interface Offer {
   compensation: Compensation;
   start_date: string;
   status: OfferStatus;
+  expires_at?: string;
   responded_at?: string;
   created_at: string;
   updated_at: string;

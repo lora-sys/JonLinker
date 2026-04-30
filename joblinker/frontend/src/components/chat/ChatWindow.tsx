@@ -19,7 +19,9 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
     setIsSending(true);
     try {
       const intentType = detectIntent(inputValue);
-      await sendMessageREST(inputValue, intentType);
+      // Format as XML for the backend
+      const contentXml = `<message><header><message_id>${Date.now().toString()}</message_id></header><payload><intent>${intentType}</intent><message_text>${inputValue}</message_text></payload></message>`;
+      await sendMessageREST(contentXml, intentType);
       setInputValue('');
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -42,10 +44,34 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
     try {
       // Simple XML parsing for display
       if (contentXml.includes('<message>')) {
+        // Match intent from attribute: intent="INTRODUCTION"
         const intentMatch = contentXml.match(/intent="([^"]+)"/);
-        const textMatch = contentXml.match(/>([^<]+)</);
-        if (intentMatch) {
-          return `[${intentMatch[1]}] ${textMatch?.[1] || ''}`;
+        // Match intent from tag: <intent>INTRODUCTION</intent>
+        const intentTagMatch = contentXml.match(/<intent>([^<]+)<\/intent>/);
+        const intent = intentMatch?.[1] || intentTagMatch?.[1] || 'UNKNOWN';
+
+        // Try to parse parameters as JSON and extract message
+        const paramsMatch = contentXml.match(/<parameters>([^<]+)<\/parameters>/);
+        let displayText = '';
+
+        if (paramsMatch?.[1]) {
+          try {
+            const params = JSON.parse(paramsMatch[1]);
+            if (params.message) {
+              displayText = params.message;
+            } else if (params.title) {
+              displayText = `${params.title} - ${params.location || ''} $${params.salary_min || 0}-${params.salary_max || 0}`;
+            }
+          } catch {
+            // Use raw params as text
+            displayText = paramsMatch[1];
+          }
+        }
+
+        if (displayText) {
+          return `[${intent}] ${displayText}`;
+        } else {
+          return `[${intent}]`;
         }
       }
       return contentXml;

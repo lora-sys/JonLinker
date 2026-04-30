@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getAuthHeaderFromCookie } from '@/lib/api-cookies';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-function getAuthHeader(request: Request): Record<string, string> {
-  const authHeader = request.headers.get('Authorization');
-  if (authHeader) {
-    return { 'Authorization': authHeader };
-  }
-  return {};
-}
-
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const headers = getAuthHeader(request);
-    const response = await fetch(`${API_BASE}/api/agents`, { headers });
+    const authHeader = await getAuthHeaderFromCookie();
+    const response = await fetch(`${API_BASE}/api/agents`, { headers: { ...authHeader } });
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
   } catch {
@@ -24,7 +17,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const headers = { 'Content-Type': 'application/json', ...getAuthHeader(request) };
+    const authHeader = await getAuthHeaderFromCookie();
+    const headers = { 'Content-Type': 'application/json', ...authHeader };
     const response = await fetch(`${API_BASE}/api/agents`, {
       method: 'POST',
       headers,

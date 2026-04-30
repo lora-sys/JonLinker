@@ -17,7 +17,17 @@ export async function POST(request: Request) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    return NextResponse.json(data, { status: response.status });
+    // Set auth cookie for middleware
+    const nextResponse = NextResponse.json(data, { status: response.status });
+    nextResponse.cookies.set('joblinker-auth', JSON.stringify({ token: data.token, userId: data.user?.id }), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+      path: '/',
+    });
+
+    return nextResponse;
   } catch (error) {
     return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
   }
