@@ -65,6 +65,9 @@ func main() {
 		&model.SecurityEvent{},
 		&model.ErrorLog{},
 		&model.RateLimitCounter{},
+		&model.AgentMetrics{},
+		&model.AuditLog{},
+		&model.ErrorEvent{},
 	); err != nil {
 		log.Fatalf("Failed to auto migrate: %v", err)
 	}
@@ -80,6 +83,11 @@ func main() {
 	securityRepo := repository.NewSecurityEventRepository().WithDB(db)
 	errorLogRepo := repository.NewErrorLogRepository().WithDB(db)
 	_ = errorLogRepo // used by middleware via LogError
+
+	// Observability repositories
+	metricsRepo := repository.NewAgentMetricsRepository().WithDB(db)
+	auditRepo := repository.NewAuditLogRepository().WithDB(db)
+	observabilityErrorRepo := repository.NewErrorEventRepository().WithDB(db)
 
 	// Initialize RabbitMQ
 	var rmq *rabbitmq.RabbitMQ
@@ -99,7 +107,7 @@ func main() {
 	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)
 	offerSvc := service.NewOfferService(offerRepo, matchRepo, jobRepo, securitySvc)
 	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo)
-	adminHandler := handler.NewAdminHandler()
+	adminHandler := handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
@@ -155,7 +163,11 @@ func main() {
 		api.DELETE("/privacy/account", privacyHandler.DeleteAccount)
 
 		// Admin endpoints
-		api.GET("/admin/dashboard", adminHandler.GetDashboard)
+		api.GET("/admin/metrics", adminHandler.GetMetrics)
+		api.GET("/admin/agent-metrics", adminHandler.GetAllAgentMetrics)
+		api.GET("/admin/audit", adminHandler.GetAuditLogs)
+		api.GET("/admin/errors", adminHandler.GetErrors)
+		api.POST("/admin/errors/:id/resolve", adminHandler.ResolveError)
 
 		// Messages REST (auth required)
 		api.GET("/messages/:matchId", messageHandler.GetConversation)
