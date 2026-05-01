@@ -21,6 +21,7 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, token) => {
         apiClient.setToken(token);
+        apiClient.setUserId(user.id);
         set({ user, token, isAuthenticated: true });
       },
 
@@ -44,6 +45,9 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         if (state?.token) {
           apiClient.setToken(state.token);
+          if (state.user?.id) {
+            apiClient.setUserId(state.user.id);
+          }
         }
       },
     }

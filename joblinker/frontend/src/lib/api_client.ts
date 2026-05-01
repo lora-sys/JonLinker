@@ -1,5 +1,9 @@
+// API Client - wraps GatewayClient for backwards compatibility
+// All API calls now route through the unified gateway
+
 import type { ApiError } from '@/types';
 import { getAuthToken } from '@/lib/api-utils';
+import { GatewayClient, initGateway, ServiceRoutes, type GatewayConfig } from '@/lib/gateway';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -7,15 +11,47 @@ interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
+// Internal gateway client instance
+let internalGateway: GatewayClient | null = null;
+
+function getGateway(): GatewayClient {
+  if (!internalGateway) {
+    const token = getAuthToken();
+    const config: GatewayConfig = {
+      baseURL: API_BASE,
+      userId: '', // Will be set from auth store
+      tenantId: 'default',
+    };
+    internalGateway = initGateway(config);
+    if (token) {
+      internalGateway.setToken(token);
+    }
+  }
+  return internalGateway;
+}
+
+function setUserContext(userId: string, agentId?: string) {
+  const gateway = getGateway();
+  gateway.headers['X-User-ID'] = userId;
+  if (agentId) {
+    gateway.headers['X-Agent-ID'] = agentId;
+  }
+}
+
 class ApiClient {
   private token: string | null = null;
 
   setToken(token: string | null) {
     this.token = token;
+    const gateway = getGateway();
+    gateway.setToken(token);
+  }
+
+  setUserId(userId: string, agentId?: string) {
+    setUserContext(userId, agentId);
   }
 
   private getToken(): string | null {
-    // Fallback to localStorage if token not set on instance
     return this.token || getAuthToken();
   }
 
@@ -25,6 +61,7 @@ class ApiClient {
   ): Promise<T> {
     const { params, ...fetchOptions } = options;
 
+    // Build URL with params
     let url = `${API_BASE}${endpoint}`;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -46,9 +83,11 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // For backwards compatibility, use direct fetch but with gateway headers
+    const gateway = getGateway();
     const response = await fetch(url, {
       ...fetchOptions,
-      headers: { ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
+      headers: { ...gateway.headers, ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
     });
 
     if (!response.ok) {
@@ -93,3 +132,4 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+export { ServiceRoutes, GatewayClient, initGateway };
