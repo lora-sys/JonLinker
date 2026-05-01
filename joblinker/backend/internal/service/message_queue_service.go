@@ -27,6 +27,10 @@ type MessageQueueService struct {
 	aiClient           *ai.Client
 	promptService      *AgentPromptService
 	toolExecutor       *agent.ToolExecutor
+	// Observability
+	metricsSvc         *MetricsService
+	auditSvc           *AuditService
+	alertSvc           *AlertingService
 }
 
 func NewMessageQueueService(
@@ -37,10 +41,19 @@ func NewMessageQueueService(
 	jobRepo *repository.JobRepository,
 	offerRepo *repository.OfferRepository,
 	interviewRepo *repository.InterviewRepository,
+	metricsRepo *repository.AgentMetricsRepository,
+	auditRepo *repository.AuditLogRepository,
+	errorEventRepo *repository.ErrorEventRepository,
 ) *MessageQueueService {
 	aiClient := ai.NewClient()
 	promptService := NewAgentPromptService()
+	metricsSvc := NewMetricsService(metricsRepo)
+	auditSvc := NewAuditService(auditRepo)
+	alertSvc := NewAlertingService(errorEventRepo, "")
 	toolExecutor := agent.NewToolExecutor(jobRepo, nil, offerRepo, interviewRepo)
+	toolExecutor.SetErrorHandler(func(errorType, msg string, ctx map[string]interface{}) {
+		alertSvc.RecordError(errorType, msg, "", ctx)
+	})
 	log.Printf("MessageQueueService AI client - BaseURL: %s, APIKey length: %d", aiClient.BaseURL, len(aiClient.APIKey))
 	return &MessageQueueService{
 		rmq:                rmq,
@@ -53,6 +66,9 @@ func NewMessageQueueService(
 		aiClient:           aiClient,
 		promptService:      promptService,
 		toolExecutor:       toolExecutor,
+		metricsSvc:         metricsSvc,
+		auditSvc:           auditSvc,
+		alertSvc:           alertSvc,
 	}
 }
 
@@ -88,6 +104,22 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	if err != nil {
 		log.Printf("Sender agent %s not found: %v", msg.SenderID, err)
 		return nil // Don't requeue - agent not found is permanent
+	}
+
+	// Observability: Update metrics heartbeat
+	if s.metricsSvc != nil {
+		s.metricsSvc.UpdateHeartbeat(senderAgent.ID)
+		s.metricsSvc.RecordMessage(senderAgent.ID)
+	}
+
+	// Observability: Audit log incoming message
+	// Note: Using context.Background() as the RabbitMQ callback doesn't pass ctx
+	// For production, consider modifying Consume signature to propagate context
+	if s.auditSvc != nil {
+		s.auditSvc.LogEvent(context.Background(), senderAgent.ID, matchID, "message_sent", map[string]interface{}{
+			"intent": msg.Intent,
+			"content_length": len(msg.MessageID),
+		})
 	}
 
 	// Note: We don't store the incoming message again here.
@@ -277,6 +309,8 @@ When NOT using tools, respond with ONLY a valid JSON object:
 		}
 
 		log.Printf("DEBUG: Calling toolExecutor.ExecuteTool with match_id=%s, datetime=%s", match.ID.String(), datetime)
+		// Note: Using context.Background() as generateAutoResponse doesn't receive context
+		// For production, propagate context through the call chain
 		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "schedule_interview", map[string]interface{}{
 			"match_id": match.ID.String(),
 			"datetime": datetime,

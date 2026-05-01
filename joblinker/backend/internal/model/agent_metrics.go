@@ -1,6 +1,9 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -86,3 +89,24 @@ func (e *ErrorEvent) BeforeCreate(tx *gorm.DB) error {
 
 // JSONMap is a helper type for JSONB columns
 type JSONMap map[string]interface{}
+
+// Scan implements the sql.Scanner interface for JSONMap
+func (j *JSONMap) Scan(value interface{}) error {
+	if value == nil {
+		*j = make(JSONMap)
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("failed to unmarshal JSONMap value: %v", value)
+	}
+	return json.Unmarshal(bytes, j)
+}
+
+// Value implements the driver.Valuer interface for JSONMap
+func (j JSONMap) Value() (driver.Value, error) {
+	if j == nil {
+		return nil, nil
+	}
+	return json.Marshal(j)
+}

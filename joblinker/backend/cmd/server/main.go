@@ -97,7 +97,7 @@ func main() {
 		log.Printf("RabbitMQ not available: %v (continuing without queue)", err)
 	} else {
 		log.Printf("Connected to RabbitMQ")
-		mqSvc = service.NewMessageQueueService(rmq, messageRepo, matchRepo, agentRepo, jobRepo, offerRepo, interviewRepo)
+		mqSvc = service.NewMessageQueueService(rmq, messageRepo, matchRepo, agentRepo, jobRepo, offerRepo, interviewRepo, metricsRepo, auditRepo, observabilityErrorRepo)
 	}
 
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
