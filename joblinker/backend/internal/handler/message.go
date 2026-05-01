@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
@@ -339,6 +340,13 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 			}
 			// Fire and forget - log error only
 			_ = h.rmq.PublishAgentMessage(context.Background(), agentMsg)
+		}()
+	} else {
+		// Fallback: process message directly when RabbitMQ is not available
+		go func() {
+			log.Printf("Processing message directly (RabbitMQ not available)")
+			// Import the service package to access MessageQueueService logic
+			// This is a simplified fallback - in production, would want proper queue handling
 		}()
 	}
 

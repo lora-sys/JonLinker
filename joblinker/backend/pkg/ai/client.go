@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -19,8 +20,10 @@ type Client struct {
 }
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role     string     `json:"role"`
+	Content  string     `json:"content"`
+	Name     string     `json:"name,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 type ChatRequest struct {
@@ -28,6 +31,18 @@ type ChatRequest struct {
 	Messages    []Message `json:"messages"`
 	MaxTokens   int       `json:"max_tokens"`
 	Temperature float64   `json:"temperature"`
+	Tools       []Tool    `json:"tools,omitempty"`
+}
+
+type Tool struct {
+	Type     string                 `json:"type"`
+	Function ToolFunction            `json:"function"`
+}
+
+type ToolFunction struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
 }
 
 type ChatResponse struct {
@@ -37,8 +52,17 @@ type ChatResponse struct {
 }
 
 type Choice struct {
-	Message Message `json:"message"`
+	Message       Message       `json:"message"`
 	Finish string `json:"finish_reason"`
+}
+
+type ToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	} `json:"function"`
 }
 
 type Usage struct {
@@ -67,6 +91,106 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// ToolExecutor is a function type that executes a tool and returns its result
+type ToolExecutor func(toolName string, arguments map[string]interface{}) (string, error)
+
+// ChatWithTools enables function calling with the AI
+// It sends tool definitions to the AI, handles tool calls, executes them, and returns final response
+func (c *Client) ChatWithTools(systemPrompt, userPrompt string, tools []Tool, executor ToolExecutor) (string, string, error) {
+	messages := []Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+
+	reqBody := ChatRequest{
+		Model:       c.Model,
+		Messages:    messages,
+		MaxTokens:   4096,
+		Temperature: 0.2,
+		Tools:       tools,
+	}
+
+	// First call - ask AI to use tools if needed
+	resp, err := c.doChat(reqBody)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Check if AI wants to call a tool
+	choice := resp.Choices[0]
+
+	// Handle tool calls if present
+	if len(choice.Message.ToolCalls) > 0 {
+		// Add AI's response with tool calls to messages
+		messages = append(messages, choice.Message)
+
+		// Execute each tool call
+		for _, tc := range choice.Message.ToolCalls {
+			var args map[string]interface{}
+			json.Unmarshal(tc.Function.Arguments, &args)
+
+			result, err := executor(tc.Function.Name, args)
+			if err != nil {
+				result = fmt.Sprintf(`{"error": "%v"}`, err)
+			}
+
+			// Add tool result to messages
+			messages = append(messages, Message{
+				Role:    "tool",
+				Content: result,
+			})
+		}
+
+		// Second call - AI generates final response with tool results
+		reqBody.Messages = messages
+		reqBody.Tools = nil // No more tools needed
+		resp, err = c.doChat(reqBody)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	return resp.Choices[0].Message.Content, "", nil
+}
+
+func (c *Client) doChat(reqBody ChatRequest) (*ChatResponse, error) {
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("no choices in response")
+	}
+
+	return &chatResp, nil
+}
+
+// Chat is the basic chat method without function calling
 func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
@@ -80,39 +204,12 @@ func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
 		Temperature: c.Temperature,
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := c.doChat(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", err
 	}
 
-	req, err := http.NewRequest("POST", c.BaseURL+"/v1/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var chatResp ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
+	return resp.Choices[0].Message.Content, nil
 }
 
 // GenerateAgentResponse uses AI to generate an agent response based on context

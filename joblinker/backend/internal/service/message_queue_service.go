@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"joblinker/internal/agent"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/pkg/ai"
@@ -16,12 +17,16 @@ import (
 )
 
 type MessageQueueService struct {
-	rmq         *rabbitmq.RabbitMQ
-	messageRepo *repository.MessageRepository
-	matchRepo   *repository.MatchRepository
-	agentRepo   *repository.AgentRepository
-	jobRepo     *repository.JobRepository
-	aiClient    *ai.Client
+	rmq                *rabbitmq.RabbitMQ
+	messageRepo        *repository.MessageRepository
+	matchRepo          *repository.MatchRepository
+	agentRepo          *repository.AgentRepository
+	jobRepo            *repository.JobRepository
+	offerRepo          *repository.OfferRepository
+	interviewRepo      *repository.InterviewRepository
+	aiClient           *ai.Client
+	promptService      *AgentPromptService
+	toolExecutor       *agent.ToolExecutor
 }
 
 func NewMessageQueueService(
@@ -30,16 +35,24 @@ func NewMessageQueueService(
 	matchRepo *repository.MatchRepository,
 	agentRepo *repository.AgentRepository,
 	jobRepo *repository.JobRepository,
+	offerRepo *repository.OfferRepository,
+	interviewRepo *repository.InterviewRepository,
 ) *MessageQueueService {
 	aiClient := ai.NewClient()
+	promptService := NewAgentPromptService()
+	toolExecutor := agent.NewToolExecutor(jobRepo, nil, offerRepo, interviewRepo)
 	log.Printf("MessageQueueService AI client - BaseURL: %s, APIKey length: %d", aiClient.BaseURL, len(aiClient.APIKey))
 	return &MessageQueueService{
-		rmq:         rmq,
-		messageRepo: messageRepo,
-		matchRepo:   matchRepo,
-		agentRepo:   agentRepo,
-		jobRepo:     jobRepo,
-		aiClient:    aiClient,
+		rmq:                rmq,
+		messageRepo:        messageRepo,
+		matchRepo:          matchRepo,
+		agentRepo:          agentRepo,
+		jobRepo:            jobRepo,
+		offerRepo:          offerRepo,
+		interviewRepo:      interviewRepo,
+		aiClient:           aiClient,
+		promptService:      promptService,
+		toolExecutor:       toolExecutor,
 	}
 }
 
@@ -118,6 +131,23 @@ type AutoResponse struct {
 }
 
 func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
+	// Determine scenario type from intent
+	scenario := intentToScenario(msg.Intent)
+
+	// Get agent type
+	var agentType model.AgentType
+	if senderAgent.Type == "seeker" {
+		agentType = model.AgentTypeSeeker
+	} else {
+		agentType = model.AgentTypeRecruiter
+	}
+
+	// Get conversation context for better responses
+	conversationContext := s.buildAgentContext(msg, match)
+
+	// Build the full three-part prompt
+	fullPrompt := s.promptService.BuildFullPrompt(agentType, scenario, conversationContext)
+
 	// Get job and agent details for context
 	var jobTitle, jobLocation string
 	var salaryMin, salaryMax int
@@ -141,8 +171,8 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 			}
 			if skills, ok := jobData["skills"].([]interface{}); ok {
 				for _, skill := range skills {
-					if s, ok := skill.(string); ok {
-						jobSkills = append(jobSkills, s)
+					if sk, ok := skill.(string); ok {
+						jobSkills = append(jobSkills, sk)
 					}
 				}
 			}
@@ -155,38 +185,40 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 		if json.Unmarshal([]byte(seeker.ConfigJSON), &config) == nil {
 			if skills, ok := config["skills"].([]interface{}); ok {
 				for _, skill := range skills {
-					if s, ok := skill.(string); ok {
-						seekerSkills = append(seekerSkills, s)
+					if sk, ok := skill.(string); ok {
+						seekerSkills = append(seekerSkills, sk)
 					}
 				}
 			}
 		}
 	}
 
-	// Get conversation context for better responses
-	conversationContext := s.buildAgentContext(msg, match)
+	// Enhance prompt with job and candidate details
+	enhancedPrompt := fmt.Sprintf(`%s
 
-	// Enhanced prompt with professional tone and job details
-	prompt := fmt.Sprintf(`You are a professional AI recruitment agent in an A2A (Agent-to-Agent) recruitment platform.
-
-## Current Conversation State
-- Incoming intent: %s
-- Your role: %s
-
-## Conversation History
-%s
-
-## Job Details (include in response when relevant)
+## Current Job Details
 - Position: %s
 - Location: %s
 - Salary Range: $%d - $%d
 - Required Skills: %v
+- Match ID: %s
 
 ## Candidate Profile
 - Skills: %v
 
-## Response Requirements
-You MUST respond with ONLY a valid JSON object (no markdown, no explanation):
+## Your Task
+When asked to schedule an interview, create offers, or query jobs, you MUST use the available tools.
+Do NOT make up job details, salary numbers, or candidate information - always use the tools.
+
+## Available Tools
+- schedule_interview: Schedule an interview (requires match_id, datetime, interview_type)
+- create_offer: Create a job offer (requires match_id, salary, start_date)
+- query_jobs: Search for jobs (requires location, optional skills, salary_min)
+- get_candidate: Get candidate details (requires candidate_id)
+- search_candidates: Search for candidates (requires skills, optional location)
+
+## Response Format
+When NOT using tools, respond with ONLY a valid JSON object:
 {"intent":"ONE_OF:[INTRODUCTION,INTEREST,NEGOTIATION,OFFER,CONFIRM,SCHEDULE,INQUIRY]","message":"Your professional response message here","data":{"title":"Job title if relevant","location":"Job location if relevant","salary_min":number,"salary_max":number,"skills":["skill1","skill2"],"message":"Short message for display"}}
 
 ## Intent Progression Rules
@@ -195,35 +227,28 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation):
 - INTEREST -> respond with NEGOTIATION, discuss salary/benefits if appropriate
 - NEGOTIATION -> respond with OFFER, present formal offer terms
 - OFFER -> respond with CONFIRM or DECLINE
-- SCHEDULE -> respond with CONFIRM with interview details
-
-## Professional Tone Guidelines
-- Be concise but informative
-- Use natural language, avoid robotic phrasing
-- Include specific details (salary numbers, location, skills) when relevant
-- For off-hours messages, acknowledge timing professionally
-`,
-		msg.Intent,
-		senderAgent.Type,
-		conversationContext,
+- SCHEDULE -> respond with CONFIRM with interview details`,
+		fullPrompt,
 		jobTitle,
 		jobLocation,
 		salaryMin,
 		salaryMax,
 		jobSkills,
+		match.ID,
 		seekerSkills)
 
+	// Call AI for intent recognition and response
 	response, err := s.aiClient.Chat(
 		"You are a professional AI recruitment agent.",
-		prompt,
+		enhancedPrompt,
 	)
 
 	if err != nil {
-		log.Printf("AI response failed, using fallback: %v (API key length: %d)", err, len(s.aiClient.APIKey))
+		log.Printf("AI response failed, using fallback: %v", err)
 		return s.fallbackResponse(msg.Intent)
 	}
 
-	log.Printf("DEBUG: AI response received, length=%d, content=%s", len(response), response)
+	log.Printf("DEBUG: AI response received, content=%s", response)
 
 	// Parse AI response
 	var aiResp struct {
@@ -234,6 +259,73 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation):
 	if err := json.Unmarshal([]byte(response), &aiResp); err != nil {
 		log.Printf("Failed to parse AI response: %v", err)
 		return s.fallbackResponse(msg.Intent)
+	}
+
+	// Execute tools based on intent (since AI API doesn't support function calling natively)
+	log.Printf("DEBUG: Checking incoming intent '%s' vs AI response '%s' for tool execution", msg.Intent, aiResp.Intent)
+
+	// Execute tools based on USER's intent, not AI's response (AI may progress intent)
+	// The user sent SCHEDULE, so we execute schedule_interview tool
+	if msg.Intent == "SCHEDULE" || msg.Intent == "CONFIRM" || aiResp.Intent == "SCHEDULE" || aiResp.Intent == "CONFIRM" {
+		log.Printf("DEBUG: Executing schedule_interview tool for match %s", match.ID)
+		// Schedule interview
+		datetime := "2026-06-01T10:00:00Z"
+		if aiResp.Data != nil {
+			if dt, ok := aiResp.Data["datetime"].(string); ok {
+				datetime = dt
+			}
+		}
+
+		log.Printf("DEBUG: Calling toolExecutor.ExecuteTool with match_id=%s, datetime=%s", match.ID.String(), datetime)
+		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "schedule_interview", map[string]interface{}{
+			"match_id": match.ID.String(),
+			"datetime": datetime,
+			"interview_type": "video",
+		})
+
+		log.Printf("DEBUG: toolResult=%+v, err=%v", toolResult, err)
+
+		if err == nil && toolResult.Success {
+			log.Printf("Interview scheduled via tool: %+v", toolResult.Data)
+			// Add interview_id to response data
+			if aiResp.Data == nil {
+				aiResp.Data = make(map[string]interface{})
+			}
+			if toolResult.Data != nil {
+				if id, ok := toolResult.Data["interview_id"]; ok {
+					aiResp.Data["interview_id"] = id
+				}
+			}
+		}
+	}
+
+	if aiResp.Intent == "OFFER" {
+		// Create offer
+		salary := 150000
+		startDate := "2026-07-01"
+		if aiResp.Data != nil {
+			if s, ok := aiResp.Data["salary_max"].(float64); ok {
+				salary = int(s)
+			}
+		}
+
+		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "create_offer", map[string]interface{}{
+			"match_id": match.ID.String(),
+			"salary": salary,
+			"start_date": startDate,
+		})
+
+		if err == nil && toolResult.Success {
+			log.Printf("Offer created via tool: %+v", toolResult.Data)
+			if aiResp.Data == nil {
+				aiResp.Data = make(map[string]interface{})
+			}
+			if toolResult.Data != nil {
+				if id, ok := toolResult.Data["offer_id"]; ok {
+					aiResp.Data["offer_id"] = id
+				}
+			}
+		}
 	}
 
 	return &AutoResponse{
@@ -276,6 +368,26 @@ func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoRespon
 		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "interview_confirmed"}}
 	default:
 		return &AutoResponse{Intent: "INQUIRY", Payload: map[string]interface{}{"message": "Thank you for your message."}}
+	}
+}
+
+// intentToScenario maps intent strings to PromptScenarioType
+func intentToScenario(intent string) model.PromptScenarioType {
+	switch intent {
+	case "NEGOTIATION":
+		return model.ScenarioNegotiation
+	case "SALARY", "COMPENSATION":
+		return model.ScenarioSalary
+	case "INTERVIEW", "SCHEDULE":
+		return model.ScenarioInterview
+	case "OFFER":
+		return model.ScenarioOffer
+	case "DECLINE", "REJECT":
+		return model.ScenarioDecline
+	case "TERMINATION", "WITHDRAW":
+		return model.ScenarioTermination
+	default:
+		return model.ScenarioGreeting
 	}
 }
 
