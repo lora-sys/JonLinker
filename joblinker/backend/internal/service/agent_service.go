@@ -1,6 +1,9 @@
 package service
 
 import (
+	"encoding/json"
+	"log"
+
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 
@@ -29,6 +32,7 @@ func (s *AgentService) CreateAgent(userID uuid.UUID, agentType model.AgentType, 
 		UserID:     userID,
 		Type:       agentType,
 		Status:     model.AgentStatusActive,
+		FSMState:   model.AgentFSMIdle,
 		ConfigJSON: configJSON,
 	}
 	if err := s.agentRepo.Create(agent); err != nil {
@@ -92,14 +96,20 @@ func (s *AgentService) UpdateStatus(id uuid.UUID, status model.AgentStatus) (*mo
 
 func (s *AgentService) logSecurityEvent(userID uuid.UUID, actionType string, details map[string]interface{}) {
 	if s.securityRepo != nil {
-		s.securityRepo.Create(&model.SecurityEvent{
+		if err := s.securityRepo.Create(&model.SecurityEvent{
 			UserID:     userID,
 			ActionType: actionType,
 			DetailsJSON: toJSON(details),
-		})
+		}); err != nil {
+			log.Printf("security event log failed: %v", err)
+		}
 	}
 }
 
 func toJSON(v interface{}) string {
-	return "{}"
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(bytes)
 }

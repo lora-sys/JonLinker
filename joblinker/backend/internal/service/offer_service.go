@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"time"
@@ -39,10 +40,13 @@ func (s *OfferService) GenerateOffer(matchID uuid.UUID, compensationJSON string,
 	if err := s.offerRepo.Create(offer); err != nil {
 		return nil, err
 	}
-	match, _ := s.matchRepo.GetByID(matchID)
-	if match != nil {
-		match.Status = model.MatchStatusOffered
-		s.matchRepo.Update(match)
+	match, err := s.matchRepo.GetByID(matchID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get match for status update: %w", err)
+	}
+	match.Status = model.MatchStatusOffered
+	if err := s.matchRepo.Update(match); err != nil {
+		return nil, fmt.Errorf("failed to update match status: %w", err)
 	}
 
 	if s.securitySvc != nil {
@@ -58,6 +62,39 @@ func (s *OfferService) GenerateOffer(matchID uuid.UUID, compensationJSON string,
 
 func (s *OfferService) GetOffer(id uuid.UUID) (*model.Offer, error) {
 	return s.offerRepo.GetByID(id)
+}
+
+func (s *OfferService) GetOfferByMatchID(matchID uuid.UUID) (*model.Offer, error) {
+	return s.offerRepo.GetByMatchID(matchID)
+}
+
+func (s *OfferService) AcceptOffer(matchID uuid.UUID) (*model.Offer, error) {
+	offer, err := s.offerRepo.GetByMatchID(matchID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	offer.RespondedAt = &now
+	offer.Status = model.OfferStatusAccepted
+	if err := s.offerRepo.Update(offer); err != nil {
+		return nil, err
+	}
+	s.handleOfferAccepted(offer)
+	return offer, nil
+}
+
+func (s *OfferService) DeclineOffer(matchID uuid.UUID) (*model.Offer, error) {
+	offer, err := s.offerRepo.GetByMatchID(matchID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	offer.RespondedAt = &now
+	offer.Status = model.OfferStatusDeclined
+	if err := s.offerRepo.Update(offer); err != nil {
+		return nil, err
+	}
+	return offer, nil
 }
 
 func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Offer, error) {

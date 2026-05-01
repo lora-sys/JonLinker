@@ -55,7 +55,9 @@ func (r *MatchRepository) ListByJobID(jobID uuid.UUID) ([]*model.Match, error) {
 func (r *MatchRepository) ListAll(limit, offset int) ([]*model.Match, int64, error) {
 	var matches []*model.Match
 	var total int64
-	r.db.Model(&model.Match{}).Count(&total)
+	if err := r.db.Model(&model.Match{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	if err := r.db.Limit(limit).Offset(offset).Preload("SeekerAgent").Preload("Job").Find(&matches).Error; err != nil {
 		return nil, 0, err
 	}
@@ -70,4 +72,12 @@ func (r *MatchRepository) ListByStatus(status model.MatchStatus, limit, offset i
 		return nil, 0, err
 	}
 	return matches, total, nil
+}
+
+func (r *MatchRepository) FindBySeekerAndJob(seekerAgentID, jobID uuid.UUID) (*model.Match, error) {
+	var match model.Match
+	if err := r.db.Where("seeker_agent_id = ? AND job_id = ?", seekerAgentID, jobID).First(&match).Error; err != nil {
+		return nil, err
+	}
+	return &match, nil
 }

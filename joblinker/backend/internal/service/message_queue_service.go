@@ -480,5 +480,7 @@ func (s *MessageQueueService) PublishMessage(matchID, senderID, intent string, p
 		Timestamp:  time.Now(),
 	}
 
-	return s.rmq.PublishAgentMessage(context.Background(), msg)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return s.rmq.PublishAgentMessage(ctx, msg)
 }
