@@ -115,10 +115,10 @@ export default function JobForm() {
         location,
         type: jobType,
         salary_range: salaryRange,
-        structured: {
+        structured: JSON.stringify({
           requirements,
           nice_to_have: niceToHave,
-        },
+        }),
       });
 
       router.push("/jobs");

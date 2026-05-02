@@ -52,6 +52,10 @@ func NewFSM(agentID uuid.UUID) *FSM {
 	}
 }
 
+func (f *FSM) SetState(state State) {
+	f.state = state
+}
+
 func (f *FSM) CurrentState() State {
 	return f.state
 }

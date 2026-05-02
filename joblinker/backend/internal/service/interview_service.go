@@ -36,6 +36,7 @@ func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt stri
 		Format:      format,
 		Location:    location,
 		Status:      model.InterviewStatusScheduled,
+		Feedback:    "null",
 	}
 	if err := s.interviewRepo.Create(interview); err != nil {
 		return nil, err
@@ -54,6 +55,34 @@ func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt stri
 
 func (s *InterviewService) GetInterview(id uuid.UUID) (*model.Interview, error) {
 	return s.interviewRepo.GetByID(id)
+}
+
+func (s *InterviewService) GetInterviewByMatchID(matchID uuid.UUID) (*model.Interview, error) {
+	return s.interviewRepo.GetByMatchID(matchID)
+}
+
+func (s *InterviewService) ConfirmInterview(matchID uuid.UUID) (*model.Interview, error) {
+	interview, err := s.interviewRepo.GetByMatchID(matchID)
+	if err != nil {
+		return nil, err
+	}
+	interview.Status = model.InterviewStatusConfirmed
+	if err := s.interviewRepo.Update(interview); err != nil {
+		return nil, err
+	}
+	return interview, nil
+}
+
+func (s *InterviewService) CancelInterview(matchID uuid.UUID) (*model.Interview, error) {
+	interview, err := s.interviewRepo.GetByMatchID(matchID)
+	if err != nil {
+		return nil, err
+	}
+	interview.Status = model.InterviewStatusCancelled
+	if err := s.interviewRepo.Update(interview); err != nil {
+		return nil, err
+	}
+	return interview, nil
 }
 
 func (s *InterviewService) UpdateInterview(id uuid.UUID, updates map[string]interface{}) (*model.Interview, error) {

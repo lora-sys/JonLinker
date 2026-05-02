@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,15 +39,87 @@ const (
 	AgentStatusPaused AgentStatus = "paused"
 )
 
+type AgentFSMState string
+
+const (
+	AgentFSMIdle           AgentFSMState = "idle"
+	AgentFSMIntro          AgentFSMState = "intro"
+	AgentFSMInterest       AgentFSMState = "interest"
+	AgentFSMNegotiation    AgentFSMState = "negotiation"
+	AgentFSMOffer          AgentFSMState = "offer"
+	AgentFSMConfirmed      AgentFSMState = "confirmed"
+	AgentFSMRejected      AgentFSMState = "rejected"
+)
+
 type Agent struct {
-	ID        uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	UserID    uuid.UUID   `json:"user_id" gorm:"type:uuid;not null;index"`
-	Type      AgentType   `json:"type" gorm:"type:varchar(20);not null"`
-	Status    AgentStatus `json:"status" gorm:"type:varchar(20);not null;index"`
-	ConfigJSON string     `json:"config" gorm:"type:jsonb"`
-	CreatedAt time.Time   `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
-	User      *User       `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	ID        uuid.UUID    `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	UserID    uuid.UUID    `json:"user_id" gorm:"type:uuid;not null;index"`
+	Type      AgentType    `json:"type" gorm:"type:varchar(20);not null"`
+	Status    AgentStatus  `json:"status" gorm:"type:varchar(20);not null;index"`
+	FSMState  AgentFSMState `json:"fsm_state" gorm:"type:varchar(20);not null;default:'idle'"`
+	ConfigJSON string       `json:"config" gorm:"type:jsonb"`
+	CreatedAt time.Time    `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt time.Time    `json:"updated_at" gorm:"autoUpdateTime"`
+	User      *User        `json:"user,omitempty" gorm:"foreignKey:UserID"`
+}
+
+// ToolConfigJSON returns the tools configuration from ConfigJSON
+func (a *Agent) ToolConfigJSON() (map[string]interface{}, error) {
+	if a.ConfigJSON == "" || a.ConfigJSON == "null" {
+		return nil, nil
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal([]byte(a.ConfigJSON), &cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// CanUseTool checks if the agent has permission to use a specific tool
+func (a *Agent) CanUseTool(toolName string) bool {
+	cfg, err := a.ToolConfigJSON()
+	if err != nil || cfg == nil {
+		return true // Default allow if no config
+	}
+	tools, ok := cfg["tools"].(map[string]interface{})
+	if !ok {
+		return true
+	}
+	toolPerm, ok := tools[toolName].(map[string]interface{})
+	if !ok {
+		return true
+	}
+	enabled, ok := toolPerm["enabled"].(bool)
+	return enabled
+}
+
+// GetToolConfig returns the tool configuration for a specific tool
+func (a *Agent) GetToolConfig(toolName string) (map[string]interface{}, bool) {
+	cfg, err := a.ToolConfigJSON()
+	if err != nil || cfg == nil {
+		return nil, false
+	}
+	tools, ok := cfg["tools"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	toolPerm, ok := tools[toolName].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	return toolPerm, true
+}
+
+// GetCacheBudget returns the cache budget from config
+func (a *Agent) GetCacheBudget() int {
+	cfg, err := a.ToolConfigJSON()
+	if err != nil || cfg == nil {
+		return 50 // Default 50
+	}
+	if budget, ok := cfg["cache_budget"].(float64); ok {
+		return int(budget)
+	}
+	return 50
 }
 
 type Organization struct {
@@ -104,6 +177,7 @@ type Match struct {
 	JobID         uuid.UUID   `json:"job_id" gorm:"type:uuid;not null;index"`
 	Score         float64     `json:"score" gorm:"type:decimal(5,4);not null"`
 	Status        MatchStatus `json:"status" gorm:"type:varchar(30);not null;index"`
+	FSMState      string      `json:"fsm_state" gorm:"type:varchar(30);default:'idle'"`
 	CreatedAt     time.Time   `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt     time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
 	SeekerAgent   *Agent      `json:"seeker_agent,omitempty" gorm:"foreignKey:SeekerAgentID"`
@@ -132,6 +206,7 @@ type InterviewStatus string
 
 const (
 	InterviewStatusScheduled   InterviewStatus = "scheduled"
+	InterviewStatusConfirmed   InterviewStatus = "confirmed"
 	InterviewStatusCompleted   InterviewStatus = "completed"
 	InterviewStatusCancelled   InterviewStatus = "cancelled"
 	InterviewStatusRescheduled InterviewStatus = "rescheduled"
@@ -144,7 +219,7 @@ type Interview struct {
 	Format       InterviewFormat  `json:"format" gorm:"type:varchar(20);not null"`
 	Location     string           `json:"location" gorm:"size:500"`
 	Status       InterviewStatus `json:"status" gorm:"type:varchar(20);not null"`
-	Feedback     string           `json:"feedback" gorm:"type:jsonb"`
+	Feedback     string           `json:"feedback" gorm:"type:jsonb;default:null"`
 	ReminderSent bool             `json:"reminder_sent" gorm:"default:false"`
 	CreatedAt    time.Time        `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt    time.Time        `json:"updated_at" gorm:"autoUpdateTime"`

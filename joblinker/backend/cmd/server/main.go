@@ -13,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"joblinker/internal/cache"
 	"joblinker/internal/handler"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
@@ -43,6 +44,7 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(middleware.Logger())
+	r.Use(middleware.GatewayMiddleware())
 
 	dsn := getEnv("DATABASE_URL", "host=localhost user=joblinker password=joblinker_dev dbname=joblinker port=5432 sslmode=disable")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -89,6 +91,9 @@ func main() {
 	auditRepo := repository.NewAuditLogRepository().WithDB(db)
 	observabilityErrorRepo := repository.NewErrorEventRepository().WithDB(db)
 
+	// Initialize tool cache (100 entries max, 5 min TTL)
+	toolCache := cache.NewToolCache(100, 5*time.Minute)
+
 	// Initialize RabbitMQ
 	var rmq *rabbitmq.RabbitMQ
 	var mqSvc *service.MessageQueueService
@@ -97,7 +102,7 @@ func main() {
 		log.Printf("RabbitMQ not available: %v (continuing without queue)", err)
 	} else {
 		log.Printf("Connected to RabbitMQ")
-		mqSvc = service.NewMessageQueueService(rmq, messageRepo, matchRepo, agentRepo, jobRepo, offerRepo, interviewRepo, metricsRepo, auditRepo, observabilityErrorRepo)
+		mqSvc = service.NewMessageQueueService(rmq, messageRepo, matchRepo, agentRepo, jobRepo, offerRepo, interviewRepo, metricsRepo, auditRepo, observabilityErrorRepo, toolCache)
 	}
 
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)

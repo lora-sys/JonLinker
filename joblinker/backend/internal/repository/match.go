@@ -81,3 +81,7 @@ func (r *MatchRepository) FindBySeekerAndJob(seekerAgentID, jobID uuid.UUID) (*m
 	}
 	return &match, nil
 }
+
+func (r *MatchRepository) UpdateFSMState(matchID uuid.UUID, state string) error {
+	return r.db.Model(&model.Match{}).Where("id = ?", matchID).Update("fsm_state", state).Error
+}

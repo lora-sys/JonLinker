@@ -322,3 +322,69 @@ func (n *SalaryNegotiatorSimple) GenerateCounter() (int, string, error) {
 	}
 	return counter, fmt.Sprintf("I'd need at least $%d to proceed.", counter), nil
 }
+
+// EmbeddingRequest for text embedding generation
+type EmbeddingRequest struct {
+	Input string `json:"input"`
+	Model string `json:"model"`
+}
+
+// EmbeddingResponse from embedding API
+type EmbeddingResponse struct {
+	Data []EmbeddingData `json:"data"`
+}
+
+// EmbeddingData contains the embedding vector
+type EmbeddingData struct {
+	Embedding []float64 `json:"embedding"`
+	Object    string    `json:"object"`
+	Index     int       `json:"index"`
+}
+
+// GenerateEmbedding creates a text embedding using the AI API
+func (c *Client) GenerateEmbedding(text string) ([]float64, error) {
+	model := os.Getenv("EMBEDDING_MODEL")
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+
+	reqBody := EmbeddingRequest{
+		Input: text,
+		Model: model,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal embedding request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/v1/embeddings", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embedding request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send embedding request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("embedding API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var embResp EmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&embResp); err != nil {
+		return nil, fmt.Errorf("failed to decode embedding response: %w", err)
+	}
+
+	if len(embResp.Data) == 0 {
+		return nil, fmt.Errorf("no embedding data in response")
+	}
+
+	return embResp.Data[0].Embedding, nil
+}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"joblinker/internal/agent"
+	"joblinker/internal/cache"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/pkg/ai"
@@ -27,10 +28,14 @@ type MessageQueueService struct {
 	aiClient           *ai.Client
 	promptService      *AgentPromptService
 	toolExecutor       *agent.ToolExecutor
+	toolCache          *cache.ToolCache
+	fsmIntegration     *FSMIntegration
 	// Observability
 	metricsSvc         *MetricsService
 	auditSvc           *AuditService
 	alertSvc           *AlertingService
+	// Bidirectional A2A tracking
+	conversationRounds map[string]int // matchID -> round count
 }
 
 func NewMessageQueueService(
@@ -44,16 +49,21 @@ func NewMessageQueueService(
 	metricsRepo *repository.AgentMetricsRepository,
 	auditRepo *repository.AuditLogRepository,
 	errorEventRepo *repository.ErrorEventRepository,
+	toolCache *cache.ToolCache,
 ) *MessageQueueService {
 	aiClient := ai.NewClient()
 	promptService := NewAgentPromptService()
 	metricsSvc := NewMetricsService(metricsRepo)
 	auditSvc := NewAuditService(auditRepo)
 	alertSvc := NewAlertingService(errorEventRepo, "")
+	fsmIntegration := NewFSMIntegration(matchRepo)
 	toolExecutor := agent.NewToolExecutor(jobRepo, nil, offerRepo, interviewRepo)
 	toolExecutor.SetErrorHandler(func(errorType, msg string, ctx map[string]interface{}) {
 		alertSvc.RecordError(errorType, msg, "", ctx)
 	})
+	if toolCache != nil {
+		toolExecutor.SetCache(toolCache)
+	}
 	log.Printf("MessageQueueService AI client - BaseURL: %s, APIKey length: %d", aiClient.BaseURL, len(aiClient.APIKey))
 	return &MessageQueueService{
 		rmq:                rmq,
@@ -66,9 +76,12 @@ func NewMessageQueueService(
 		aiClient:           aiClient,
 		promptService:      promptService,
 		toolExecutor:       toolExecutor,
+		toolCache:          toolCache,
+		fsmIntegration:     fsmIntegration,
 		metricsSvc:         metricsSvc,
 		auditSvc:           auditSvc,
 		alertSvc:           alertSvc,
+		conversationRounds: make(map[string]int),
 	}
 }
 
@@ -105,6 +118,32 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		log.Printf("Sender agent %s not found: %v", msg.SenderID, err)
 		return nil // Don't requeue - agent not found is permanent
 	}
+
+	// FSM Integration: Trigger state transition based on intent
+	if s.fsmIntegration != nil {
+		newState, transitioned, err := s.fsmIntegration.TransitionFSM(matchID, msg.Intent)
+		if err != nil {
+			log.Printf("FSM transition error: %v", err)
+		} else if transitioned {
+			log.Printf("FSM state changed: match=%s intent=%s -> state=%s", matchID, msg.Intent, newState)
+		}
+	}
+
+	// Increment conversation round counter
+	roundKey := matchID.String()
+	s.conversationRounds[roundKey]++
+	currentRound := s.conversationRounds[roundKey]
+	log.Printf("Conversation round: match=%s round=%d", matchID, currentRound)
+
+	// Guard: Max 10 rounds to prevent infinite loops
+	if currentRound > 10 {
+		log.Printf("Conversation max rounds reached for match %s, pausing", matchID)
+		// Would notify human in production
+		return nil
+	}
+
+	// Check for duplicate message (idempotency)
+	// In production, check message ID against processed set
 
 	// Observability: Update metrics heartbeat
 	if s.metricsSvc != nil {
@@ -148,6 +187,41 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	}
 	if err := s.messageRepo.Create(responseMsg); err != nil {
 		log.Printf("Failed to store response message: %v", err)
+	}
+
+	// Bidirectional A2A: Check if receiver is an agent
+	// If so, route response back to create a dialogueloop
+	if msg.ReceiverID != "" {
+		receiverAgentID, err := uuid.Parse(msg.ReceiverID)
+		if err == nil {
+			// Check if receiver is an agent
+			if receiverAgent, err := s.agentRepo.GetByID(receiverAgentID); err == nil && receiverAgent != nil {
+				// Receiver is an agent - create response message back to receiver
+				log.Printf("Bidirectional A2A: routing response to receiver agent %s", msg.ReceiverID)
+
+				// Create message for the receiver agent
+				receiverMsg := &rabbitmq.AgentMessage{
+					MessageID:  uuid.New().String(),
+					SenderID:   responseAgentID.String(),
+					ReceiverID: msg.ReceiverID,
+					Intent:     response.Intent,
+					MatchID:    msg.MatchID,
+					Payload:    response.Payload,
+					Timestamp:  time.Now(),
+				}
+
+				// Route back to the queue for the receiver agent
+				if s.rmq != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					if err := s.rmq.PublishAgentMessage(ctx, receiverMsg); err != nil {
+						log.Printf("Failed to route message to receiver agent: %v", err)
+					} else {
+						log.Printf("Bidirectional A2A: message routed to agent %s", msg.ReceiverID)
+					}
+				}
+			}
+		}
 	}
 
 	// Note: We do NOT publish response back to queue - that would cause a loop
