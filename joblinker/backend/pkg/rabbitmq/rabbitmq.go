@@ -10,6 +10,7 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"joblinker/internal/config"
 )
 
 const (
@@ -222,14 +223,21 @@ func (r *RabbitMQ) PublishAgentMessage(ctx context.Context, msg *AgentMessage) e
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
+	contentType := "application/json"
+	if config.IsQueueProtobufEnabled() {
+		contentType = "application/x-protobuf"
+		// Note: Full Protobuf support requires proto.Marshal(msg)
+		// This will be enabled once the agent.proto includes AgentMessage
+	}
+
 	err = r.channel.PublishWithContext(
 		ctx,
 		ExchangeAgent,
 		RoutingKeyIn,
-		false, // mandatory
-		false, // immediate
+		false,
+		false,
 		amqp.Publishing{
-			ContentType:  "application/json",
+			ContentType:  contentType,
 			DeliveryMode: amqp.Persistent,
 			Timestamp:    time.Now(),
 			Body:         body,
@@ -239,7 +247,7 @@ func (r *RabbitMQ) PublishAgentMessage(ctx context.Context, msg *AgentMessage) e
 		return fmt.Errorf("failed to publish message: %w", err)
 	}
 
-	log.Printf("Published agent message: %s -> %s", msg.SenderID, msg.Intent)
+	log.Printf("Published agent message: %s -> %s (contentType=%s)", msg.SenderID, msg.Intent, contentType)
 	return nil
 }
 

@@ -4,10 +4,28 @@
 import type { GatewayConfig, ApiResponse, RequestConfig } from './types';
 import { ServiceRoutes, type HttpMethod } from './routes';
 import { RateLimiter, CircuitBreaker, getTenantContext } from './middleware';
+import { protobufPackage, MessageType } from '../proto/agent';
 
 export { ServiceRoutes } from './routes';
 export type { GatewayConfig, ApiResponse } from './types';
 export type { HttpMethod } from './routes';
+
+// Protobuf content type constants
+const CONTENT_TYPE_JSON = 'application/json';
+const CONTENT_TYPE_PROTOBUF = 'application/x-protobuf';
+
+// Environment variable for Protobuf mode (matches backend)
+const getProtobufMode = (): string => {
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.PROTOBUF_ENABLED || 'none';
+  }
+  return 'none';
+};
+
+const isInternalProtobufEnabled = (): boolean => {
+  const mode = getProtobufMode();
+  return mode === 'internal' || mode === 'all';
+};
 
 export interface GatewayClientOptions {
   config: GatewayConfig;
@@ -87,10 +105,17 @@ export class GatewayClient {
 
     // Build request config
     const url = `${this.baseURL}${path}`;
+    const headers: Record<string, string> = { ...this._headers };
+
+    // Add Protobuf Accept header if enabled for internal communication
+    if (isInternalProtobufEnabled()) {
+      headers['Accept'] = CONTENT_TYPE_PROTOBUF;
+    }
+
     const config: RequestConfig = {
       method: method as HttpMethod,
       url,
-      headers: { ...this._headers },
+      headers,
       body: data ? JSON.stringify(data) : undefined,
     };
 
@@ -122,6 +147,17 @@ export class GatewayClient {
           };
         }
 
+        // Handle Protobuf response if Accept header was set
+        const contentType = response.headers.get('Content-Type') || '';
+        if (contentType.includes('x-protobuf') || contentType.includes('protobuf')) {
+          // Response is Protobuf binary - for now, return raw array buffer
+          // Actual deserialization would use protobufjs or @bufbuild/protobuf
+          const arrayBuffer = await response.arrayBuffer();
+          const binaryData = new Uint8Array(arrayBuffer);
+          return { success: true, data: binaryData as unknown as R };
+        }
+
+        // Default: JSON response
         const responseData = await response.json();
         return { success: true, data: responseData };
       } catch (error) {

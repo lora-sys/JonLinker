@@ -1,11 +1,15 @@
 package middleware
 
 import (
+	"bytes"
+	"io"
 	"log"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"joblinker/internal/config"
+	"joblinker/pkg/proto"
 )
 
 // GatewayMiddleware extracts and validates tenant headers from all requests
@@ -100,4 +104,81 @@ func GetCorrelationID(c *gin.Context) string {
 		return requestID.(string)
 	}
 	return ""
+}
+
+// ResponseWriter wraps gin.ResponseWriter to capture response for Protobuf encoding
+type ResponseWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w *ResponseWriter) Write(data []byte) (int, error) {
+	w.body.Write(data)
+	return w.ResponseWriter.Write(data)
+}
+
+// ProtoResponseWriter creates a response writer that captures the body for Protobuf encoding
+func ProtoResponseWriter(c *gin.Context) *ResponseWriter {
+	return &ResponseWriter{
+		ResponseWriter: c.Writer,
+		body:           &bytes.Buffer{},
+	}
+}
+
+// ShouldUseProtobuf determines if the response should be Protobuf based on Accept header
+func ShouldUseProtobuf(c *gin.Context) bool {
+	if !config.IsInternalProtobufEnabled() {
+		return false
+	}
+	accept := c.GetHeader("Accept")
+	return proto.ParseAcceptHeader(accept) == proto.ContentTypeProtobuf
+}
+
+// EncodeProtobuf marshals the response body as Protobuf
+func EncodeProtobuf(c *gin.Context, data []byte) error {
+	c.Header("Content-Type", string(proto.ContentTypeProtobuf))
+	_, err := c.Writer.Write(data)
+	return err
+}
+
+// EncodeJSON encodes data as JSON response
+func EncodeJSON(c *gin.Context, data interface{}) {
+	c.Header("Content-Type", "application/json")
+	c.JSON(200, data)
+}
+
+// ProtoMiddleware wraps response writer and handles Protobuf encoding
+func ProtoMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if ShouldUseProtobuf(c) {
+			// Use custom response writer that captures body
+			w := ProtoResponseWriter(c)
+			c.Writer = w
+			c.Set("protoWriter", w)
+		}
+		c.Next()
+	}
+}
+
+// GetProtoBody returns the captured response body from Protobuf writer
+func GetProtoBody(c *gin.Context) []byte {
+	if w, ok := c.Get("protoWriter"); ok {
+		if pw, ok := w.(*ResponseWriter); ok {
+			return pw.body.Bytes()
+		}
+	}
+	return nil
+}
+
+// ReadBody reads and restores the request body for downstream handlers
+func ReadBody(c *gin.Context) ([]byte, error) {
+	if c.Request.Body == nil {
+		return nil, nil
+	}
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, err
+	}
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+	return body, nil
 }

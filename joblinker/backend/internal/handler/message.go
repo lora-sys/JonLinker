@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"sync"
 
+	"joblinker/internal/config"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/proto"
 	"joblinker/pkg/rabbitmq"
 
 	"github.com/gin-gonic/gin"
@@ -180,6 +182,10 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		Payload: map[string]interface{}{"match_id": matchID},
 	})
 
+	// Initialize WebSocket frame serializer for Protobuf support
+	wsSerializer := proto.NewWebSocketFrameSerializer()
+	var sequenceNum uint64 = 0
+
 	// Handle incoming messages
 	for {
 		_, data, err := conn.ReadMessage()
@@ -187,12 +193,52 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 			break
 		}
 
-		// Parse incoming XML message
+		// Detect message format (Protobuf vs JSON/XML)
+		format := wsSerializer.DetectFrameFormat(data)
+		log.Printf("WebSocket message format: %s, size: %d bytes", format, len(data))
+
 		var xmlMsg A2AMessage
-		if err := xml.Unmarshal(data, &xmlMsg); err != nil {
+		var processErr error
+
+		if format == "protobuf" && config.IsWebSocketProtobufEnabled() {
+			// Protobuf mode: deserialize WebSocketFrame
+			frame, err := wsSerializer.UnmarshalFrame(data)
+			if err != nil {
+				log.Printf("Failed to unmarshal Protobuf frame: %v", err)
+				conn.WriteJSON(WSMessage{
+					Type:    "error",
+					Payload: map[string]interface{}{"message": "Invalid Protobuf format"},
+				})
+				continue
+			}
+
+			// Use frame metadata
+			sequenceNum = frame.SequenceNum
+			log.Printf("Processing Protobuf frame: message_type=%s, sequence=%d",
+				proto.GetMessageTypeName(frame.MessageType), frame.SequenceNum)
+
+			// Convert Protobuf payload to A2AMessage for processing
+			if len(frame.Payload) > 0 {
+				if err := xml.Unmarshal(frame.Payload, &xmlMsg); err != nil {
+					processErr = err
+				}
+			}
+		} else {
+			// JSON/XML mode: parse as before
+			if err := xml.Unmarshal(data, &xmlMsg); err != nil {
+				log.Printf("Failed to parse message: %v", err)
+				conn.WriteJSON(WSMessage{
+					Type:    "error",
+					Payload: map[string]interface{}{"message": "Invalid message format"},
+				})
+				continue
+			}
+		}
+
+		if processErr != nil {
 			conn.WriteJSON(WSMessage{
 				Type:    "error",
-				Payload: map[string]interface{}{"message": "Invalid message format"},
+				Payload: map[string]interface{}{"message": fmt.Sprintf("Processing error: %v", processErr)},
 			})
 			continue
 		}
@@ -210,8 +256,8 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		// Process message and generate response
 		response := h.processMessage(matchID, userID.String(), &xmlMsg)
 
-		// Broadcast response to both parties
-		h.broadcastToMatch(matchID, response)
+		// Broadcast response to both parties (respecting Protobuf mode)
+		h.broadcastToMatchWithFormat(matchID, response, wsSerializer, &sequenceNum)
 	}
 }
 
@@ -274,6 +320,42 @@ func (h *MessageHandler) broadcastToMatch(matchID string, msg *A2AMessage) {
 	data, _ := xml.MarshalIndent(msg, "", "  ")
 	for _, conn := range h.clients {
 		conn.WriteMessage(websocket.TextMessage, data)
+	}
+}
+
+// broadcastToMatchWithFormat sends messages in either Protobuf or JSON based on config
+func (h *MessageHandler) broadcastToMatchWithFormat(matchID string, msg *A2AMessage, wsSerializer *proto.WebSocketFrameSerializer, sequenceNum *uint64) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Serialize the A2AMessage to XML payload
+	xmlData, _ := xml.MarshalIndent(msg, "", "  ")
+
+	if config.IsWebSocketProtobufEnabled() {
+		// Protobuf mode: wrap in WebSocketFrame
+		*sequenceNum++
+		frame := &proto.WebSocketFrame{
+			MessageType:   proto.MessageType_TEXT,
+			Payload:       xmlData,
+			SequenceNum:   *sequenceNum,
+			Timestamp:     0, // Would use actual timestamp
+			SchemaVersion: 1,
+		}
+
+		protoData, err := wsSerializer.MarshalFrame(frame)
+		if err != nil {
+			log.Printf("Failed to marshal Protobuf frame: %v", err)
+			return
+		}
+
+		for _, conn := range h.clients {
+			conn.WriteMessage(websocket.BinaryMessage, protoData)
+		}
+	} else {
+		// JSON/XML mode
+		for _, conn := range h.clients {
+			conn.WriteMessage(websocket.TextMessage, xmlData)
+		}
 	}
 }
 

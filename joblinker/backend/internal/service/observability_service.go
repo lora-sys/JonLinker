@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,6 +106,112 @@ func (s *MetricsService) GetMetricsByType(agentType string) ([]model.AgentMetric
 
 func (s *MetricsService) GetActiveSummary() (seekerCount, recruiterCount, activeConversations int64, err error) {
 	return s.metricsRepo.GetActiveAgentsSummary()
+}
+
+// RecordProtobufMessageSize records the size of a Protobuf message for observability
+func (s *MetricsService) RecordProtobufMessageSize(agentID uuid.UUID, messageType string, sizeBytes int) error {
+	metrics, err := s.metricsRepo.GetByAgentID(agentID)
+	if err != nil {
+		return err
+	}
+
+	// Track protobuf message sizes for bandwidth monitoring
+	if metrics.Metadata == nil {
+		metrics.Metadata = make(map[string]interface{})
+	}
+
+	// Update running average of protobuf message sizes
+	key := "proto_msg_sizes_" + messageType
+	if existing, ok := metrics.Metadata[key]; ok {
+		if sizes, ok := existing.([]int); ok {
+			sizes = append(sizes, sizeBytes)
+			if len(sizes) > 100 {
+				sizes = sizes[len(sizes)-100:]
+			}
+			metrics.Metadata[key] = sizes
+		}
+	} else {
+		metrics.Metadata[key] = []int{sizeBytes}
+	}
+
+	// Update total protobuf bytes processed
+	totalKey := "proto_total_bytes_" + messageType
+	if total, ok := metrics.Metadata[totalKey].(int); ok {
+		metrics.Metadata[totalKey] = total + sizeBytes
+	} else {
+		metrics.Metadata[totalKey] = sizeBytes
+	}
+
+	return s.metricsRepo.Update(metrics)
+}
+
+// RecordProtobufError records a Protobuf encoding/decoding error
+func (s *MetricsService) RecordProtobufError(agentID uuid.UUID, errorType string) error {
+	metrics, err := s.metricsRepo.GetByAgentID(agentID)
+	if err != nil {
+		return err
+	}
+
+	if metrics.Metadata == nil {
+		metrics.Metadata = make(map[string]interface{})
+	}
+
+	key := "proto_errors_" + errorType
+	if count, ok := metrics.Metadata[key].(int); ok {
+		metrics.Metadata[key] = count + 1
+	} else {
+		metrics.Metadata[key] = 1
+	}
+
+	return s.metricsRepo.Update(metrics)
+}
+
+// GetProtobufStats returns Protobuf-related statistics for an agent
+func (s *MetricsService) GetProtobufStats(agentID uuid.UUID) (map[string]interface{}, error) {
+	metrics, err := s.metricsRepo.GetByAgentID(agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make(map[string]interface{})
+	if metrics.Metadata != nil {
+		// Collect protobuf-related stats
+		for k, v := range metrics.Metadata {
+			if strings.HasPrefix(k, "proto_") {
+				stats[k] = v
+			}
+		}
+	}
+	return stats, nil
+}
+
+// RecordMessageSize records message size for bandwidth monitoring
+func (s *MetricsService) RecordMessageSize(agentID uuid.UUID, sizeBytes int, isProtobuf bool) error {
+	metrics, err := s.metricsRepo.GetByAgentID(agentID)
+	if err != nil {
+		return err
+	}
+
+	if isProtobuf {
+		return s.RecordProtobufMessageSize(agentID, "general", sizeBytes)
+	}
+
+	// For non-protobuf messages, just track in general metadata
+	if metrics.Metadata == nil {
+		metrics.Metadata = make(map[string]interface{})
+	}
+	key := "json_msg_size_avg"
+	if sizes, ok := metrics.Metadata[key].([]int); ok {
+		sizes = append(sizes, sizeBytes)
+		if len(sizes) > 100 {
+			sizes = sizes[len(sizes)-100:]
+		}
+		metrics.Metadata[key] = sizes
+	} else {
+		metrics.Metadata[key] = []int{sizeBytes}
+	}
+
+	return s.metricsRepo.Update(metrics)
 }
 
 type AuditService struct {

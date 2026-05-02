@@ -19,6 +19,7 @@ type AgentMetrics struct {
 	AvgResponseTimeMs       int       `gorm:"default:0" json:"avg_response_time_ms"`
 	ConversationsActive     int       `gorm:"default:0" json:"conversations_active"`
 	ConversationsCompleted  int       `gorm:"default:0" json:"conversations_completed"`
+	Metadata                JSONMap   `gorm:"type:jsonb" json:"metadata"` // Flexible metadata for extensibility
 	LastHeartbeat           time.Time `gorm:"index" json:"last_heartbeat"`
 	CreatedAt               time.Time `json:"created_at"`
 	UpdatedAt               time.Time `json:"updated_at"`

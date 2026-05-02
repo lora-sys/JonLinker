@@ -1,124 +1,104 @@
-# Plan: Production Observability & Agent Monitoring
+# Implementation Plan: [FEATURE]
 
-**Feature Branch**: `012-production-observability`
-**Created**: 2026-05-01
-**Status**: Draft
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+
+## Summary
+
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-### Tech Stack
-- **Backend**: Go + Gin + GORM
-- **Database**: PostgreSQL (metrics, audit logs, errors)
-- **Frontend**: Next.js (admin dashboard)
-- **Real-time**: WebSocket for live updates
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
 
-### Project Structure
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+
+## Constitution Check
+
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+[Gates determined based on constitution file]
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/[###-feature]/
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
+
+### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
+
+```text
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
+
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
 backend/
-├── internal/
-│   ├── handler/
-│   │   └── admin.go          # Admin dashboard endpoint
-│   ├── service/
-│   │   ├── agent_metrics.go  # Metrics collection
-│   │   ├── audit_service.go  # Audit logging
-│   │   └── alerting_service.go # Webhook alerts
-│   └── model/
-│       ├── agent_metrics.go
-│       ├── audit_log.go
-│       └── error_event.go
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
 frontend/
-└── src/app/admin/
-    └── page.tsx              # Admin dashboard
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-### Key Design Decisions
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
-1. **Audit logging is async** - don't block agent response for logging
-2. **Metrics aggregated in-memory** - expensive to query pgvector for counts
-3. **WebSocket broadcast** - dashboard subscribes to metrics topic
-4. **Error deduplication** - same error within 5 min = one alert
+## Complexity Tracking
 
-## Implementation Plan
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-### Phase 1: Database & Models
-
-- [ ] Create agent_metrics table and model
-- [ ] Create audit_logs table and model
-- [ ] Create error_events table and model
-- [ ] Add AutoMigrate to main.go
-
-### Phase 2: Core Services
-
-- [ ] Implement MetricsService (collect, aggregate, query)
-- [ ] Implement AuditService (log events, query by match_id)
-- [ ] Implement AlertingService (webhook calls on error spike)
-
-### Phase 3: Integration Points
-
-- [ ] Hook agent_metrics into MessageQueueService
-- [ ] Add audit logging to MessageHandler
-- [ ] Add error tracking to tool_executor
-
-### Phase 4: Admin API
-
-- [ ] GET /api/admin/metrics - agent health summary
-- [ ] GET /api/admin/audit?match_id=xxx - query audit logs
-- [ ] GET /api/admin/errors - error events list
-- [ ] WebSocket /api/admin/ws - real-time dashboard
-
-### Phase 5: Frontend Dashboard
-
-- [ ] Admin page at /admin
-- [ ] Metrics cards (active agents, error rate, response time)
-- [ ] Audit log viewer with filters
-- [ ] Error list with resolution status
-
-## Data Model
-
-### AgentMetrics
-```go
-type AgentMetrics struct {
-    ID                    uuid.UUID
-    AgentID               uuid.UUID
-    AgentType             string // "seeker" | "recruiter"
-    MessagesProcessed     int
-    ErrorsCount           int
-    AvgResponseTimeMs     int
-    ConversationsActive   int
-    ConversationsCompleted int
-    LastHeartbeat         time.Time
-}
-```
-
-### AuditLog
-```go
-type AuditLog struct {
-    ID          uuid.UUID
-    AgentID     uuid.UUID
-    MatchID     uuid.UUID
-    EventType   string // "message_sent" | "tool_call" | "decision" | "error"
-    EventData   JSONB
-    Timestamp   time.Time
-}
-```
-
-### ErrorEvent
-```go
-type ErrorEvent struct {
-    ID           uuid.UUID
-    ErrorType    string // "ai_failure" | "rabbitmq_failure" | "db_timeout" | "tool_error"
-    ErrorMessage string
-    StackTrace   string
-    Context      JSONB
-    Resolved     bool
-    Timestamp    time.Time
-}
-```
-
-## Verification
-
-- [ ] Dashboard loads at /admin
-- [ ] Metrics update in real-time via WebSocket
-- [ ] Audit log query returns results for given match_id
-- [ ] Error events are logged and displayable
-- [ ] All existing features (A2A, RabbitMQ, Vector DB) still work
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

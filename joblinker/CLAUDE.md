@@ -1,11 +1,15 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/012-production-observability/plan.md
+specs/014-protobuf-protocol/plan.md
 
-Current feature scope: Production Observability & Agent Monitoring — admin dashboard,
-audit logging, error tracking, real-time metrics, WebSocket updates. Key components:
-MetricsService, AuditService, AlertingService, admin dashboard at /admin.
+Current feature scope: Protobuf Communication Protocol — binary serialization for
+internal services, WebSocket agent dialogue, FSM state changes, and queue tasks.
+4-phase rollout with zero-downtime JSON backward compatibility.
+
+Key components: 4 .proto files (agent, tools, websocket, queue), Go + TypeScript
+code generation via protoc, content negotiation via Accept header, cache-key
+integration with existing tool cache layer.
 
 ## API Gateway Middleware
 
@@ -43,4 +47,11 @@ Real embeddings via OpenAI-compatible API. Set env vars:
 
 Embedding dimension: 1536 (OpenAI text-embedding-ada-002 compatible).
 Mock fallback with zero vectors if API is unavailable (logged as WARNING).
+
+## Protobuf Configuration
+
+- `PROTOBUF_ENABLED` — "none" (dev), "internal", "websocket", "all" (prod)
+- `QUEUE_PROTOBUF_ENABLED` — "true"/"false" for RabbitMQ binary payloads
+- Code gen: `./scripts/generate-proto.sh`
+- Generated code: `backend/pkg/proto/` (Go), `frontend/src/lib/proto/` (TypeScript)
 <!-- SPECKIT END -->
