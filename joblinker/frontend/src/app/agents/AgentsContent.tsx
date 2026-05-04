@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Users, Plus } from 'lucide-react';
 import Card from '@/components/ui/Card';
@@ -85,6 +85,11 @@ function AgentsEmptyState() {
 export function AgentsContent({ initialAgents, isLoading = false }: { initialAgents: AgentWithSkills[]; isLoading?: boolean }) {
   const [agents, setAgents] = useState<AgentWithSkills[]>(initialAgents);
   const [error, setError] = useState<string | null>(null);
+
+  // Update when initialAgents changes (after API fetch completes)
+  useEffect(() => {
+    setAgents(initialAgents);
+  }, [initialAgents]);
 
   return (
     <ErrorBoundary>

@@ -18,9 +18,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for auth session cookie
+  // Check for auth session cookie OR Authorization header
   const authCookie = request.cookies.get('joblinker-auth');
-  if (!authCookie?.value) {
+  const authHeader = request.headers.get('Authorization');
+  const hasBearerToken = authHeader?.startsWith('Bearer ');
+
+  if (!authCookie?.value && !hasBearerToken) {
     // Redirect to login for protected pages
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);

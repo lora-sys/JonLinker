@@ -3,7 +3,13 @@ import { NextResponse } from 'next/server';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 function getTokenFromRequest(request: Request): string | null {
-  // First try localStorage format in cookie (Zustand persist format)
+  // First try Authorization header
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+
+  // Fall back to cookie parsing
   const cookieHeader = request.headers.get('cookie') || '';
   const cookieMatch = cookieHeader.match(/joblinker-auth=([^;]+)/);
 
