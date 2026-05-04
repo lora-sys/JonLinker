@@ -10,7 +10,9 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"google.golang.org/protobuf/proto"
 	"joblinker/internal/config"
+	pb "joblinker/pkg/proto"
 )
 
 const (
@@ -226,8 +228,32 @@ func (r *RabbitMQ) PublishAgentMessage(ctx context.Context, msg *AgentMessage) e
 	contentType := "application/json"
 	if config.IsQueueProtobufEnabled() {
 		contentType = "application/x-protobuf"
-		// Note: Full Protobuf support requires proto.Marshal(msg)
-		// This will be enabled once the agent.proto includes AgentMessage
+		// Marshal payload as JSON bytes for protobuf Task
+		payloadBytes, marshalErr := json.Marshal(msg.Payload)
+		if marshalErr != nil {
+			log.Printf("Failed to marshal payload to JSON: %v", marshalErr)
+			// Fall back to JSON encoding
+			contentType = "application/json"
+		} else {
+			task := &pb.QueueTask{
+				TaskId:      msg.MessageID,
+				TaskType:    msg.Intent,
+				Priority:    pb.TaskPriority_NORMAL,
+				Payload:     payloadBytes,
+				RetryCount:  0,
+				MaxRetries:  3,
+				CreatedAt:   msg.Timestamp.Unix(),
+				SchemaVersion: 1,
+			}
+			pbBody, pbErr := proto.Marshal(task)
+			if pbErr == nil {
+				body = pbBody
+			} else {
+				log.Printf("Failed to marshal protobuf: %v", pbErr)
+				// Fall back to JSON encoding
+				contentType = "application/json"
+			}
+		}
 	}
 
 	err = r.channel.PublishWithContext(

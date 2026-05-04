@@ -50,6 +50,10 @@ func (s *WebSocketFrameSerializer) DetectFrameFormat(data []byte) string {
 	if firstByte == '{' || firstByte == '[' {
 		return "json"
 	}
+	// Check for XML
+	if firstByte == '<' {
+		return "xml"
+	}
 	return "unknown"
 }
 

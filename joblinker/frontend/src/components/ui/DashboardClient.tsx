@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '@/stores/auth';
 import { useAgentStore } from '@/stores/agent';
 import { useMatchStore } from '@/stores/match';
+import { apiClient } from '@/lib/api_client';
 import Link from 'next/link';
 import {
   Users,
@@ -181,8 +182,28 @@ function EmptyState({ icon, title, description, actionLabel, href }: { icon: Rea
 
 function DashboardContent() {
   const { user } = useAuthStore();
-  const { agents } = useAgentStore();
-  const { matches } = useMatchStore();
+  const { agents, setAgents } = useAgentStore();
+  const { matches, setMatches } = useMatchStore();
+  const [loading, setLoading] = useState(true);
+
+  // Fetch agents and matches on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [agentsData, matchesData] = await Promise.all([
+          apiClient.get<any[]>('/api/agents'),
+          apiClient.get<any[]>('/api/matches'),
+        ]);
+        setAgents(agentsData || []);
+        setMatches(matchesData || []);
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [setAgents, setMatches]);
 
   const activeAgents = agents.filter((a) => a.status === 'active').length;
   const pendingMatches = matches.filter((m) => m.status === 'pending').length;

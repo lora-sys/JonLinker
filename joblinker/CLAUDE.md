@@ -1,4 +1,26 @@
 <!-- SPECKIT START -->
+## ⚠️ MANDATORY COMMAND RULE
+
+**所有命令必须使用 `rtk` 前缀**
+
+所有 Bash/Shell 命令必须以 `rtk` 开头，禁止直接执行未使用 `rtk` 的命令。
+
+```bash
+# ✅ 正确
+rtk git status
+rtk go build ./...
+rtk curl -s http://localhost:8080/health
+
+# ❌ 错误
+git status
+go build ./...
+curl -s http://localhost:8080/health
+```
+
+**原因**: RTK hook 仅自动重写已知命令，其他命令可能不被拦截导致token浪费。
+
+---
+
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
 specs/014-protobuf-protocol/plan.md

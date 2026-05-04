@@ -16,7 +16,7 @@ interface JobFiltersProps {
 
 function JobFilters({ jobs }: JobFiltersProps) {
   const [search, setSearch] = useState('');
-  const [sortBy] = useState<'title' | 'company'>('title');
+  const [sortBy, setSortBy] = useState<'title' | 'company'>('title');
 
   const filteredJobs = useMemo(() => {
     return jobs
@@ -53,6 +53,7 @@ function JobFilters({ jobs }: JobFiltersProps) {
             <SortAsc className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
             <select
               value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'title' | 'company')}
               className="w-full md:w-auto pl-10 pr-8 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 appearance-none"
             >
               <option value="title">Sort by Title</option>

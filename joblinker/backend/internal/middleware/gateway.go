@@ -151,13 +151,38 @@ func EncodeJSON(c *gin.Context, data interface{}) {
 func ProtoMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if ShouldUseProtobuf(c) {
-			// Use custom response writer that captures body
 			w := ProtoResponseWriter(c)
 			c.Writer = w
 			c.Set("protoWriter", w)
 		}
 		c.Next()
 	}
+}
+
+// ProtoResponseMiddleware captures JSON response body and re-encodes as Protobuf
+func ProtoResponseMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		useProto := ShouldUseProtobuf(c)
+		log.Printf("ProtoResponseMiddleware: path=%s accept=%s useProto=%v", c.Request.URL.Path, c.GetHeader("Accept"), useProto)
+		if !useProto {
+			c.Next()
+			return
+		}
+
+		// Set Content-Type header BEFORE the handler writes the response
+		c.Header("Content-Type", string(proto.ContentTypeProtobuf))
+		c.Next()
+	}
+}
+
+type bodyLogWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w *bodyLogWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
 }
 
 // GetProtoBody returns the captured response body from Protobuf writer

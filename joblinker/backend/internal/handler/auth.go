@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"joblinker/internal/model"
@@ -23,7 +24,14 @@ func NewAuthHandler(userRepo *repository.UserRepository, securitySvc *service.Se
 	return &AuthHandler{userRepo: userRepo, securitySvc: securitySvc}
 }
 
-var jwtSecret = []byte("joblinker-dev-secret-change-in-production")
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+var jwtSecret = []byte(getEnv("JWT_SECRET", "joblinker-dev-secret-change-in-production"))
 
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email"`

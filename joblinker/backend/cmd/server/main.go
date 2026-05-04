@@ -43,6 +43,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(middleware.Cors())
 	r.Use(middleware.Logger())
 	r.Use(middleware.GatewayMiddleware())
 
@@ -122,6 +123,7 @@ func main() {
 	offerHandler := handler.NewOfferHandler(offerSvc)
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
 	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq)
+	resumeHandler := handler.NewResumeHandler()
 	healthHandler := handler.NewHealthHandler()
 
 	r.GET("/health", healthHandler.Health)
@@ -135,6 +137,8 @@ func main() {
 
 	api := r.Group("/api")
 	api.Use(middleware.Auth())
+	api.Use(middleware.ProtoResponseMiddleware())
+	api.Use(middleware.ProtoMiddleware())
 	{
 		api.GET("/agents", agentHandler.List)
 		api.POST("/agents", agentHandler.Create)
@@ -175,8 +179,12 @@ func main() {
 		api.POST("/admin/errors/:id/resolve", adminHandler.ResolveError)
 
 		// Messages REST (auth required)
+		api.GET("/messages", messageHandler.GetMessages)
 		api.GET("/messages/:matchId", messageHandler.GetConversation)
 		api.POST("/messages/:matchId", messageHandler.SendMessage)
+
+		// Resume generation (AI-powered)
+		api.POST("/resumes/generate", resumeHandler.Generate)
 	}
 
 	// Messages WebSocket (token in query param, no auth middleware)

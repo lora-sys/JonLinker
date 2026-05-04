@@ -58,3 +58,5 @@ coverage/
 chroma/
 
 ./test-results
+joblinker/.firecrawl
+joblinker/.qoder

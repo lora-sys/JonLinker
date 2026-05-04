@@ -161,7 +161,7 @@
 - [X] T051 Measure and document bandwidth reduction: compare JSON vs Protobuf payload sizes for each message type — record in quickstart.md (skipped - embedded in plan.md)
 - [X] T052 Run full integration test suite with PROTOBUF_ENABLED=all to verify end-to-end Protobuf mode (verified - all tests pass)
 - [X] T053 [P] Add .proto file linting with buf to scripts/generate-proto.sh (skipped - protoc validation sufficient)
-- [ ] T054 Commit all generated code and verify CI pipeline passes
+- [X] T054 Commit all generated code and verify CI pipeline passes
 
 ---
 

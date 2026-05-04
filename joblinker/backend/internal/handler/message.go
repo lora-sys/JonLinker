@@ -156,11 +156,7 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// Upgrade failed and response is in indeterminate state - log and return
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upgrade connection"})
+		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
 
@@ -223,8 +219,7 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 					processErr = err
 				}
 			}
-		} else {
-			// JSON/XML mode: parse as before
+		} else if format == "xml" {
 			if err := xml.Unmarshal(data, &xmlMsg); err != nil {
 				log.Printf("Failed to parse message: %v", err)
 				conn.WriteJSON(WSMessage{
@@ -433,6 +428,50 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, message)
+}
+
+// GetMessages retrieves all messages for a user (across all matches)
+func (h *MessageHandler) GetMessages(c *gin.Context) {
+	userID := uuid.MustParse(c.GetString("userID"))
+
+	// Get all agents for this user
+	agents, err := h.agentRepo.ListByUserID(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve agents"})
+		return
+	}
+
+	agentIDs := make([]uuid.UUID, 0, len(agents))
+	for _, agent := range agents {
+		agentIDs = append(agentIDs, agent.ID)
+	}
+
+	// Get all matches where user has an agent (either seeker or recruiter)
+	matches, err := h.matchRepo.ListByAgentIDs(agentIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve matches"})
+		return
+	}
+
+	var allMessages []map[string]interface{}
+	for _, match := range matches {
+		messages, err := h.messageRepo.ListByMatchID(match.ID)
+		if err != nil {
+			continue
+		}
+		for _, msg := range messages {
+			allMessages = append(allMessages, map[string]interface{}{
+				"id":             msg.ID,
+				"match_id":       msg.MatchID,
+				"sender_agent_id": msg.SenderAgentID,
+				"content_xml":    msg.ContentXML,
+				"intent_type":    msg.IntentType,
+				"created_at":     msg.CreatedAt,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, allMessages)
 }
 
 // GetConversation retrieves message history for a match

@@ -85,3 +85,14 @@ func (r *MatchRepository) FindBySeekerAndJob(seekerAgentID, jobID uuid.UUID) (*m
 func (r *MatchRepository) UpdateFSMState(matchID uuid.UUID, state string) error {
 	return r.db.Model(&model.Match{}).Where("id = ?", matchID).Update("fsm_state", state).Error
 }
+
+func (r *MatchRepository) ListByAgentIDs(agentIDs []uuid.UUID) ([]*model.Match, error) {
+	var matches []*model.Match
+	if len(agentIDs) == 0 {
+		return matches, nil
+	}
+	if err := r.db.Where("seeker_agent_id IN ?", agentIDs).Preload("SeekerAgent").Preload("Job").Find(&matches).Error; err != nil {
+		return nil, err
+	}
+	return matches, nil
+}
