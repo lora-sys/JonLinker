@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, FileText } from 'lucide-react';
+import { getAuthToken } from '@/lib/api-utils';
 
 export default function AgentCreatePage() {
   const router = useRouter();
@@ -17,9 +18,13 @@ export default function AgentCreatePage() {
     setIsLoading(true);
 
     try {
+      const token = getAuthToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const response = await fetch('/api/agents', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ type: agentType }),
       });
       if (!response.ok) throw new Error('Failed to create agent');

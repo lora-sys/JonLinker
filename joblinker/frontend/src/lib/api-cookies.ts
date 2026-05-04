@@ -5,7 +5,9 @@ export async function getAuthTokenFromCookie(): Promise<string | null> {
   const authCookie = cookieStore.get('joblinker-auth');
   if (!authCookie?.value) return null;
   try {
-    const parsed = JSON.parse(authCookie.value);
+    // Cookie values are URL-encoded by browsers, need to decode first
+    const decoded = decodeURIComponent(authCookie.value);
+    const parsed = JSON.parse(decoded);
     return parsed.token || null;
   } catch {
     return null;

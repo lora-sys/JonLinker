@@ -42,9 +42,9 @@
 **⚠️ CRITICAL**: No user story implementation can begin until proto schemas are defined.
 
 - [X] T007 Write agent.proto with AgentRole enum, AgentState enum, TextMessage, ToolCall, ToolResult, StateChangeEvent, MemoryUpdate messages in joblinker/proto/agent.proto
-- [ ] T008 [P] Write tools.proto with JobDetail, ResumeDetail, InterviewInvitation, OfferDetail messages in joblinker/proto/tools.proto
-- [ ] T009 [P] Write websocket.proto with MessageType enum and WebSocketFrame message in joblinker/proto/websocket.proto
-- [ ] T010 [P] Write queue.proto with TaskPriority enum and QueueTask message in joblinker/proto/queue.proto
+  [X] T008 [P] Write tools.proto with JobDetail, ResumeDetail, InterviewInvitation, OfferDetail messages in joblinker/proto/agent.proto (consolidated - all types in one file)
+  [X] T009 [P] Write websocket.proto with MessageType enum and WebSocketFrame message in joblinker/proto/agent.proto (consolidated - all types in one file)
+  [X] T010 [P] Write queue.proto with TaskPriority enum and QueueTask message in joblinker/proto/agent.proto (consolidated - all types in one file)
 - [X] T011 Run generate-proto.sh to produce Go code in joblinker/backend/pkg/proto/ and TypeScript code in joblinker/frontend/src/lib/proto/
 - [X] T012 [P] Verify generated Go code compiles: `go build ./backend/pkg/proto/...`
 - [X] T013 [P] Verify generated TypeScript code has no type errors in joblinker/frontend/src/lib/proto/
