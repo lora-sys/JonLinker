@@ -82,9 +82,8 @@ function AgentsEmptyState() {
   );
 }
 
-export function AgentsContent({ initialAgents }: { initialAgents: AgentWithSkills[] }) {
+export function AgentsContent({ initialAgents, isLoading = false }: { initialAgents: AgentWithSkills[]; isLoading?: boolean }) {
   const [agents, setAgents] = useState<AgentWithSkills[]>(initialAgents);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   return (
