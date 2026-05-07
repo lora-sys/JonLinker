@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"joblinker/internal/model"
 
 	"github.com/google/uuid"
@@ -66,4 +67,21 @@ func (r *AgentRepository) ListAll(limit, offset int) ([]*model.Agent, int64, err
 		return nil, 0, err
 	}
 	return agents, total, nil
+}
+
+func (r *AgentRepository) SearchBySkills(ctx context.Context, skills []string, location string, experienceMin int, limit int) ([]*model.Agent, error) {
+	var agents []*model.Agent
+	db := r.db.WithContext(ctx).Model(&model.Agent{})
+
+	// Filter by agent type (seeker agents only for candidate search)
+	db = db.Where("type = ?", "seeker")
+
+	if location != "" {
+		db = db.Where("location ILIKE ?", "%"+location+"%")
+	}
+
+	if err := db.Limit(limit).Find(&agents).Error; err != nil {
+		return nil, err
+	}
+	return agents, nil
 }

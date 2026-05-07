@@ -61,13 +61,20 @@ func (f *FSM) CurrentState() State {
 }
 
 func (f *FSM) CanHandle(event Event) bool {
-	transitions := f.getTransitions()
+	transitions := getTransitionsForState(f.state)
 	_, exists := transitions[event]
 	return exists
 }
 
 func (f *FSM) Handle(event Event) error {
-	transitions := f.getTransitions()
+	// Special case for Resume from Paused - return to previous state
+	if f.state == StatePaused && event == EventResume {
+		f.state = f.getPreviousState()
+		f.history = append(f.history, f.state)
+		return nil
+	}
+
+	transitions := getTransitionsForState(f.state)
 	nextState, exists := transitions[event]
 	if !exists {
 		return errors.New("invalid transition")
@@ -78,8 +85,10 @@ func (f *FSM) Handle(event Event) error {
 	return nil
 }
 
-func (f *FSM) getTransitions() map[Event]State {
-	switch f.state {
+// getTransitionsForState returns valid transitions for a given state
+// This function is the single source of truth for FSM transitions
+func getTransitionsForState(state State) map[Event]State {
+	switch state {
 	case StateIdle:
 		return map[Event]State{
 			EventStartSearch: StateSearching,
@@ -114,10 +123,6 @@ func (f *FSM) getTransitions() map[Event]State {
 			EventOfferDeclined: StateRejected,
 			EventNegotiate:     StateNegotiating,
 		}
-	case StatePaused:
-		return map[Event]State{
-			EventResume: f.getPreviousState(),
-		}
 	default:
 		return map[Event]State{}
 	}
@@ -128,6 +133,20 @@ func (f *FSM) getPreviousState() State {
 		return StateIdle
 	}
 	return f.history[len(f.history)-2]
+}
+
+// NewFSMFromID creates a new FSM from a string agent ID
+func NewFSMFromID(agentID string) *FSM {
+	id, err := uuid.Parse(agentID)
+	if err != nil {
+		id = uuid.New()
+	}
+	return NewFSM(id)
+}
+
+// GetPreviousStateStr returns the previous state as a string for graph routing
+func (f *FSM) GetPreviousStateStr() string {
+	return string(f.getPreviousState())
 }
 
 type StateInfo struct {

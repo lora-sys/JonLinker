@@ -12,7 +12,7 @@ import (
 
 func main() {
 	toolCache := cache.NewToolCache(100, 5*time.Minute)
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 	exec.SetCache(toolCache)
 
 	cfg, _ := config.ParseAgentToolConfig(`{"tools":{"query_jobs":true,"create_offer":false,"get_candidate":true}}`)

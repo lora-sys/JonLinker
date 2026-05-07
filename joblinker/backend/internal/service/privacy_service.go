@@ -2,6 +2,9 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
+
 	"joblinker/internal/repository"
 	"joblinker/pkg/crypto"
 
@@ -30,7 +33,6 @@ func (s *PrivacyService) ExportUserData(userID uuid.UUID) (map[string]interface{
 
 	data := map[string]interface{}{
 		"user_id":   userID.String(),
-		"email":     user.Email,
 		"role":      user.Role,
 		"created_at": user.CreatedAt,
 	}
@@ -44,8 +46,36 @@ func (s *PrivacyService) ExportUserData(userID uuid.UUID) (map[string]interface{
 }
 
 func (s *PrivacyService) DeleteUserAccount(userID uuid.UUID) error {
-	// Schedule deletion within 30 days per privacy requirements
-	// This would typically queue a background job
+	// Verify user exists
+	if _, err := s.userRepo.GetByID(userID); err != nil {
+		return fmt.Errorf("user not found: %w", err)
+	}
+
+	// Get user's agents
+	agents, err := s.agentRepo.ListByUserID(userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user agents: %w", err)
+	}
+
+	// Delete matches for each agent
+	for _, agent := range agents {
+		matches, _ := s.matchRepo.ListByAgentIDs([]uuid.UUID{agent.ID})
+		for _, match := range matches {
+			if err := s.matchRepo.Delete(match.ID); err != nil {
+				log.Printf("Failed to delete match %s: %v", match.ID, err)
+			}
+		}
+		// Delete agent
+		if err := s.agentRepo.Delete(agent.ID); err != nil {
+			log.Printf("Failed to delete agent %s: %v", agent.ID, err)
+		}
+	}
+
+	// Delete user
+	if err := s.userRepo.Delete(userID); err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"joblinker/internal/model"
 
 	"github.com/google/uuid"
@@ -95,4 +96,12 @@ func (r *MatchRepository) ListByAgentIDs(agentIDs []uuid.UUID) ([]*model.Match, 
 		return nil, err
 	}
 	return matches, nil
+}
+
+func (r *MatchRepository) CreateToolCall(ctx context.Context, tc *model.AgentToolCall) error {
+	return r.db.WithContext(ctx).Create(tc).Error
+}
+
+func (r *MatchRepository) Delete(id uuid.UUID) error {
+	return r.db.Delete(&model.Match{}, "id = ?", id).Error
 }

@@ -11,6 +11,7 @@ import (
 	"joblinker/internal/config"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 
 	"github.com/google/uuid"
 )
@@ -18,6 +19,7 @@ import (
 // ToolExecutor handles agent tool/function execution
 type ToolExecutor struct {
 	jobRepo       *repository.JobRepository
+	agentRepo     *repository.AgentRepository
 	matchRepo     *repository.MatchRepository
 	offerRepo     *repository.OfferRepository
 	interviewRepo *repository.InterviewRepository
@@ -29,12 +31,14 @@ type ToolExecutor struct {
 
 func NewToolExecutor(
 	jobRepo *repository.JobRepository,
+	agentRepo *repository.AgentRepository,
 	matchRepo *repository.MatchRepository,
 	offerRepo *repository.OfferRepository,
 	interviewRepo *repository.InterviewRepository,
 ) *ToolExecutor {
 	return &ToolExecutor{
 		jobRepo:       jobRepo,
+		agentRepo:     agentRepo,
 		matchRepo:     matchRepo,
 		offerRepo:     offerRepo,
 		interviewRepo: interviewRepo,
@@ -76,7 +80,7 @@ func (e *ToolExecutor) canUseTool(toolName string) bool {
 
 // ExecuteTool executes a tool call and records it
 func (e *ToolExecutor) ExecuteTool(ctx context.Context, matchID uuid.UUID, toolName string, arguments map[string]interface{}) (*ToolExecutionResult, error) {
-	log.Printf("Executing tool: %s with args: %v", toolName, arguments)
+	log.Printf("Executing tool: %s for match %s", toolName, matchID)
 
 	// Check tool permission
 	if !e.canUseTool(toolName) {
@@ -120,7 +124,7 @@ func (e *ToolExecutor) ExecuteTool(ctx context.Context, matchID uuid.UUID, toolN
 
 // ExecuteToolWithCache executes tool and returns cache key + summary instead of full result
 func (e *ToolExecutor) ExecuteToolWithCache(ctx context.Context, matchID uuid.UUID, toolName string, arguments map[string]interface{}) (*CachedToolResult, error) {
-	log.Printf("Executing tool with cache: %s with args: %v", toolName, arguments)
+	log.Printf("Executing tool with cache: %s for match %s", toolName, matchID)
 
 	// Check tool permission
 	if !e.canUseTool(toolName) {
@@ -218,16 +222,53 @@ func (e *ToolExecutor) executeQueryJobs(ctx context.Context, args map[string]int
 		limit = 10
 	}
 
-	// Use job repository to search (would need to implement Search method)
-	jobs := []map[string]interface{}{
-		{
-			"id":       uuid.New().String(),
-			"title":    "Sample Job",
-			"location": location,
-			"salary":   int(salaryMin),
-			"skills":   skills,
-			"job_type": jobType,
-		},
+	var jobList []*model.Job
+	var err error
+
+	if e.jobRepo != nil {
+		jobList, err = e.jobRepo.Search(ctx, "", skills, location, int(salaryMin), jobType, int(limit))
+		if err != nil {
+			log.Printf("JobRepository.Search error: %v", err)
+			jobList = []*model.Job{}
+		}
+	} else {
+		jobList = []*model.Job{}
+	}
+
+	// Convert to map format for tool result
+	jobs := make([]map[string]interface{}, len(jobList))
+	for i, job := range jobList {
+		// Parse StructuredJSON to extract job details
+		var structuredData map[string]interface{}
+		if job.StructuredJSON != "" {
+			json.Unmarshal([]byte(job.StructuredJSON), &structuredData)
+		}
+		title := ""
+		jobLocation := ""
+		salary := 0
+		jobTypeStr := ""
+		if structuredData != nil {
+			if t, ok := structuredData["title"].(string); ok {
+				title = t
+			}
+			if loc, ok := structuredData["location"].(string); ok {
+				jobLocation = loc
+			}
+			if sal, ok := structuredData["salary"].(float64); ok {
+				salary = int(sal)
+			}
+			if jt, ok := structuredData["job_type"].(string); ok {
+				jobTypeStr = jt
+			}
+		}
+		jobs[i] = map[string]interface{}{
+			"id":        job.ID.String(),
+			"title":     title,
+			"location":  jobLocation,
+			"salary":    salary,
+			"skills":    skills,
+			"job_type": jobTypeStr,
+		}
 	}
 
 	return &ToolExecutionResult{
@@ -240,17 +281,62 @@ func (e *ToolExecutor) executeQueryJobs(ctx context.Context, args map[string]int
 }
 
 func (e *ToolExecutor) executeGetCandidate(ctx context.Context, args map[string]interface{}) (*ToolExecutionResult, error) {
-	candidateID, _ := args["candidate_id"].(string)
-	if candidateID == "" {
+	candidateIDStr, _ := args["candidate_id"].(string)
+	if candidateIDStr == "" {
 		return nil, fmt.Errorf("candidate_id required")
 	}
 
-	// Would fetch from candidate repository
-	candidate := map[string]interface{}{
-		"id":       candidateID,
-		"name":     "Sample Candidate",
-		"skills":   []string{"golang", "python"},
-		"experience": 5,
+	candidateID, err := uuid.Parse(candidateIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid candidate_id: %w", err)
+	}
+
+	var candidate map[string]interface{}
+
+	if e.agentRepo != nil {
+		agent, err := e.agentRepo.GetByID(candidateID)
+		if err != nil {
+			return &ToolExecutionResult{
+				Success: false,
+				Error:   fmt.Sprintf("failed to get candidate: %v", err),
+			}, nil
+		}
+		// Parse ConfigJSON to extract candidate details
+		var configData map[string]interface{}
+		if agent.ConfigJSON != "" {
+			json.Unmarshal([]byte(agent.ConfigJSON), &configData)
+		}
+		name := ""
+		if agent.User != nil {
+			name = agent.User.Email
+		}
+		skills := []string{}
+		experience := 0
+		if configData != nil {
+			if s, ok := configData["skills"].([]interface{}); ok {
+				for _, sk := range s {
+					if skStr, ok := sk.(string); ok {
+						skills = append(skills, skStr)
+					}
+				}
+			}
+			if exp, ok := configData["experience_years"].(float64); ok {
+				experience = int(exp)
+			}
+		}
+		candidate = map[string]interface{}{
+			"id":         agent.ID.String(),
+			"name":       name,
+			"skills":     skills,
+			"experience": experience,
+		}
+	} else {
+		candidate = map[string]interface{}{
+			"id":         candidateIDStr,
+			"name":       "Sample Candidate",
+			"skills":     []string{"golang", "python"},
+			"experience": 5,
+		}
 	}
 
 	return &ToolExecutionResult{
@@ -278,10 +364,17 @@ func (e *ToolExecutor) executeCreateOffer(ctx context.Context, args map[string]i
 		return nil, fmt.Errorf("invalid match_id: %w", err)
 	}
 
-	// Parse start date
-	startDate, err := time.Parse("2006-01-02", startDateStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid start_date format: %w", err)
+	// Parse start date - accept both YYYY-MM-DD and RFC3339 formats
+	var startDate time.Time
+	if startDateStr != "" {
+		// Try RFC3339 first (full datetime), then date only
+		startDate, err = time.Parse(time.RFC3339, startDateStr)
+		if err != nil {
+			startDate, err = time.Parse("2006-01-02", startDateStr)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_date format: %w", err)
+		}
 	}
 
 	// Create compensation JSON
@@ -401,14 +494,48 @@ func (e *ToolExecutor) executeSearchCandidates(ctx context.Context, args map[str
 		limit = 10
 	}
 
-	// Would use vector similarity search in production
-	candidates := []map[string]interface{}{
-		{
-			"id":         uuid.New().String(),
-			"skills":     skills,
+	var candidateList []*model.Agent
+	var err error
+
+	if e.agentRepo != nil {
+		candidateList, err = e.agentRepo.SearchBySkills(ctx, skills, location, int(experienceMin), int(limit))
+		if err != nil {
+			log.Printf("AgentRepository.SearchBySkills error: %v", err)
+			candidateList = []*model.Agent{}
+		}
+	} else {
+		candidateList = []*model.Agent{}
+	}
+
+	// Convert to map format for tool result
+	candidates := make([]map[string]interface{}, len(candidateList))
+	for i, agent := range candidateList {
+		// Parse ConfigJSON to extract candidate details
+		var configData map[string]interface{}
+		if agent.ConfigJSON != "" {
+			json.Unmarshal([]byte(agent.ConfigJSON), &configData)
+		}
+		name := ""
+		if agent.User != nil {
+			name = agent.User.Email
+		}
+		agentSkills := []string{}
+		if configData != nil {
+			if s, ok := configData["skills"].([]interface{}); ok {
+				for _, sk := range s {
+					if skStr, ok := sk.(string); ok {
+						agentSkills = append(agentSkills, skStr)
+					}
+				}
+			}
+		}
+		candidates[i] = map[string]interface{}{
+			"id":         agent.ID.String(),
+			"name":       name,
+			"skills":     agentSkills,
 			"location":   location,
 			"experience": int(experienceMin),
-		},
+		}
 	}
 
 	return &ToolExecutionResult{
@@ -441,8 +568,16 @@ func (e *ToolExecutor) recordToolCall(matchID uuid.UUID, toolName string, args m
 		toolCall.Result = string(resultJSON)
 	}
 
-	// Record to repository (would save to DB)
-	log.Printf("Tool call recorded: %s.%s - %s", matchID, toolName, status)
+	// Persist to database
+	if e.matchRepo != nil {
+		if dbErr := e.matchRepo.CreateToolCall(context.Background(), toolCall); dbErr != nil {
+			log.Printf("Failed to persist tool call: %v", dbErr)
+		} else {
+			log.Printf("Tool call recorded: %s.%s - %s", matchID, toolName, status)
+		}
+	} else {
+		log.Printf("Tool call recorded (no DB): %s.%s - %s", matchID, toolName, status)
+	}
 
 	// Observability: Track errors
 	if status == model.ToolStatusFailed && e.onError != nil {
@@ -473,4 +608,104 @@ type ToolCallParams struct {
 	MatchID   uuid.UUID
 	ToolName  string
 	Arguments map[string]interface{}
+}
+
+// GetTools returns all tools as AI Tool definitions for ChatWithTools
+func (e *ToolExecutor) GetTools() []ai.Tool {
+	return []ai.Tool{
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "query_jobs",
+				Description: "Search for jobs based on location, skills, salary range, and job type",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"location":  map[string]interface{}{"type": "string", "description": "Desired work location"},
+						"skills":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+						"salary_min": map[string]interface{}{"type": "number"},
+						"job_type":  map[string]interface{}{"type": "string"},
+						"limit":     map[string]interface{}{"type": "number"},
+					},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "get_candidate",
+				Description: "Get detailed candidate profile by ID",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"candidate_id": map[string]interface{}{"type": "string"},
+					},
+					"required": []string{"candidate_id"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "create_offer",
+				Description: "Create a job offer for a candidate",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"match_id":   map[string]interface{}{"type": "string"},
+						"salary":     map[string]interface{}{"type": "number"},
+						"start_date": map[string]interface{}{"type": "string"},
+						"notes":      map[string]interface{}{"type": "string"},
+					},
+					"required": []string{"match_id", "salary"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "schedule_interview",
+				Description: "Schedule an interview between candidate and recruiter",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"match_id":        map[string]interface{}{"type": "string"},
+						"datetime":       map[string]interface{}{"type": "string"},
+						"interview_type":  map[string]interface{}{"type": "string"},
+					},
+					"required": []string{"match_id", "datetime"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "search_candidates",
+				Description: "Search for candidates matching job requirements",
+				Parameters: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"skills":        map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+						"location":      map[string]interface{}{"type": "string"},
+						"experience_min": map[string]interface{}{"type": "number"},
+						"limit":         map[string]interface{}{"type": "number"},
+					},
+					"required": []string{"skills"},
+				},
+			},
+		},
+	}
+}
+
+// ExecuteToolForAI executes a tool and returns JSON string for AI function calling
+func (e *ToolExecutor) ExecuteToolForAI(toolName string, args map[string]interface{}) (string, error) {
+	result, err := e.ExecuteTool(context.Background(), uuid.Nil, toolName, args)
+	if err != nil {
+		return "", err
+	}
+	if !result.Success {
+		return "", fmt.Errorf("%s", result.Error)
+	}
+	data, _ := json.Marshal(result.Data)
+	return string(data), nil
 }

@@ -10,6 +10,7 @@ import (
 	"joblinker/internal/agent"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 
 	"github.com/google/uuid"
 )
@@ -19,6 +20,7 @@ type ReasoningService struct {
 	matchRepo    *repository.MatchRepository
 	messageRepo  *repository.MessageRepository
 	promptService *AgentPromptService
+	aiClient     *ai.Client
 }
 
 func NewReasoningService(
@@ -26,12 +28,14 @@ func NewReasoningService(
 	matchRepo *repository.MatchRepository,
 	messageRepo *repository.MessageRepository,
 	promptService *AgentPromptService,
+	aiClient *ai.Client,
 ) *ReasoningService {
 	return &ReasoningService{
 		toolExecutor: toolExecutor,
 		matchRepo:    matchRepo,
 		messageRepo:  messageRepo,
 		promptService: promptService,
+		aiClient:     aiClient,
 	}
 }
 
@@ -230,6 +234,21 @@ func (s *ReasoningService) respondPhase(ctx context.Context, matchID, agentID uu
 	// Get the conversation context
 	conversationContext := contextBuilder.String()
 
+	// Use AI if available for response generation
+	if s.aiClient != nil {
+		// Use AI client to generate response with reasoning context
+		response, err := s.aiClient.GenerateAgentResponse(conversationContext, "seeker")
+		if err == nil && response != "" {
+			return ReasoningStep{
+				Phase:  "respond",
+				Input:  fmt.Sprintf("%d reasoning steps", len(steps)),
+				Output: response,
+			}
+		}
+		log.Printf("AI response generation failed: %v, falling back", err)
+	}
+
+	// Fallback: generate response from reasoning steps
 	// Use prompt service to generate response
 	prompt := s.promptService.BuildFullPrompt(model.AgentTypeSeeker, model.ScenarioGreeting, conversationContext)
 

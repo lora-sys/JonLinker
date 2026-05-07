@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
+	einoagent "joblinker/internal/eino/agent"
+	"joblinker/internal/eino/chatmodel"
+	"joblinker/internal/eino/runner"
+	"joblinker/internal/eino/prompt"
 	"joblinker/internal/agent"
 	"joblinker/internal/cache"
 	"joblinker/internal/model"
@@ -26,16 +31,34 @@ type MessageQueueService struct {
 	offerRepo          *repository.OfferRepository
 	interviewRepo      *repository.InterviewRepository
 	aiClient           *ai.Client
+	einoChatModel      *chatmodel.EinoChatModel
 	promptService      *AgentPromptService
 	toolExecutor       *agent.ToolExecutor
 	toolCache          *cache.ToolCache
 	fsmIntegration     *FSMIntegration
+	// Eino Agent Runner (optional, for new Eino-based processing)
+	einoRunner         *runner.AgentRunner
+	// Context optimization for AI prompts
+	contextOptimizer   *ContextOptimizerService
 	// Observability
 	metricsSvc         *MetricsService
 	auditSvc           *AuditService
 	alertSvc           *AlertingService
 	// Bidirectional A2A tracking
-	conversationRounds map[string]int // matchID -> round count
+	conversationRounds map[string]int
+	conversationMu     sync.RWMutex
+}
+
+// SetEinoRunner sets the Eino AgentRunner for Eino-based processing
+func (s *MessageQueueService) SetEinoRunner(einoRunner *runner.AgentRunner) {
+	s.einoRunner = einoRunner
+	log.Printf("MessageQueueService: Eino Runner configured")
+}
+
+// SetContextOptimizer sets the context optimizer for AI prompts
+func (s *MessageQueueService) SetContextOptimizer(ctxOptimizer *ContextOptimizerService) {
+	s.contextOptimizer = ctxOptimizer
+	log.Printf("MessageQueueService: Context Optimizer configured")
 }
 
 func NewMessageQueueService(
@@ -52,12 +75,13 @@ func NewMessageQueueService(
 	toolCache *cache.ToolCache,
 ) *MessageQueueService {
 	aiClient := ai.NewClient()
+	einoChatModel := chatmodel.NewEinoChatModel(aiClient)
 	promptService := NewAgentPromptService()
 	metricsSvc := NewMetricsService(metricsRepo)
 	auditSvc := NewAuditService(auditRepo)
 	alertSvc := NewAlertingService(errorEventRepo, "")
 	fsmIntegration := NewFSMIntegration(matchRepo)
-	toolExecutor := agent.NewToolExecutor(jobRepo, nil, offerRepo, interviewRepo)
+	toolExecutor := agent.NewToolExecutor(jobRepo, agentRepo, matchRepo, offerRepo, interviewRepo)
 	toolExecutor.SetErrorHandler(func(errorType, msg string, ctx map[string]interface{}) {
 		alertSvc.RecordError(errorType, msg, "", ctx)
 	})
@@ -74,6 +98,7 @@ func NewMessageQueueService(
 		offerRepo:          offerRepo,
 		interviewRepo:      interviewRepo,
 		aiClient:           aiClient,
+		einoChatModel:      einoChatModel,
 		promptService:      promptService,
 		toolExecutor:       toolExecutor,
 		toolCache:          toolCache,
@@ -131,8 +156,10 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 
 	// Increment conversation round counter
 	roundKey := matchID.String()
+	s.conversationMu.Lock()
 	s.conversationRounds[roundKey]++
 	currentRound := s.conversationRounds[roundKey]
+	s.conversationMu.Unlock()
 	log.Printf("Conversation round: match=%s round=%d", matchID, currentRound)
 
 	// Guard: Max 10 rounds to prevent infinite loops
@@ -248,6 +275,16 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 		agentType = model.AgentTypeRecruiter
 	}
 
+	// Try Eino-based agent processing first if runner is configured
+	if s.einoRunner != nil {
+		einoResponse := s.generateEinoResponse(msg, match, senderAgent, scenario)
+		if einoResponse != nil {
+			log.Printf("Eino agent generated response: intent=%s, response_len=%d", einoResponse.Intent, len(fmt.Sprint(einoResponse.Payload)))
+			return einoResponse
+		}
+		log.Printf("Eino agent returned nil, falling back to legacy AI")
+	}
+
 	// Get conversation context for better responses
 	conversationContext := s.buildAgentContext(msg, match)
 
@@ -343,18 +380,19 @@ When NOT using tools, respond with ONLY a valid JSON object:
 		match.ID,
 		seekerSkills)
 
-	// Call AI for intent recognition and response
-	response, err := s.aiClient.Chat(
-		"You are a professional AI recruitment agent.",
+	// Call AI for intent recognition and response using ChatWithTools for function calling
+	response, toolCall, err := s.aiClient.ChatWithTools(
+		"You are a professional AI recruitment agent. Use tools when needed to get real data.",
 		enhancedPrompt,
+		s.toolExecutor.GetTools(),
+		s.toolExecutor.ExecuteToolForAI,
 	)
-
 	if err != nil {
 		log.Printf("AI response failed, using fallback: %v", err)
 		return s.fallbackResponse(msg.Intent)
 	}
 
-	log.Printf("DEBUG: AI response received, content=%s", response)
+	log.Printf("DEBUG: AI response received, content=%s, tool_called=%v", response, toolCall != "")
 
 	// Parse AI response
 	var aiResp struct {
@@ -367,73 +405,96 @@ When NOT using tools, respond with ONLY a valid JSON object:
 		return s.fallbackResponse(msg.Intent)
 	}
 
-	// Execute tools based on intent (since AI API doesn't support function calling natively)
+	// Execute tools based on intent (AI may have already called tools via ChatWithTools)
 	log.Printf("DEBUG: Checking incoming intent '%s' vs AI response '%s' for tool execution", msg.Intent, aiResp.Intent)
 
-	// Execute tools based on USER's intent, not AI's response (AI may progress intent)
-	// The user sent SCHEDULE, so we execute schedule_interview tool
-	if msg.Intent == "SCHEDULE" || msg.Intent == "CONFIRM" || aiResp.Intent == "SCHEDULE" || aiResp.Intent == "CONFIRM" {
-		log.Printf("DEBUG: Executing schedule_interview tool for match %s", match.ID)
-		// Schedule interview
-		datetime := "2026-06-01T10:00:00Z"
-		if aiResp.Data != nil {
-			if dt, ok := aiResp.Data["datetime"].(string); ok {
-				datetime = dt
+	// Only execute tools if AI didn't call them via ChatWithTools
+	// (toolCall == "" means AI didn't request any tools)
+	aiCalledTools := toolCall != ""
+	if !aiCalledTools {
+		// Execute tools based on USER's intent, not AI's response (AI may progress intent)
+		// The user sent SCHEDULE, so we execute schedule_interview tool
+		if msg.Intent == "SCHEDULE" || msg.Intent == "CONFIRM" || aiResp.Intent == "SCHEDULE" || aiResp.Intent == "CONFIRM" {
+			log.Printf("DEBUG: Executing schedule_interview tool for match %s", match.ID)
+			// Extract datetime from AI response - no hardcoded dates
+			datetime := ""
+			if aiResp.Data != nil {
+				if dt, ok := aiResp.Data["datetime"].(string); ok {
+					datetime = dt
+				}
 			}
-		}
-
-		log.Printf("DEBUG: Calling toolExecutor.ExecuteTool with match_id=%s, datetime=%s", match.ID.String(), datetime)
-		// Note: Using context.Background() as generateAutoResponse doesn't receive context
-		// For production, propagate context through the call chain
-		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "schedule_interview", map[string]interface{}{
-			"match_id": match.ID.String(),
-			"datetime": datetime,
-			"interview_type": "video",
-		})
-
-		log.Printf("DEBUG: toolResult=%+v, err=%v", toolResult, err)
-
-		if err == nil && toolResult.Success {
-			log.Printf("Interview scheduled via tool: %+v", toolResult.Data)
-			// Add interview_id to response data
-			if aiResp.Data == nil {
-				aiResp.Data = make(map[string]interface{})
+			// Fallback: generate reasonable future datetime if AI didn't provide one
+			if datetime == "" {
+				datetime = time.Now().AddDate(0, 0, 14).Format(time.RFC3339) // 2 weeks from now
 			}
-			if toolResult.Data != nil {
-				if id, ok := toolResult.Data["interview_id"]; ok {
-					aiResp.Data["interview_id"] = id
+
+			log.Printf("DEBUG: Calling toolExecutor.ExecuteTool with match_id=%s, datetime=%s", match.ID.String(), datetime)
+			// Note: Using context.Background() as generateAutoResponse doesn't receive context
+			// For production, propagate context through the call chain
+			toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "schedule_interview", map[string]interface{}{
+				"match_id": match.ID.String(),
+				"datetime": datetime,
+				"interview_type": "video",
+			})
+
+			log.Printf("DEBUG: toolResult=%+v, err=%v", toolResult, err)
+
+			if err == nil && toolResult.Success {
+				log.Printf("Interview scheduled via tool: %+v", toolResult.Data)
+				// Add interview_id to response data
+				if aiResp.Data == nil {
+					aiResp.Data = make(map[string]interface{})
+				}
+				if toolResult.Data != nil {
+					if id, ok := toolResult.Data["interview_id"]; ok {
+						aiResp.Data["interview_id"] = id
+					}
 				}
 			}
 		}
-	}
 
-	if aiResp.Intent == "OFFER" {
-		// Create offer
-		salary := 150000
-		startDate := "2026-07-01"
-		if aiResp.Data != nil {
-			if s, ok := aiResp.Data["salary_max"].(float64); ok {
-				salary = int(s)
+		if aiResp.Intent == "OFFER" {
+			// Create offer - extract values from AI response, not hardcoded
+			salary := 0
+			startDate := ""
+			if aiResp.Data != nil {
+				if s, ok := aiResp.Data["salary"].(float64); ok {
+					salary = int(s)
+				} else if s, ok := aiResp.Data["salary_max"].(float64); ok {
+					salary = int(s)
+				}
+				if sd, ok := aiResp.Data["start_date"].(string); ok {
+					startDate = sd
+				}
 			}
-		}
-
-		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "create_offer", map[string]interface{}{
-			"match_id": match.ID.String(),
-			"salary": salary,
-			"start_date": startDate,
-		})
-
-		if err == nil && toolResult.Success {
-			log.Printf("Offer created via tool: %+v", toolResult.Data)
-			if aiResp.Data == nil {
-				aiResp.Data = make(map[string]interface{})
+			// Fallback to reasonable defaults only if AI didn't provide them
+			if salary == 0 {
+				salary = 120000
 			}
-			if toolResult.Data != nil {
-				if id, ok := toolResult.Data["offer_id"]; ok {
-					aiResp.Data["offer_id"] = id
+			if startDate == "" {
+				startDate = "2026-07-01"
+			}
+
+			toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "create_offer", map[string]interface{}{
+				"match_id": match.ID.String(),
+				"salary": salary,
+				"start_date": startDate,
+			})
+
+			if err == nil && toolResult.Success {
+				log.Printf("Offer created via tool: %+v", toolResult.Data)
+				if aiResp.Data == nil {
+					aiResp.Data = make(map[string]interface{})
+				}
+				if toolResult.Data != nil {
+					if id, ok := toolResult.Data["offer_id"]; ok {
+						aiResp.Data["offer_id"] = id
+					}
 				}
 			}
 		}
+	} else {
+		log.Printf("DEBUG: AI called tools via ChatWithTools, skipping manual tool execution")
 	}
 
 	return &AutoResponse{
@@ -443,6 +504,15 @@ When NOT using tools, respond with ONLY a valid JSON object:
 }
 
 func (s *MessageQueueService) buildAgentContext(msg *rabbitmq.AgentMessage, match *model.Match) string {
+	// Use context optimizer if available
+	if s.contextOptimizer != nil {
+		optimized := s.contextOptimizer.GetContextForMatch(match.ID)
+		if optimized != "" {
+			return optimized
+		}
+	}
+
+	// Fallback to simple context building
 	var context string
 
 	// Get recent messages for context
@@ -459,6 +529,76 @@ func (s *MessageQueueService) buildAgentContext(msg *rabbitmq.AgentMessage, matc
 	}
 
 	return context
+}
+
+// generateEinoResponse uses Eino agent to generate response
+// Returns nil if Eino is not configured or fails, triggering fallback
+func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, scenario model.PromptScenarioType) *AutoResponse {
+	if s.einoRunner == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// Extract message content from XML
+	var msgContent string
+	if msg.Payload != nil {
+		if content, ok := msg.Payload["content"].(string); ok {
+			msgContent = content
+		}
+	}
+	if msgContent == "" {
+		msgContent = msg.Intent // Fallback to intent as message
+	}
+
+	// Choose agent based on sender type
+	var response string
+	var err error
+
+	if senderAgent.Type == "seeker" {
+		// Use Eino seeker agent
+		seekerAgent := einoagent.NewSeekerAgent(s.aiClient)
+		seekerAgent.SetScenario(scenarioFromPromptType(scenario))
+		response, err = seekerAgent.Chat(ctx, msgContent)
+	} else {
+		// Use Eino recruiter agent
+		recruiterAgent := einoagent.NewRecruiterAgent(s.aiClient)
+		recruiterAgent.SetScenario(scenarioFromPromptType(scenario))
+		response, err = recruiterAgent.Chat(ctx, msgContent)
+	}
+
+	if err != nil {
+		log.Printf("Eino agent error: %v", err)
+		return nil // Fallback to legacy AI
+	}
+
+	// Parse Eino response to AutoResponse format
+	// The response is free-form text, we convert it to structured format
+	return &AutoResponse{
+		Intent:  msg.Intent, // Keep same intent for flow continuity
+		Payload: map[string]interface{}{"message": response},
+	}
+}
+
+// scenarioFromPromptType converts model.PromptScenarioType to prompt.Scenario
+func scenarioFromPromptType(scenario model.PromptScenarioType) prompt.Scenario {
+	switch scenario {
+	case model.ScenarioNegotiation:
+		return prompt.ScenarioNegotiation
+	case model.ScenarioSalary:
+		return prompt.ScenarioSalary
+	case model.ScenarioInterview:
+		return prompt.ScenarioInterview
+	case model.ScenarioOffer:
+		return prompt.ScenarioOffer
+	case model.ScenarioDecline:
+		return prompt.ScenarioDecline
+	case model.ScenarioTermination:
+		return prompt.ScenarioTermination
+	default:
+		return prompt.ScenarioGreeting
+	}
 }
 
 func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoResponse {

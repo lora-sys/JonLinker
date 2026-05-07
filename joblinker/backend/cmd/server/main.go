@@ -14,11 +14,13 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"joblinker/internal/cache"
+	"joblinker/internal/eino/runner"
 	"joblinker/internal/handler"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/internal/service"
+	"joblinker/pkg/ai"
 	"joblinker/pkg/rabbitmq"
 )
 
@@ -46,6 +48,7 @@ func main() {
 	r.Use(middleware.Cors())
 	r.Use(middleware.Logger())
 	r.Use(middleware.GatewayMiddleware())
+	r.Use(middleware.ErrorHandler())
 
 	dsn := getEnv("DATABASE_URL", "host=localhost user=joblinker password=joblinker_dev dbname=joblinker port=5432 sslmode=disable")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -86,6 +89,7 @@ func main() {
 	securityRepo := repository.NewSecurityEventRepository().WithDB(db)
 	errorLogRepo := repository.NewErrorLogRepository().WithDB(db)
 	_ = errorLogRepo // used by middleware via LogError
+	rateLimitRepo := repository.NewRateLimitRepository().WithDB(db)
 
 	// Observability repositories
 	metricsRepo := repository.NewAgentMetricsRepository().WithDB(db)
@@ -115,6 +119,12 @@ func main() {
 	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo)
 	adminHandler := handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
+	// Initialize Eino Agent Runner (for T029 integration)
+	aiClient := ai.NewClient()
+	einoRunner := runner.NewAgentRunner(aiClient, nil)
+	log.Printf("Eino AgentRunner initialized with pool config: MaxAgents=%d, MinAgents=%d",
+		100, 5)
+
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
 	jobHandler := handler.NewJobHandler(jobRepo, agentRepo)
@@ -126,17 +136,30 @@ func main() {
 	resumeHandler := handler.NewResumeHandler()
 	healthHandler := handler.NewHealthHandler()
 
+	// Wire Eino Runner to MessageQueueService (T029)
+	if mqSvc != nil {
+		mqSvc.SetEinoRunner(einoRunner)
+		log.Printf("Eino Runner wired to MessageQueueService")
+	}
+
 	r.GET("/health", healthHandler.Health)
 
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
-		auth.POST("/refresh", authHandler.Refresh)
+	}
+
+	// Refresh requires authentication
+	authProtected := r.Group("/api/auth")
+	authProtected.Use(middleware.Auth())
+	{
+		authProtected.POST("/refresh", authHandler.Refresh)
 	}
 
 	api := r.Group("/api")
 	api.Use(middleware.Auth())
+	api.Use(middleware.RateLimit(rateLimitRepo))
 	api.Use(middleware.ProtoResponseMiddleware())
 	api.Use(middleware.ProtoMiddleware())
 	{
@@ -171,12 +194,16 @@ func main() {
 		api.POST("/privacy/export", privacyHandler.Export)
 		api.DELETE("/privacy/account", privacyHandler.DeleteAccount)
 
-		// Admin endpoints
-		api.GET("/admin/metrics", adminHandler.GetMetrics)
-		api.GET("/admin/agent-metrics", adminHandler.GetAllAgentMetrics)
-		api.GET("/admin/audit", adminHandler.GetAuditLogs)
-		api.GET("/admin/errors", adminHandler.GetErrors)
-		api.POST("/admin/errors/:id/resolve", adminHandler.ResolveError)
+		// Admin endpoints (require admin role)
+		admin := api.Group("/admin")
+		admin.Use(middleware.RequireRole("admin"))
+		{
+			admin.GET("/metrics", adminHandler.GetMetrics)
+			admin.GET("/agent-metrics", adminHandler.GetAllAgentMetrics)
+			admin.GET("/audit", adminHandler.GetAuditLogs)
+			admin.GET("/errors", adminHandler.GetErrors)
+			admin.POST("/errors/:id/resolve", adminHandler.ResolveError)
+		}
 
 		// Messages REST (auth required)
 		api.GET("/messages", messageHandler.GetMessages)

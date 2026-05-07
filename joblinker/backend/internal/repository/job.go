@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"joblinker/internal/model"
 
 	"github.com/google/uuid"
@@ -66,4 +67,27 @@ func (r *JobRepository) ListAll(limit, offset int) ([]*model.Job, int64, error) 
 		return nil, 0, err
 	}
 	return jobs, total, nil
+}
+
+func (r *JobRepository) Search(ctx context.Context, query string, skills []string, location string, salaryMin int, jobType string, limit int) ([]*model.Job, error) {
+	var jobs []*model.Job
+	db := r.db.WithContext(ctx).Model(&model.Job{})
+
+	if query != "" {
+		db = db.Where("title ILIKE ? OR description ILIKE ?", "%"+query+"%", "%"+query+"%")
+	}
+	if location != "" {
+		db = db.Where("location ILIKE ?", "%"+location+"%")
+	}
+	if salaryMin > 0 {
+		db = db.Where("salary_max >= ?", salaryMin)
+	}
+	if jobType != "" {
+		db = db.Where("job_type = ?", jobType)
+	}
+
+	if err := db.Limit(limit).Preload("Agent").Find(&jobs).Error; err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }

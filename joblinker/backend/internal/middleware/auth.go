@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var JwtSecret = []byte(getEnv("JWT_SECRET", "joblinker-dev-secret-change-in-production"))
+var JwtSecret = []byte(getEnvOrFail("JWT_SECRET"))
 
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -54,4 +55,32 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvOrFail(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("Required environment variable %s is not set", key)
+	}
+	return value
+}
+
+func RequireRole(role string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userRole, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Role not found in token"})
+			c.Abort()
+			return
+		}
+
+		roleStr, ok := userRole.(string)
+		if !ok || roleStr != role {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }

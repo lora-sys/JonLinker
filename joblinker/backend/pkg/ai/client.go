@@ -79,7 +79,7 @@ func NewClient() *Client {
 		MaxTokens:  4096,
 		Temperature: 0.2,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -111,7 +111,7 @@ func (c *Client) ChatWithTools(systemPrompt, userPrompt string, tools []Tool, ex
 	}
 
 	// First call - ask AI to use tools if needed
-	resp, err := c.doChat(reqBody)
+	resp, err := c.DoChat(reqBody)
 	if err != nil {
 		return "", "", err
 	}
@@ -144,7 +144,7 @@ func (c *Client) ChatWithTools(systemPrompt, userPrompt string, tools []Tool, ex
 		// Second call - AI generates final response with tool results
 		reqBody.Messages = messages
 		reqBody.Tools = nil // No more tools needed
-		resp, err = c.doChat(reqBody)
+		resp, err = c.DoChat(reqBody)
 		if err != nil {
 			return "", "", err
 		}
@@ -153,7 +153,8 @@ func (c *Client) ChatWithTools(systemPrompt, userPrompt string, tools []Tool, ex
 	return resp.Choices[0].Message.Content, "", nil
 }
 
-func (c *Client) doChat(reqBody ChatRequest) (*ChatResponse, error) {
+// DoChat is the internal chat method for making API calls
+func (c *Client) DoChat(reqBody ChatRequest) (*ChatResponse, error) {
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -204,7 +205,7 @@ func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
 		Temperature: c.Temperature,
 	}
 
-	resp, err := c.doChat(reqBody)
+	resp, err := c.DoChat(reqBody)
 	if err != nil {
 		return "", err
 	}
@@ -358,7 +359,7 @@ func (c *Client) GenerateEmbedding(text string) ([]float64, error) {
 		return nil, fmt.Errorf("failed to marshal embedding request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.BaseURL+"/v1/embeddings", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("POST", c.BaseURL+"/embeddings", bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embedding request: %w", err)
 	}

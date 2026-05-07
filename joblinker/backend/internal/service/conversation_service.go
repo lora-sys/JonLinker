@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,15 +23,18 @@ const (
 type ConversationService struct {
 	messageRepo *repository.MessageRepository
 	summaryRepo *repository.ConversationSummaryRepository
+	aiClient    *ai.Client
 }
 
 func NewConversationService(
 	messageRepo *repository.MessageRepository,
 	summaryRepo *repository.ConversationSummaryRepository,
+	aiClient *ai.Client,
 ) *ConversationService {
 	return &ConversationService{
 		messageRepo: messageRepo,
 		summaryRepo: summaryRepo,
+		aiClient:    aiClient,
 	}
 }
 
@@ -83,6 +87,32 @@ func (s *ConversationService) CompressConversation(matchID uuid.UUID) error {
 	summary.KeyFactsJSON = string(keyFactsJSON)
 
 	return s.summaryRepo.Create(summary)
+}
+
+// Summarize uses AI to generate a summary of the conversation if available
+func (s *ConversationService) Summarize(matchID uuid.UUID) (string, error) {
+	messages, _, err := s.GetConversationMessages(matchID)
+	if err != nil {
+		return "", err
+	}
+
+	if s.aiClient == nil {
+		return "", fmt.Errorf("AI client not configured")
+	}
+
+	// Build conversation text for AI
+	var convText strings.Builder
+	for _, m := range messages {
+		convText.WriteString(fmt.Sprintf("[%s] %s\n", m.IntentType, m.ContentXML))
+	}
+
+	// Use AI to summarize
+	summary, err := s.aiClient.GenerateAgentResponse(convText.String(), "conversation summarizer")
+	if err != nil {
+		return "", fmt.Errorf("AI summarization failed: %w", err)
+	}
+
+	return summary, nil
 }
 
 // extractKeyFacts extracts important information from conversation
@@ -197,8 +227,41 @@ func (s *ConversationService) GetSummary(matchID uuid.UUID) (*model.Conversation
 // Helper functions for extraction
 
 func extractSalaryValue(content string) string {
-	// Simple extraction - look for patterns like $XXX,XXX or numbers near "salary"
-	// In production, this would use regex
+	// Look for salary patterns: $XXX,XXX or "salary: XXX" or numbers followed by "k" or "thousand"
+	lower := strings.ToLower(content)
+
+	// Pattern for $XXX,XXX or $XXXk
+	if strings.Contains(lower, "$") {
+		// Find dollar sign and extract number
+		for i, c := range content {
+			if c == '$' && i+1 < len(content) {
+				var num []byte
+				for j := i + 1; j < len(content) && (content[j] >= '0' && content[j] <= '9' || content[j] == ',' || content[j] == 'k' || content[j] == 'K'); j++ {
+					if content[j] != ',' {
+						num = append(num, content[j])
+					}
+				}
+				if len(num) > 0 {
+					return "$" + string(num)
+				}
+			}
+		}
+	}
+
+	// Pattern for "salary" followed by number
+	idx := strings.Index(lower, "salary")
+	if idx >= 0 && idx+7 < len(content) {
+		var num []byte
+		for j := idx + 7; j < len(content) && (content[j] >= '0' && content[j] <= '9' || content[j] == ' ' || content[j] == ':'); j++ {
+			if content[j] >= '0' && content[j] <= '9' {
+				num = append(num, content[j])
+			}
+		}
+		if len(num) >= 4 { // At least 4 digits (e.g., 100k)
+			return string(num)
+		}
+	}
+
 	return "extracted_from_conversation"
 }
 

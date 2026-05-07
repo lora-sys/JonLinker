@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 
 	"joblinker/internal/config"
@@ -25,7 +27,20 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for development
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		if allowedOrigins == "" {
+			// No whitelist configured - deny all in production
+			log.Printf("WebSocket: ALLOWED_ORIGINS not set, denying all origins")
+			return false
+		}
+		origin := r.Header.Get("Origin")
+		for _, allowed := range strings.Split(allowedOrigins, ",") {
+			if strings.TrimSpace(allowed) == origin {
+				return true
+			}
+		}
+		log.Printf("WebSocket: origin %s not in whitelist %s", origin, allowedOrigins)
+		return false
 	},
 }
 

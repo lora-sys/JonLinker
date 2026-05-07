@@ -10,7 +10,7 @@ import (
 )
 
 func TestToolExecutor_QueryJobs(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
 		context.Background(),
@@ -35,14 +35,14 @@ func TestToolExecutor_QueryJobs(t *testing.T) {
 }
 
 func TestToolExecutor_GetCandidate(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
 		context.Background(),
 		uuid.New(),
 		"get_candidate",
 		map[string]interface{}{
-			"candidate_id": "test-candidate-id",
+			"candidate_id": uuid.New().String(),
 		},
 	)
 
@@ -55,7 +55,7 @@ func TestToolExecutor_GetCandidate(t *testing.T) {
 }
 
 func TestToolExecutor_CreateOffer_MissingMatchID(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
 		context.Background(),
@@ -73,7 +73,7 @@ func TestToolExecutor_CreateOffer_MissingMatchID(t *testing.T) {
 }
 
 func TestToolExecutor_ScheduleInterview(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 	matchID := uuid.New()
 
 	result, err := exec.ExecuteTool(
@@ -96,7 +96,7 @@ func TestToolExecutor_ScheduleInterview(t *testing.T) {
 }
 
 func TestToolExecutor_SearchCandidates(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
 		context.Background(),
@@ -118,7 +118,7 @@ func TestToolExecutor_SearchCandidates(t *testing.T) {
 }
 
 func TestToolExecutor_UnknownTool(t *testing.T) {
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
 		context.Background(),
@@ -134,7 +134,7 @@ func TestToolExecutor_UnknownTool(t *testing.T) {
 
 func TestToolExecutor_ExecuteWithNilRepos(t *testing.T) {
 	// Tool executor should work even with nil repos (for testing purposes)
-	exec := agent.NewToolExecutor(nil, nil, nil, nil)
+	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, _ := exec.ExecuteTool(
 		context.Background(),

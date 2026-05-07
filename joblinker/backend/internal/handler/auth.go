@@ -1,10 +1,11 @@
 package handler
 
 import (
+	"log"
 	"net/http"
-	"os"
 	"time"
 
+	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/internal/service"
@@ -24,14 +25,12 @@ func NewAuthHandler(userRepo *repository.UserRepository, securitySvc *service.Se
 	return &AuthHandler{userRepo: userRepo, securitySvc: securitySvc}
 }
 
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
+type UserResponse struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at,omitempty"`
 }
-
-var jwtSecret = []byte(getEnv("JWT_SECRET", "joblinker-dev-secret-change-in-production"))
 
 type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email"`
@@ -65,7 +64,12 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 	h.securitySvc.LogEvent(user.ID, "register", map[string]interface{}{"email": user.Email}, c.ClientIP())
 	token := h.generateToken(user)
-	c.JSON(http.StatusCreated, gin.H{"user": user, "token": token})
+	c.JSON(http.StatusCreated, gin.H{"user": UserResponse{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Role:      string(user.Role),
+		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}, "token": token})
 }
 
 type LoginRequest struct {
@@ -90,7 +94,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	h.securitySvc.LogEvent(user.ID, "login", nil, c.ClientIP())
 	token := h.generateToken(user)
-	c.JSON(http.StatusOK, gin.H{"user": user, "token": token})
+	c.JSON(http.StatusOK, gin.H{"user": UserResponse{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Role:      string(user.Role),
+		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}, "token": token})
 }
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
@@ -111,6 +120,10 @@ func (h *AuthHandler) generateToken(user *model.User) string {
 		"iat":  time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, _ := token.SignedString(jwtSecret)
+	tokenString, err := token.SignedString(middleware.JwtSecret)
+	if err != nil {
+		log.Printf("Failed to sign token: %v", err)
+		return ""
+	}
 	return tokenString
 }

@@ -2,21 +2,39 @@ package service
 
 import (
 	"context"
+	"log"
 
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 
 	"github.com/google/uuid"
 )
 
 type VectorService struct {
 	vectorRepo *repository.VectorRepository
+	aiClient   *ai.Client
 }
 
 func NewVectorService(vectorRepo *repository.VectorRepository) *VectorService {
 	return &VectorService{vectorRepo: vectorRepo}
 }
 
+// NewVectorServiceWithAI creates a VectorService with AI client for real embeddings
+func NewVectorServiceWithAI(vectorRepo *repository.VectorRepository, aiClient *ai.Client) *VectorService {
+	return &VectorService{vectorRepo: vectorRepo, aiClient: aiClient}
+}
+
 func (s *VectorService) GenerateEmbedding(text string) ([]float64, error) {
+	// Try AI API first if client is configured
+	if s.aiClient != nil {
+		embedding, err := s.aiClient.GenerateEmbedding(text)
+		if err != nil {
+			log.Printf("WARNING: AI embedding failed, falling back to TF: %v", err)
+		} else {
+			return embedding, nil
+		}
+	}
+	// Fallback to simple TF-based embedding
 	words := tokenize(text)
 	tf := computeTF(words)
 	embedding := make([]float64, len(words))
