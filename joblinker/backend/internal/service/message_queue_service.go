@@ -467,12 +467,23 @@ When NOT using tools, respond with ONLY a valid JSON object:
 					startDate = sd
 				}
 			}
-			// Fallback to reasonable defaults only if AI didn't provide them
+			// Fallback: get from job's salary range if AI didn't provide
 			if salary == 0 {
-				salary = 120000
+				if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
+					var jobData map[string]interface{}
+					json.Unmarshal([]byte(job.StructuredJSON), &jobData)
+					if min, ok := jobData["salary_min"].(float64); ok {
+						if max, ok := jobData["salary_max"].(float64); ok && max > min {
+							salary = int((min + max) / 2)
+						}
+					}
+				}
+				if salary == 0 {
+					salary = 100000
+				}
 			}
 			if startDate == "" {
-				startDate = "2026-07-01"
+				startDate = time.Now().AddDate(0, 1, 0).Format("2006-01-02")
 			}
 
 			toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), match.ID, "create_offer", map[string]interface{}{
@@ -602,18 +613,19 @@ func scenarioFromPromptType(scenario model.PromptScenarioType) prompt.Scenario {
 }
 
 func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoResponse {
-	// Simple fallback responses if AI fails
+	// Dynamic fallback using current time and sensible defaults
+	now := time.Now()
 	switch currentIntent {
 	case "INTRODUCTION":
 		return &AutoResponse{Intent: "INTEREST", Payload: map[string]interface{}{"message": "Thank you for your introduction. We are interested in your profile."}}
 	case "INTEREST":
-		return &AutoResponse{Intent: "NEGOTIATION", Payload: map[string]interface{}{"type": "salary", "current": 120000, "target": 150000}}
+		return &AutoResponse{Intent: "NEGOTIATION", Payload: map[string]interface{}{"type": "salary", "current": 100000, "target": 140000}}
 	case "NEGOTIATION":
-		return &AutoResponse{Intent: "OFFER", Payload: map[string]interface{}{"type": "offer", "base_salary": 130000}}
+		return &AutoResponse{Intent: "OFFER", Payload: map[string]interface{}{"type": "offer", "base_salary": 110000}}
 	case "OFFER":
 		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "acceptance"}}
 	case "SCHEDULE":
-		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "interview_confirmed"}}
+		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "interview_confirmed", "scheduled_at": now.AddDate(0, 0, 14).Format(time.RFC3339)}}
 	default:
 		return &AutoResponse{Intent: "INQUIRY", Payload: map[string]interface{}{"message": "Thank you for your message."}}
 	}

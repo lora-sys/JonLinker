@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"joblinker/internal/config"
 	"joblinker/internal/middleware"
@@ -276,7 +277,7 @@ func (h *MessageHandler) processMessage(matchID, senderID string, msg *A2AMessag
 	response := &A2AMessage{
 		Header: MessageHeader{
 			MessageID:  uuid.New().String(),
-			Timestamp:  "2026-04-23T00:00:00Z", // Would use time.Now().Format()
+			Timestamp:  time.Now().Format(time.RFC3339),
 			SenderID:   "system",
 			ReceiverID: senderID,
 			ReplyTo:    msg.Header.MessageID,
