@@ -91,11 +91,21 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error: ApiError = await response.json().catch(() => ({ error: 'Unknown error' }));
+      let error: ApiError = { error: 'Unknown error' };
+      try {
+        error = await response.json();
+      } catch {
+        // Response was not JSON, use status text
+        error = { error: response.statusText || 'Request failed' };
+      }
       throw error;
     }
 
-    return response.json();
+    try {
+      return await response.json();
+    } catch {
+      throw { error: 'Invalid JSON response from server' };
+    }
   }
 
   get<T>(endpoint: string, options?: FetchOptions): Promise<T> {

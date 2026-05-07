@@ -3,14 +3,29 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, FileText } from 'lucide-react';
+import { Sparkles, FileText, Plus, X } from 'lucide-react';
 import { getAuthToken } from '@/lib/api-utils';
 
 export default function AgentCreatePage() {
   const router = useRouter();
   const [agentType, setAgentType] = useState<'seeker' | 'recruiter'>('seeker');
+  const [name, setName] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState('');
+  const [preferences, setPreferences] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleAddSkill = () => {
+    if (skillInput.trim() && !skills.includes(skillInput.trim())) {
+      setSkills([...skills, skillInput.trim()]);
+      setSkillInput('');
+    }
+  };
+
+  const handleRemoveSkill = (skillToRemove: string) => {
+    setSkills(skills.filter(s => s !== skillToRemove));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,10 +37,19 @@ export default function AgentCreatePage() {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
+      const config = {
+        name: name || undefined,
+        skills: skills.length > 0 ? skills : undefined,
+        preferences: preferences || undefined,
+      };
+
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ type: agentType }),
+        body: JSON.stringify({
+          type: agentType,
+          config: JSON.stringify(config),
+        }),
       });
       if (!response.ok) throw new Error('Failed to create agent');
       const data = await response.json();
@@ -83,6 +107,72 @@ export default function AgentCreatePage() {
                 <div className="text-sm opacity-75">Hiring talent</div>
               </button>
             </div>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Agent Name (optional)
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Agent"
+              className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Skills (optional)
+            </label>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={skillInput}
+                onChange={(e) => setSkillInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddSkill();
+                  }
+                }}
+                placeholder="Add a skill and press Enter"
+                className="flex-1 px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+              />
+              <button
+                type="button"
+                onClick={handleAddSkill}
+                className="p-3 bg-blue-100 text-blue-600 rounded-xl hover:bg-blue-200 transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+            {skills.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {skills.map((skill) => (
+                  <span key={skill} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                    {skill}
+                    <button type="button" onClick={() => handleRemoveSkill(skill)} className="hover:text-blue-900">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              Preferences (optional)
+            </label>
+            <textarea
+              value={preferences}
+              onChange={(e) => setPreferences(e.target.value)}
+              placeholder="Any preferences for job searching..."
+              rows={3}
+              className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
+            />
           </div>
 
           <button

@@ -82,14 +82,17 @@ function AgentsEmptyState() {
   );
 }
 
-export function AgentsContent({ initialAgents, isLoading = false }: { initialAgents: AgentWithSkills[]; isLoading?: boolean }) {
+export function AgentsContent({ initialAgents, isLoading = false, initialError = null }: { initialAgents: AgentWithSkills[]; isLoading?: boolean; initialError?: string | null }) {
   const [agents, setAgents] = useState<AgentWithSkills[]>(initialAgents);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
 
   // Update when initialAgents changes (after API fetch completes)
   useEffect(() => {
     setAgents(initialAgents);
-  }, [initialAgents]);
+    if (initialError) {
+      setError(initialError);
+    }
+  }, [initialAgents, initialError]);
 
   return (
     <ErrorBoundary>

@@ -1,29 +1,40 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Briefcase, ArrowLeftRight, MessageCircle, Settings, Calendar, FileText, Upload } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { LayoutDashboard, Users, Briefcase, ArrowLeftRight, MessageCircle, Settings, Calendar, FileText, Upload, LogOut } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
 import { useAuthStore } from '@/stores/auth';
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { label: 'Agents', href: '/agents', icon: <Users className="w-5 h-5" /> },
-  { label: 'Jobs', href: '/jobs', icon: <Briefcase className="w-5 h-5" /> },
-  { label: 'Offers', href: '/offers', icon: <FileText className="w-5 h-5" /> },
-  { label: 'Interviews', href: '/interviews', icon: <Calendar className="w-5 h-5" /> },
-  { label: 'Matches', href: '/matches', icon: <ArrowLeftRight className="w-5 h-5" /> },
-  { label: 'Messages', href: '/messages', icon: <MessageCircle className="w-5 h-5" /> },
-  { label: 'Resume', href: '/resume', icon: <Upload className="w-5 h-5" /> },
-  { label: 'Settings', href: '/settings', icon: <Settings className="w-5 h-5" /> },
-];
-
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, clearAuth } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      clearAuth();
+      router.push('/login');
+    }
+  };
 
   if (!isAuthenticated) return null;
+
+  const navItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    { label: 'Agents', href: '/agents', icon: <Users className="w-5 h-5" /> },
+    { label: 'Jobs', href: '/jobs', icon: <Briefcase className="w-5 h-5" /> },
+    { label: 'Offers', href: '/offers', icon: <FileText className="w-5 h-5" /> },
+    { label: 'Interviews', href: '/interviews', icon: <Calendar className="w-5 h-5" /> },
+    { label: 'Matches', href: '/matches', icon: <ArrowLeftRight className="w-5 h-5" /> },
+    { label: 'Messages', href: '/messages', icon: <MessageCircle className="w-5 h-5" /> },
+    { label: 'Resume', href: '/resume', icon: <Upload className="w-5 h-5" /> },
+    { label: 'Settings', href: '/settings', icon: <Settings className="w-5 h-5" /> },
+    { label: 'Logout', href: '#', icon: <LogOut className="w-5 h-5" />, onClick: handleLogout },
+  ];
 
   return (
     <>
@@ -48,16 +59,21 @@ export function Sidebar() {
         <nav className="p-3 space-y-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const isLogout = item.label === 'Logout';
+
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
                 onClick={() => {
-                  if (window.innerWidth < 1024) toggleSidebar();
+                  if (isLogout) {
+                    item.onClick?.();
+                  } else {
+                    if (window.innerWidth < 1024) toggleSidebar();
+                  }
                 }}
                 className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
-                  ${isActive
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
+                  ${isActive && !isLogout
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }
@@ -66,7 +82,7 @@ export function Sidebar() {
               >
                 {item.icon}
                 <span className={`font-medium ${!sidebarOpen && 'lg:hidden'}`}>{item.label}</span>
-              </Link>
+              </button>
             );
           })}
         </nav>

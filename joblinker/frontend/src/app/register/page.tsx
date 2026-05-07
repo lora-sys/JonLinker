@@ -52,11 +52,7 @@ function RegisterForm() {
       }
 
       const data = await response.json();
-      // Set localStorage for hooks (useChat reads from here)
-      localStorage.setItem('joblinker-auth', JSON.stringify({ state: { token: data.token, user: data.user } }));
-      // Set auth cookie for middleware compatibility
-      document.cookie = `joblinker-auth=${JSON.stringify({ token: data.token, userId: data.user?.id })}; path=/; max-age=${60*60*24*7}`;
-      // Also set Zustand auth state
+      // API route sets cookie server-side - just redirect
       setAuth(data.user, data.token);
       router.push('/dashboard');
     } catch (err) {
