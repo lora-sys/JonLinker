@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"joblinker/internal/repository"
 	"joblinker/internal/service"
 	"joblinker/pkg/ai"
+	"joblinker/pkg/chroma"
 	"joblinker/pkg/rabbitmq"
 )
 
@@ -31,13 +33,28 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvInt(key string, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
 func main() {
 	// Load .env file if present (from same directory as binary)
 	godotenv.Load()
 
-	// Log environment for debugging
-	log.Printf("AI_API_KEY length: %d", len(os.Getenv("AI_API_KEY")))
-	log.Printf("AI_BASE_URL: %s", os.Getenv("AI_BASE_URL"))
+	// Initialize Chroma client
+	chromaHost := getEnv("CHROMA_HOST", "localhost")
+	chromaPort := getEnvInt("CHROMA_PORT", 8000)
+	chromaClient := chroma.NewClient(chromaHost, chromaPort)
+	if err := chromaClient.Heartbeat(); err != nil {
+		log.Printf("WARNING: Chroma not reachable at %s:%d: %v", chromaHost, chromaPort, err)
+	} else {
+		log.Printf("Connected to Chroma at %s:%d", chromaHost, chromaPort)
+	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(os.Stdout)

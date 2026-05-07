@@ -8,19 +8,23 @@ import (
 
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/chroma"
 
 	"github.com/google/uuid"
 )
 
 type PreferenceExtractionService struct {
-	summaryRepo *repository.ConversationSummaryRepository
+	chromaClient *chroma.Client
+	summaryRepo  *repository.ConversationSummaryRepository
 }
 
 func NewPreferenceExtractionService(
+	chromaClient *chroma.Client,
 	summaryRepo *repository.ConversationSummaryRepository,
 ) *PreferenceExtractionService {
 	return &PreferenceExtractionService{
-		summaryRepo: summaryRepo,
+		chromaClient: chromaClient,
+		summaryRepo:  summaryRepo,
 	}
 }
 
@@ -35,10 +39,15 @@ type ExtractedPreference struct {
 func (s *PreferenceExtractionService) ExtractAndStorePreferences(ctx context.Context, userID uuid.UUID, messages []*model.Message) error {
 	log.Printf("Auto-extracting preferences for user %s", userID)
 
-	// Extract preferences from conversation
 	preferences := s.extractPreferencesFromMessages(messages)
 
-	log.Printf("Extracted %d preferences for user %s: %+v", len(preferences), userID, preferences)
+	for _, pref := range preferences {
+		if err := s.StorePreference(ctx, userID, pref); err != nil {
+			log.Printf("Failed to store preference: %v", err)
+		}
+	}
+
+	log.Printf("Extracted %d preferences for user %s", len(preferences), userID)
 	return nil
 }
 
@@ -48,7 +57,6 @@ func (s *PreferenceExtractionService) extractPreferencesFromMessages(messages []
 	for _, msg := range messages {
 		content := msg.ContentXML
 
-		// Extract salary preferences
 		if s.containsSalaryContext(content) {
 			preferences = append(preferences, ExtractedPreference{
 				Type:       "salary_expectation",
@@ -57,7 +65,6 @@ func (s *PreferenceExtractionService) extractPreferencesFromMessages(messages []
 			})
 		}
 
-		// Extract location preferences
 		if s.containsLocationContext(content) {
 			preferences = append(preferences, ExtractedPreference{
 				Type:       "preferred_location",
@@ -66,7 +73,6 @@ func (s *PreferenceExtractionService) extractPreferencesFromMessages(messages []
 			})
 		}
 
-		// Extract job type preferences
 		if s.containsJobTypeContext(content) {
 			preferences = append(preferences, ExtractedPreference{
 				Type:       "job_type",
@@ -105,7 +111,6 @@ func (s *PreferenceExtractionService) containsJobTypeContext(content string) boo
 }
 
 func extractValueFromContent(content string, preferenceType string) string {
-	// Simple extraction - in production would parse structured data
 	return fmt.Sprintf("extracted_%s_value", preferenceType)
 }
 
@@ -134,17 +139,55 @@ func extractPrefJobTypeValue(content string) string {
 	return "full-time"
 }
 
-// StorePreference stores an extracted preference (placeholder for vector storage)
+// StorePreference stores an extracted preference to Chroma
 func (s *PreferenceExtractionService) StorePreference(ctx context.Context, userID uuid.UUID, pref ExtractedPreference) error {
-	log.Printf("Storing preference for user %s: type=%s, value=%s, confidence=%.2f",
+	meta := map[string]interface{}{
+		"user_id":   userID.String(),
+		"pref_type": pref.Type,
+		"confidence": pref.Confidence,
+	}
+	id := uuid.New().String()
+	err := s.chromaClient.Add("user_preferences", []string{id}, []string{pref.Value}, []map[string]interface{}{meta})
+	if err != nil {
+		return fmt.Errorf("failed to store preference in Chroma: %w", err)
+	}
+	log.Printf("Stored preference for user %s: type=%s, value=%s, confidence=%.2f",
 		userID, pref.Type, pref.Value, pref.Confidence)
-	// In production, would store to vector database (pgvector)
 	return nil
 }
 
-// RecallPreferences retrieves stored preferences for a user
+// RecallPreferences retrieves stored preferences for a user from Chroma
 func (s *PreferenceExtractionService) RecallPreferences(ctx context.Context, userID uuid.UUID) ([]ExtractedPreference, error) {
-	// In production, would query vector database
-	log.Printf("Recalling preferences for user %s", userID)
-	return []ExtractedPreference{}, nil
+	where := map[string]interface{}{
+		"user_id": userID.String(),
+	}
+	result, err := s.chromaClient.Query("user_preferences", []string{"preference"}, 10, where)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recall preferences from Chroma: %w", err)
+	}
+
+	var prefs []ExtractedPreference
+	if len(result.IDs) > 0 && len(result.IDs[0]) > 0 {
+		for i := 0; i < len(result.IDs[0]); i++ {
+			var prefType, confidence string
+			if len(result.Metadatas) > 0 && len(result.Metadatas[0]) > i {
+				if t, ok := result.Metadatas[0][i]["pref_type"].(string); ok {
+					prefType = t
+				}
+				if c, ok := result.Metadatas[0][i]["confidence"].(string); ok {
+					confidence = c
+				}
+			}
+			pref := ExtractedPreference{
+				Type:  prefType,
+				Value: result.Documents[0][i],
+			}
+			if confidence != "" {
+				fmt.Sscanf(confidence, "%f", &pref.Confidence)
+			}
+			prefs = append(prefs, pref)
+		}
+	}
+	log.Printf("Recalled %d preferences for user %s", len(prefs), userID)
+	return prefs, nil
 }

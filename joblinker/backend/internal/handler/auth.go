@@ -120,7 +120,7 @@ func (h *AuthHandler) generateToken(user *model.User) string {
 		"iat":  time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(middleware.JwtSecret)
+	tokenString, err := token.SignedString(middleware.GetJwtSecret())
 	if err != nil {
 		log.Printf("Failed to sign token: %v", err)
 		return ""

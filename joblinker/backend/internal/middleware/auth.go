@@ -10,7 +10,19 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var JwtSecret = []byte(getEnvOrFail("JWT_SECRET"))
+var jwtSecret []byte
+
+func getJwtSecret() []byte {
+	if jwtSecret == nil {
+		jwtSecret = []byte(getEnvOrFail("JWT_SECRET"))
+	}
+	return jwtSecret
+}
+
+// GetJwtSecret returns the JWT secret, initializing it from env if not yet set.
+func GetJwtSecret() []byte {
+	return getJwtSecret()
+}
 
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -31,7 +43,7 @@ func Auth() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return JwtSecret, nil
+			return getJwtSecret(), nil
 		})
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})

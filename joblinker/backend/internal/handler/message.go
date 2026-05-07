@@ -619,7 +619,7 @@ func extractUserIDFromToken(tokenStr string) (uuid.UUID, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
 		}
-		return middleware.JwtSecret, nil
+		return middleware.GetJwtSecret(), nil
 	})
 	if err != nil || !token.Valid {
 		return uuid.Nil, err
