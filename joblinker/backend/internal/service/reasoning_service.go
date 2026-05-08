@@ -97,8 +97,21 @@ func (s *ReasoningService) ProcessWithReasoning(ctx context.Context, matchID uui
 
 // understandPhase extracts requirements from user message
 func (s *ReasoningService) understandPhase(message string) ReasoningStep {
-	// Simple keyword extraction for understanding
-	// In production, would use NER and intent classification
+	// Try AI-based intent classification first
+	if s.aiClient != nil {
+		systemPrompt := "Classify the user message intent. Respond with a JSON object: {\"intent\": \"...\", \"requirements\": [\"...\"]}"
+		response, err := s.aiClient.Chat(systemPrompt, message)
+		if err == nil && response != "" {
+			return ReasoningStep{
+				Phase:  "understand",
+				Input:  message,
+				Output: response,
+			}
+		}
+		log.Printf("AI intent classification failed: %v, using keyword fallback", err)
+	}
+
+	// Fallback: keyword extraction
 	lower := strings.ToLower(message)
 
 	var extractedRequirements []string
@@ -257,21 +270,10 @@ func (s *ReasoningService) respondPhase(ctx context.Context, matchID, agentID uu
 		prompt = prompt + "\n\nLet's think step by step about this situation."
 	}
 
-	// In production, would call AI client with this prompt
-	// For now, generate a simple response based on the reasoning steps
-	var response strings.Builder
-	response.WriteString("Based on my analysis:\n\n")
-
-	for _, step := range steps {
-		if step.Phase != "respond" {
-			response.WriteString(fmt.Sprintf("- [%s] %s\n", strings.ToUpper(step.Phase), step.Output))
-		}
-	}
-
 	return ReasoningStep{
 		Phase:  "respond",
 		Input:  fmt.Sprintf("%d reasoning steps", len(steps)),
-		Output: response.String(),
+		Output: "I'll review the details and get back to you.",
 	}
 }
 

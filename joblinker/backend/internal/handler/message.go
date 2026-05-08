@@ -349,7 +349,7 @@ func (h *MessageHandler) broadcastToMatchWithFormat(matchID string, msg *A2AMess
 			MessageType:   proto.MessageType_TEXT,
 			Payload:       xmlData,
 			SequenceNum:   *sequenceNum,
-			Timestamp:     0, // Would use actual timestamp
+			Timestamp:     time.Now().UnixMilli(),
 			SchemaVersion: 1,
 		}
 

@@ -10,9 +10,10 @@ import (
 )
 
 type Client struct {
-	host   string
-	port   int
-	client *http.Client
+	host        string
+	port        int
+	client      *http.Client
+	collections map[string]string // name → UUID
 }
 
 func NewClient(host string, port int) *Client {
@@ -28,6 +29,7 @@ func NewClient(host string, port int) *Client {
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		collections: make(map[string]string),
 	}
 }
 
@@ -84,12 +86,31 @@ func (c *Client) GetOrCreateCollection(name string) (Collection, error) {
 	return col, nil
 }
 
+// EnsureCollection resolves a collection name to a UUID, creating it if needed.
+// Results are cached so subsequent calls with the same name return the same UUID.
+func (c *Client) EnsureCollection(name string) (string, error) {
+	if uuid, ok := c.collections[name]; ok {
+		return uuid, nil
+	}
+	col, err := c.GetOrCreateCollection(name)
+	if err != nil {
+		return "", fmt.Errorf("ensure collection %s: %w", name, err)
+	}
+	c.collections[name] = col.ID
+	return col.ID, nil
+}
+
 func (c *Client) Add(collectionID string, ids, documents []string, metadatas []map[string]interface{}) error {
 	if len(ids) == 0 || len(documents) == 0 {
 		return nil
 	}
 	if len(ids) != len(documents) {
 		return fmt.Errorf("ids (%d) and documents (%d) length mismatch", len(ids), len(documents))
+	}
+
+	resolvedID, err := c.EnsureCollection(collectionID)
+	if err != nil {
+		return err
 	}
 
 	payload := map[string]interface{}{
@@ -102,7 +123,7 @@ func (c *Client) Add(collectionID string, ids, documents []string, metadatas []m
 		return fmt.Errorf("failed to marshal add payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/collections/%s/add", c.baseURL(), collectionID)
+	url := fmt.Sprintf("%s/collections/%s/add", c.baseURL(), resolvedID)
 	resp, err := c.client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to add documents: %w", err)
@@ -125,6 +146,11 @@ type QueryResult struct {
 }
 
 func (c *Client) Query(collectionID string, queryTexts []string, nResults int, where map[string]interface{}) (QueryResult, error) {
+	resolvedID, err := c.EnsureCollection(collectionID)
+	if err != nil {
+		return QueryResult{}, err
+	}
+
 	payload := map[string]interface{}{
 		"query_texts": queryTexts,
 		"n_results":   nResults,
@@ -138,7 +164,7 @@ func (c *Client) Query(collectionID string, queryTexts []string, nResults int, w
 		return QueryResult{}, fmt.Errorf("failed to marshal query payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/collections/%s/query", c.baseURL(), collectionID)
+	url := fmt.Sprintf("%s/collections/%s/query", c.baseURL(), resolvedID)
 	resp, err := c.client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("failed to query collection: %w", err)
@@ -161,6 +187,10 @@ func (c *Client) Delete(collectionID string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	resolvedID, err := c.EnsureCollection(collectionID)
+	if err != nil {
+		return err
+	}
 	payload := map[string]interface{}{
 		"ids": ids,
 	}
@@ -169,7 +199,7 @@ func (c *Client) Delete(collectionID string, ids []string) error {
 		return fmt.Errorf("failed to marshal delete payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/collections/%s/delete", c.baseURL(), collectionID)
+	url := fmt.Sprintf("%s/collections/%s/delete", c.baseURL(), resolvedID)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
@@ -192,6 +222,10 @@ func (c *Client) Get(collectionID string, ids []string, include []string) ([]map
 	if len(ids) == 0 {
 		return nil, nil
 	}
+	resolvedID, err := c.EnsureCollection(collectionID)
+	if err != nil {
+		return nil, err
+	}
 	payload := map[string]interface{}{
 		"ids":     ids,
 		"include": include,
@@ -201,7 +235,7 @@ func (c *Client) Get(collectionID string, ids []string, include []string) ([]map
 		return nil, fmt.Errorf("failed to marshal get payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/collections/%s/get", c.baseURL(), collectionID)
+	url := fmt.Sprintf("%s/collections/%s/get", c.baseURL(), resolvedID)
 	resp, err := c.client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get documents: %w", err)

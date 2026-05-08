@@ -54,6 +54,12 @@ func main() {
 		log.Printf("WARNING: Chroma not reachable at %s:%d: %v", chromaHost, chromaPort, err)
 	} else {
 		log.Printf("Connected to Chroma at %s:%d", chromaHost, chromaPort)
+		if _, err := chromaClient.EnsureCollection("agent_memories"); err != nil {
+			log.Printf("WARNING: failed to ensure agent_memories collection: %v", err)
+		}
+		if _, err := chromaClient.EnsureCollection("user_preferences"); err != nil {
+			log.Printf("WARNING: failed to ensure user_preferences collection: %v", err)
+		}
 	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -91,6 +97,10 @@ func main() {
 		&model.AgentMetrics{},
 		&model.AuditLog{},
 		&model.ErrorEvent{},
+		&model.AgentMemory{},
+		&model.ConversationSummary{},
+		&model.AgentToolCall{},
+		&model.ConfirmationRequest{},
 	); err != nil {
 		log.Fatalf("Failed to auto migrate: %v", err)
 	}
@@ -203,9 +213,9 @@ func main() {
 		api.GET("/interviews", interviewHandler.List)
 		api.POST("/interviews", interviewHandler.Create)
 		api.PATCH("/interviews/:id", interviewHandler.Update)
-		api.GET("/interviews/:matchId", interviewHandler.GetByMatchID)
-		api.POST("/interviews/:matchId/confirm", interviewHandler.Confirm)
-		api.POST("/interviews/:matchId/cancel", interviewHandler.Cancel)
+		api.GET("/interviews/match/:matchId", interviewHandler.GetByMatchID)
+		api.POST("/interviews/match/:matchId/confirm", interviewHandler.Confirm)
+		api.POST("/interviews/match/:matchId/cancel", interviewHandler.Cancel)
 
 		api.GET("/offers/:matchId", offerHandler.GetByMatchID)
 		api.POST("/offers", offerHandler.Create)

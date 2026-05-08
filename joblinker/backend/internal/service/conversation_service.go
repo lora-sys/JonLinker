@@ -262,11 +262,32 @@ func extractSalaryValue(content string) string {
 		}
 	}
 
-	return "extracted_from_conversation"
+	if len(content) > 100 {
+		return content[:100]
+	}
+	return content
+}
+
+var locationKeywords = []string{
+	"remote", "onsite", "on-site", "hybrid",
+	"san francisco", "new york", "nyc", "seattle", "austin", "boston", "chicago",
+	"los angeles", "la", "denver", "portland", "san diego", "miami", "atlanta",
+	"dallas", "houston", "phoenix", "philadelphia", "minneapolis", "detroit",
+	"london", "berlin", "paris", "tokyo", "singapore", "toronto", "vancouver",
+	"amsterdam", "dublin", "munich", "sydney", "melbangalore",
 }
 
 func extractLocationValue(content string) string {
-	return "extracted_from_conversation"
+	lower := strings.ToLower(content)
+	for _, kw := range locationKeywords {
+		if strings.Contains(lower, kw) {
+			return kw
+		}
+	}
+	if len(content) > 50 {
+		return content[:50]
+	}
+	return content
 }
 
 func extractJobTypeValue(content string) string {
@@ -283,8 +304,38 @@ func extractJobTypeValue(content string) string {
 	return "unspecified"
 }
 
+var skillKeywords = []string{
+	"Go", "Python", "Java", "JavaScript", "TypeScript", "C++", "C#", "Rust", "Ruby", "PHP",
+	"Swift", "Kotlin", "Scala", "Elixir", "Haskell", "Clojure", "Perl", "R", "MATLAB",
+	"React", "Vue", "Angular", "Svelte", "Next.js", "Nuxt", "Remix",
+	"Node.js", "Express", "Django", "Flask", "FastAPI", "Spring", "Rails", "Gin", "Fiber",
+	"Docker", "Kubernetes", "K8s", "Terraform", "Ansible", "Helm",
+	"AWS", "GCP", "Azure", "Cloudflare", "Vercel", "Netlify",
+	"PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "DynamoDB", "Cassandra",
+	"gRPC", "GraphQL", "REST", "WebSocket", "Kafka", "RabbitMQ", "NATS",
+	"Git", "CI/CD", "Jenkins", "GitHub Actions", "GitLab CI",
+	"Linux", "Bash", "Shell", "Nginx", "Apache",
+	"Machine Learning", "ML", "AI", "Deep Learning", "NLP", "PyTorch", "TensorFlow",
+	"Microservices", "Serverless", "FaaS", "API", "OAuth", "JWT",
+}
+
 func extractSkillsValue(content string) string {
-	return "extracted_from_conversation"
+	var found []string
+	lower := strings.ToLower(content)
+	seen := make(map[string]bool)
+	for _, skill := range skillKeywords {
+		if strings.Contains(lower, strings.ToLower(skill)) && !seen[strings.ToLower(skill)] {
+			found = append(found, skill)
+			seen[strings.ToLower(skill)] = true
+		}
+	}
+	if len(found) > 0 {
+		return strings.Join(found, ", ")
+	}
+	if len(content) > 100 {
+		return content[:100]
+	}
+	return content
 }
 
 func truncateContent(content string, maxLen int) string {

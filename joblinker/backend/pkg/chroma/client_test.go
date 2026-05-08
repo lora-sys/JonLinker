@@ -75,10 +75,12 @@ func TestChromaClient_CollectionCRUD(t *testing.T) {
 		t.Error("Query returned no results")
 	}
 	found := false
-	for _, id := range result.IDs {
-		if id == testID {
-			found = true
-			break
+	for _, ids := range result.IDs {
+		for _, id := range ids {
+			if id == testID {
+				found = true
+				break
+			}
 		}
 	}
 	if !found {
@@ -136,12 +138,38 @@ func TestChromaClient_AddAndQuery(t *testing.T) {
 	}
 
 	// doc1 should be top result (highest similarity)
-	if result.IDs[0] != "doc1" {
-		t.Errorf("expected doc1 as top result for ML query, got %s", result.IDs[0])
+	if len(result.IDs[0]) == 0 || result.IDs[0][0] != "doc1" {
+		t.Errorf("expected doc1 as top result for ML query, got %v", result.IDs[0])
 	}
 
 	// Clean up
 	c.Delete(colName, ids)
+}
+
+func TestChromaClient_EnsureCollection(t *testing.T) {
+	chromaHost := getEnv("CHROMA_HOST", "localhost")
+	chromaPort := getEnvInt("CHROMA_PORT", 8000)
+	c := NewClient(chromaHost, chromaPort)
+
+	collName := "test_ensure_" + randomID()
+
+	// First call should create and return a UUID
+	uuid1, err := c.EnsureCollection(collName)
+	if err != nil {
+		t.Fatalf("EnsureCollection first call failed: %v", err)
+	}
+	if uuid1 == "" {
+		t.Fatal("EnsureCollection returned empty UUID")
+	}
+
+	// Second call should return the same UUID (cached)
+	uuid2, err := c.EnsureCollection(collName)
+	if err != nil {
+		t.Fatalf("EnsureCollection second call failed: %v", err)
+	}
+	if uuid1 != uuid2 {
+		t.Errorf("EnsureCollection returned different UUIDs: %s vs %s", uuid1, uuid2)
+	}
 }
 
 // Helper functions

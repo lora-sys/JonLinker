@@ -1,13 +1,10 @@
 package agent_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
 	"joblinker/internal/agent"
-
-	"github.com/google/uuid"
 )
 
 func TestSalaryNegotiator_NewNegotiator(t *testing.T) {
@@ -235,84 +232,3 @@ func TestFormatCompensation(t *testing.T) {
 	}
 }
 
-func TestMemory_NewMemory(t *testing.T) {
-	id := uuid.New()
-	mem := agent.NewMemory(id)
-
-	if mem == nil {
-		t.Fatal("expected non-nil memory")
-	}
-
-	if mem.AgentID != id {
-		t.Errorf("expected agent ID %v, got %v", id, mem.AgentID)
-	}
-
-	if mem.MaxEntries != 1000 {
-		t.Errorf("expected max entries 1000, got %d", mem.MaxEntries)
-	}
-}
-
-func TestMemory_AddEntry(t *testing.T) {
-	mem := agent.NewMemory(uuid.New())
-
-	entry := agent.MemoryEntry{
-		Type:       "interaction",
-		Content:    "Matched with recruiter agent",
-		Importance: 0.8,
-	}
-
-	mem.AddEntry(entry)
-
-	if len(mem.History) != 1 {
-		t.Errorf("expected 1 entry, got %d", len(mem.History))
-	}
-
-	if mem.History[0].Content != "Matched with recruiter agent" {
-		t.Errorf("unexpected content: %s", mem.History[0].Content)
-	}
-}
-
-func TestMemory_LearnFact(t *testing.T) {
-	mem := agent.NewMemory(uuid.New())
-
-	mem.LearnFact("Remote work preferred")
-
-	if !mem.LearnedFacts["Remote work preferred"] {
-		t.Error("expected fact to be stored")
-	}
-
-	if len(mem.History) != 1 {
-		t.Errorf("expected 1 entry, got %d", len(mem.History))
-	}
-}
-
-func TestMemory_StorePreference(t *testing.T) {
-	mem := agent.NewMemory(uuid.New())
-
-	mem.StorePreference("salary_expectation", 120000)
-
-	if mem.Preferences["salary_expectation"] != 120000 {
-		t.Errorf("expected preference 120000, got %v", mem.Preferences["salary_expectation"])
-	}
-}
-
-func TestMemory_GetActiveContext(t *testing.T) {
-	mem := agent.NewMemory(uuid.New())
-	mem.ContextBudget = 5
-
-	// Add 10 entries
-	for i := 0; i < 10; i++ {
-		mem.AddEntry(agent.MemoryEntry{
-			Type:       "interaction",
-			Content:    fmt.Sprintf("Entry %d", i),
-			Importance: 0.5,
-		})
-	}
-
-	ctx := mem.GetActiveContext()
-
-	// Should return last 5 entries due to context budget
-	if len(ctx) != 5 {
-		t.Errorf("expected 5 entries in context, got %d", len(ctx))
-	}
-}

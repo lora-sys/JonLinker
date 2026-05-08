@@ -11,6 +11,7 @@ import (
 	"joblinker/internal/agent"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -23,6 +24,7 @@ type DualAgentNegotiationService struct {
 	agentRepo     *repository.AgentRepository
 	promptService *AgentPromptService
 	toolExecutor  *agent.ToolExecutor
+	aiClient      *ai.Client
 }
 
 func NewDualAgentNegotiationService(
@@ -32,6 +34,7 @@ func NewDualAgentNegotiationService(
 	agentRepo *repository.AgentRepository,
 	promptService *AgentPromptService,
 	toolExecutor *agent.ToolExecutor,
+	aiClient *ai.Client,
 ) *DualAgentNegotiationService {
 	return &DualAgentNegotiationService{
 		db:            db,
@@ -40,6 +43,7 @@ func NewDualAgentNegotiationService(
 		agentRepo:     agentRepo,
 		promptService: promptService,
 		toolExecutor:  toolExecutor,
+		aiClient:      aiClient,
 	}
 }
 
@@ -145,11 +149,17 @@ You are acting as a job seeker in a dual-agent negotiation.
 Respond with your proposal text. If agreeing to terms, say "I agree to these terms."`,
 		prompt, round)
 
-	// In production, this would call the AI client
-	// For now, generate a simple response
-	response := fmt.Sprintf("Seeker proposal in round %d - requesting salary discussion", round)
+	// Call AI service if available
+	if s.aiClient != nil {
+		systemPrompt := "You are a job seeker agent in a salary negotiation. Respond naturally based on the conversation context."
+		response, err := s.aiClient.Chat(systemPrompt, prompt)
+		if err == nil && response != "" {
+			return response
+		}
+		log.Printf("AI call failed in generateSeekerProposal: %v", err)
+	}
 
-	return response
+	return "I'd like to discuss the compensation package further."
 }
 
 func (s *DualAgentNegotiationService) storeAgentMessage(ctx context.Context, matchID, agentID uuid.UUID, content, intent string) {

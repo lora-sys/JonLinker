@@ -88,7 +88,7 @@ func NewMessageQueueService(
 	if toolCache != nil {
 		toolExecutor.SetCache(toolCache)
 	}
-	log.Printf("MessageQueueService AI client - BaseURL: %s, APIKey length: %d", aiClient.BaseURL, len(aiClient.APIKey))
+	log.Printf("MessageQueueService initialized with AI client")
 	return &MessageQueueService{
 		rmq:                rmq,
 		messageRepo:        messageRepo,
@@ -479,7 +479,8 @@ When NOT using tools, respond with ONLY a valid JSON object:
 					}
 				}
 				if salary == 0 {
-					salary = 100000
+					log.Printf("WARNING: salary could not be determined from job data, using fallback")
+					return s.fallbackResponse("OFFER")
 				}
 			}
 			if startDate == "" {
@@ -613,15 +614,14 @@ func scenarioFromPromptType(scenario model.PromptScenarioType) prompt.Scenario {
 }
 
 func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoResponse {
-	// Dynamic fallback using current time and sensible defaults
 	now := time.Now()
 	switch currentIntent {
 	case "INTRODUCTION":
 		return &AutoResponse{Intent: "INTEREST", Payload: map[string]interface{}{"message": "Thank you for your introduction. We are interested in your profile."}}
 	case "INTEREST":
-		return &AutoResponse{Intent: "NEGOTIATION", Payload: map[string]interface{}{"type": "salary", "current": 100000, "target": 140000}}
+		return &AutoResponse{Intent: "NEGOTIATION", Payload: map[string]interface{}{"message": "Let's discuss compensation details."}}
 	case "NEGOTIATION":
-		return &AutoResponse{Intent: "OFFER", Payload: map[string]interface{}{"type": "offer", "base_salary": 110000}}
+		return &AutoResponse{Intent: "OFFER", Payload: map[string]interface{}{"message": "We'd like to extend an offer."}}
 	case "OFFER":
 		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "acceptance"}}
 	case "SCHEDULE":
