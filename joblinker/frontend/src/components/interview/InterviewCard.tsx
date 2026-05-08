@@ -1,33 +1,10 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
-
-interface Interview {
-  id: string;
-  match_id: string;
-  scheduled_at: string;
-  format: string;
-  location?: string;
-  status: string;
-  match?: {
-    job?: {
-      title?: string;
-      agent?: {
-        user?: {
-          email?: string;
-        };
-      };
-    };
-    seeker_agent?: {
-      user?: {
-        email?: string;
-      };
-    };
-  };
-}
+import type { Interview as DomainInterview } from '@/types';
 
 interface InterviewCardProps {
-  interview: Interview;
+  interview: DomainInterview;
   onReschedule?: (id: string) => void;
   onCancel?: (id: string) => void;
   onConfirm?: (id: string) => void;
@@ -101,7 +78,7 @@ export function InterviewCard({
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">
-              {interview.match?.job?.title || 'Interview'}
+              {interview.match?.job?.structured?.title || 'Interview'}
             </h3>
             <p className="text-sm text-gray-500 mt-1">
               {formatDate(interview.scheduled_at)}

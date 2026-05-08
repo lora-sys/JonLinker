@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, ArrowLeft, Loader2, FileText, Check } from 'lucide-react';
+import { Sparkles, ArrowLeft, Loader2, FileText, Check, X } from 'lucide-react';
 import { apiClient } from '@/lib/api_client';
 
 export default function ResumeGeneratePage() {
@@ -11,6 +11,7 @@ export default function ResumeGeneratePage() {
   const [userInfo, setUserInfo] = useState('');
   const [resume, setResume] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
 
   const handleGenerate = async () => {
     if (!userInfo.trim()) {
@@ -43,7 +44,8 @@ export default function ResumeGeneratePage() {
 
       const password = prompt('Enter a password to encrypt your resume (min 8 characters):');
       if (!password || password.length < 8) {
-        alert('Password must be at least 8 characters');
+        setNotification('Password must be at least 8 characters');
+        setTimeout(() => setNotification(null), 3000);
         return;
       }
 
@@ -51,16 +53,30 @@ export default function ResumeGeneratePage() {
       const resumeText = JSON.stringify(resume, null, 2);
       await privacyStorage.storeResume(id, resumeText, password);
 
-      alert('Resume saved to your encrypted local storage!');
-      router.push('/resume');
+      setNotification('Resume saved to your encrypted local storage!');
+      setTimeout(() => {
+        setNotification(null);
+        router.push('/resume');
+      }, 1500);
     } catch (err) {
-      alert('Failed to save resume');
+      setNotification('Failed to save resume');
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
       <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Toast notification */}
+        {notification && (
+          <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg shadow-lg">
+            <span className="text-sm font-medium">{notification}</span>
+            <button onClick={() => setNotification(null)} className="p-0.5 hover:bg-blue-700 rounded">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"

@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/react": "^3.0.174",
     "@radix-ui/react-label": "^2.1.8",
     "@tabler/icons-react": "^3.41.1",
@@ -22,7 +23,6 @@
     "framer-motion": "^12.38.0",
     "idb": "^8.0.3",
     "lucide-react": "^1.11.0",
-    "motion": "^12.38.0",
     "next": "^16.0.0",
     "playwright": "^1.59.1",
     "radix-ui": "^1.4.3",

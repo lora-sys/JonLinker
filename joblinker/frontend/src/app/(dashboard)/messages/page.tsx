@@ -45,13 +45,15 @@ export default function MessagesPage() {
   const messageQueueRef = useRef<Message[]>([]);
   const reconnectAttemptRef = useRef(0);
 
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+
   const fetchMessages = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
       const data = await apiClient.get<{conversations: Conversation[]}>('/api/messages');
       const convs = data?.conversations || [];
-      // Extract messages from conversations for display
+      setConversations(convs);
       const msgs: Message[] = convs
         .filter(c => c.LastMessage)
         .map(c => c.LastMessage!);
@@ -189,7 +191,7 @@ export default function MessagesPage() {
     return undefined;
   }, [connectionState, disconnectedTime]);
 
-  const unreadCount = 0;
+  const unreadCount = conversations.reduce((sum, c) => sum + (c.UnreadCount || 0), 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">

@@ -12,7 +12,7 @@ interface ChatWindowProps {
 
 export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
   const {
-    messages,
+    messages: rawMessages,
     input,
     setInput,
     status,
@@ -25,9 +25,22 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
     hasMoreMessages,
   } = useAIChat({ matchId });
 
+  // Convert AI SDK messages to ChatMessage format for MessageList
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages = rawMessages.map((m: any) => {
+    const text = m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join('') || '';
+    return {
+      id: m.id,
+      matchId,
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: text,
+      createdAt: new Date(),
+      status: 'done' as const,
+    };
+  });
+
   const isStreaming = status === 'streaming';
-  const isPending = status === 'pending';
-  const isDisabled = isStreaming || isPending;
+  const isDisabled = isStreaming;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -83,7 +96,7 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
       <MessageList
         messages={messages}
         status={status}
-        isLoading={messages.length === 0 && isPending}
+        isLoading={messages.length === 0 && isStreaming}
         onLoadMore={loadMoreMessages}
         hasMore={hasMoreMessages}
       />
@@ -121,7 +134,7 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
             aria-label="Send message"
           >
             <Send className="w-4 h-4" />
-            {isPending ? 'Sending...' : 'Send'}
+            Send
           </button>
         </form>
 

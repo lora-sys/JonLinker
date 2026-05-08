@@ -1,12 +1,11 @@
-import { cookies } from 'next/headers';
 import { AgentsContent } from './AgentsContent';
+import { getServerToken } from '@/lib/auth-utils';
 import type { Agent } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 async function getAgents(): Promise<{ agents: Agent[]; error: string | null }> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth_token')?.value;
+  const token = await getServerToken();
 
   if (!token) {
     return { agents: [], error: 'Not authenticated' };

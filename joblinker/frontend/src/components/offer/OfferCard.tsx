@@ -1,42 +1,12 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import type { Offer as DomainOffer } from '@/types';
 
-interface CompensationPackage {
-  base_salary: number;
-  signing_bonus?: number;
-  annual_bonus?: number;
-  equity_grant?: number;
-  equity_type?: string;
-  benefits?: string[];
-  currency?: string;
-  total_compensation?: number;
-}
-
-interface Offer {
-  id: string;
-  match_id: string;
-  compensation: CompensationPackage;
-  start_date: string;
-  status: string;
-  responded_at?: string;
-  created_at: string;
-  match?: {
-    job?: {
-      title?: string;
-    };
-    seeker_agent?: {
-      user?: {
-        email?: string;
-      };
-    };
-  };
-}
-
-interface OfferCardProps {
-  offer: Offer;
+type OfferCardProps = {
+  offer: DomainOffer;
   onRespond?: (id: string, response: 'accept' | 'decline' | 'negotiate') => void;
-}
+};
 
 export function OfferCard({ offer, onRespond }: OfferCardProps) {
   const formatCurrency = (amount: number, currency = 'USD') => {
@@ -74,7 +44,7 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
-            {offer.match?.job?.title || 'Offer'}
+            {offer.match?.job?.structured?.title || 'Offer'}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             Received {formatDate(offer.created_at)}
@@ -93,38 +63,20 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
           </span>
         </div>
 
-        {comp.signing_bonus && comp.signing_bonus > 0 && (
+        {comp.bonus && comp.bonus.amount > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-gray-100">
-            <span className="text-sm text-gray-600">Signing Bonus</span>
+            <span className="text-sm text-gray-600">{comp.bonus.description || 'Bonus'}</span>
             <span className="font-semibold text-gray-900">
-              {formatCurrency(comp.signing_bonus, comp.currency)}
+              {formatCurrency(comp.bonus.amount, comp.currency)}
             </span>
           </div>
         )}
 
-        {comp.annual_bonus && comp.annual_bonus > 0 && (
+        {comp.equity && comp.equity.shares > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-gray-100">
-            <span className="text-sm text-gray-600">Annual Bonus</span>
+            <span className="text-sm text-gray-600">Equity ({comp.equity.vesting_period})</span>
             <span className="font-semibold text-gray-900">
-              {formatCurrency(comp.annual_bonus, comp.currency)}
-            </span>
-          </div>
-        )}
-
-        {comp.equity_grant && comp.equity_grant > 0 && (
-          <div className="flex justify-between items-center py-2 border-b border-gray-100">
-            <span className="text-sm text-gray-600">Equity Grant ({comp.equity_type})</span>
-            <span className="font-semibold text-gray-900">
-              {formatCurrency(comp.equity_grant, comp.currency)}
-            </span>
-          </div>
-        )}
-
-        {comp.total_compensation && comp.total_compensation > 0 && (
-          <div className="flex justify-between items-center py-2 bg-blue-50 rounded-lg px-3 -mx-3">
-            <span className="text-sm font-medium text-blue-900">Total Compensation</span>
-            <span className="font-bold text-blue-900">
-              {formatCurrency(comp.total_compensation, comp.currency)}
+              {comp.equity.shares.toLocaleString()} shares
             </span>
           </div>
         )}

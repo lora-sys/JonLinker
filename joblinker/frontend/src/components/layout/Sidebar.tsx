@@ -61,19 +61,33 @@ export function Sidebar() {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const isLogout = item.label === 'Logout';
 
+            if (isLogout) {
+              return (
+                <button
+                  key={item.href}
+                  onClick={() => item.onClick?.()}
+                  className={`
+                    w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
+                    text-gray-600 hover:bg-gray-50 hover:text-gray-900
+                    ${!sidebarOpen && 'lg:justify-center'}
+                  `}
+                >
+                  {item.icon}
+                  <span className={`font-medium ${!sidebarOpen && 'lg:hidden'}`}>{item.label}</span>
+                </button>
+              );
+            }
+
             return (
-              <button
+              <Link
                 key={item.href}
+                href={item.href}
                 onClick={() => {
-                  if (isLogout) {
-                    item.onClick?.();
-                  } else {
-                    if (window.innerWidth < 1024) toggleSidebar();
-                  }
+                  if (window.innerWidth < 1024) toggleSidebar();
                 }}
                 className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
-                  ${isActive && !isLogout
+                  flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200
+                  ${isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }
@@ -82,7 +96,7 @@ export function Sidebar() {
               >
                 {item.icon}
                 <span className={`font-medium ${!sidebarOpen && 'lg:hidden'}`}>{item.label}</span>
-              </button>
+              </Link>
             );
           })}
         </nav>

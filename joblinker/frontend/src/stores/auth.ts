@@ -20,6 +20,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      _hasRehydrated: false,
 
       setAuth: (user, token) => {
         apiClient.setToken(token);
@@ -36,6 +37,8 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({
           user: state.user ? { ...state.user, ...userData } : null,
         })),
+
+      setRehydrated: () => set({ _hasRehydrated: true }),
     }),
     {
       name: 'joblinker-auth',

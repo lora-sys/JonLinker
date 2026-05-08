@@ -1,6 +1,6 @@
 import { Activity, AlertTriangle, CheckCircle, Users, Shield, Zap } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { getServerToken } from '@/lib/auth-utils';
 
 interface MetricsSummary {
   active_seekers: number;
@@ -45,8 +45,7 @@ interface DashboardData {
 }
 
 async function getAdminData(): Promise<DashboardData | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('joblinker-auth')?.value;
+  const token = await getServerToken();
 
   if (!token) {
     return null;

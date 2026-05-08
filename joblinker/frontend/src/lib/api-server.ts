@@ -1,21 +1,9 @@
-import { cookies } from 'next/headers';
+import { getServerToken } from '@/lib/auth-utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-async function getAuthToken(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const authCookie = cookieStore.get('joblinker-auth');
-  if (!authCookie?.value) return null;
-  try {
-    const parsed = JSON.parse(authCookie.value);
-    return parsed.token || null;
-  } catch {
-    return null;
-  }
-}
-
 export async function fetchServer<T>(endpoint: string): Promise<T | null> {
-  const token = await getAuthToken();
+  const token = await getServerToken();
   if (!token) return null;
 
   try {
