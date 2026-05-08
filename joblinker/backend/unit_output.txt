@@ -1,0 +1,2 @@
+ok  	joblinker/tests/unit/agent	0.004s
+ok  	joblinker/tests/unit/service	0.008s

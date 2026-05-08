@@ -3,3 +3,10 @@ joblinker/frontend/test-results/
 joblinker/frontend/tests/
 # Added by code-review-graph
 .code-review-graph/
+.cursorrules
+.mcp.json
+.opencode.json
+.kiro
+.claude
+.windsurfrules
+.playwright-cli

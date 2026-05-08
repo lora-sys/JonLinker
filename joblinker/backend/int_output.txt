@@ -1,0 +1,83 @@
+--- FAIL: TestAgentCreate_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentList_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentGet_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentUpdate_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentDelete_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentDataIsolation (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAgentCreate_RecruiterType (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_DuplicateEmail (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestLogin_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestLogin_WrongPassword (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestProtectedEndpoint_NoToken (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_InvalidEmail (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_ShortPassword (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_MissingRole (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_InvalidRole (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestLogin_NonExistentEmail (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRegister_VerifyEmailNotLeaked (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+2026/05/07 22:03:10 [94db4601-2d4f-45a8-81e9-36a59409f17e] GET /test - userID=anonymous agentID= tenantID=default
+2026/05/07 22:03:10 [94db4601-2d4f-45a8-81e9-36a59409f17e] Completed GET /test - 200 (91.759µs)
+2026/05/07 22:03:10 [25628125-cd14-4c1f-a145-cb51a61d2d5f] GET /test - userID=anonymous agentID= tenantID=default
+2026/05/07 22:03:10 [25628125-cd14-4c1f-a145-cb51a61d2d5f] Completed GET /test - 200 (13.114µs)
+--- FAIL: TestAutoMatch_Real (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAutoMatch_List (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAutoMatch_Get (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAutoMatch_Confirm (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestMatch_SeekerCannotCreateJob (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestMemoryPersistence (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestVectorSearch (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAdminEndpoint_NonAdmin (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestAdminEndpoint_Admin (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestPasswordHashNotLeaked (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRefreshRequiresAuth (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestRateLimit (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestJWTSecretNotDefault (0.00s)
+    setup.go:56: required environment variable JWT_SECRET is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestDeleteAccount_Works (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestExportExcludesPlaintextEmail (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestWebSocket_Connect (0.00s)
+    setup.go:56: required environment variable TEST_WS_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestWebSocket_AuthRequired (0.00s)
+    setup.go:56: required environment variable TEST_WS_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestWebSocket_InvalidMatchID (0.00s)
+    setup.go:56: required environment variable TEST_WS_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestWebSocket_MessageIsolation (0.00s)
+    setup.go:56: required environment variable TEST_SERVER_URL is not set — required environment variable not set — test must t.Fatal
+--- FAIL: TestWebSocket_TimestampNotHardcoded (0.00s)
+    setup.go:56: required environment variable TEST_WS_URL is not set — required environment variable not set — test must t.Fatal
+FAIL
+FAIL	joblinker/tests/integration	0.009s
+FAIL

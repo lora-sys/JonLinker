@@ -58,5 +58,9 @@ coverage/
 chroma/
 
 ./test-results
-joblinker/.firecrawl
-joblinker/.qoder
+.firecrawl
+.qoder
+joblinker/--full-page
+test_output.txt
+dogfood-output
+.specify

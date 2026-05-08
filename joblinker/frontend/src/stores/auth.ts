@@ -7,9 +7,11 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  _hasRehydrated: boolean;
   setAuth: (user: User, token: string) => void;
   clearAuth: () => void;
   updateUser: (user: Partial<User>) => void;
+  setRehydrated: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
