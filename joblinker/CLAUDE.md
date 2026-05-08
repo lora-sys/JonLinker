@@ -23,15 +23,11 @@ curl -s http://localhost:8080/health
 
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/014-protobuf-protocol/plan.md
+specs/019-backend-refactor-22fixes/plan.md
 
-Current feature scope: Protobuf Communication Protocol — binary serialization for
-internal services, WebSocket agent dialogue, FSM state changes, and queue tasks.
-4-phase rollout with zero-downtime JSON backward compatibility.
-
-Key components: 4 .proto files (agent, tools, websocket, queue), Go + TypeScript
-code generation via protoc, content negotiation via Accept header, cache-key
-integration with existing tool cache layer.
+Current feature scope: Backend Refactor — Fix 22 Issues across 7 phases.
+TDD-driven (Red-Green-Refactor). Chroma collection resolution, data extraction,
+AI integration, hardcoded value removal, schema completion, test cleanup, dead code removal.
 
 ## API Gateway Middleware
 
