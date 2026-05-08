@@ -331,12 +331,7 @@ func (e *ToolExecutor) executeGetCandidate(ctx context.Context, args map[string]
 			"experience": experience,
 		}
 	} else {
-		candidate = map[string]interface{}{
-			"id":         candidateIDStr,
-			"name":       "Sample Candidate",
-			"skills":     []string{"golang", "python"},
-			"experience": 5,
-		}
+		return nil, fmt.Errorf("agent repository not configured")
 	}
 
 	return &ToolExecutionResult{

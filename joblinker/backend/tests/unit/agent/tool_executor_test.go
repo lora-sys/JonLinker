@@ -34,7 +34,7 @@ func TestToolExecutor_QueryJobs(t *testing.T) {
 	}
 }
 
-func TestToolExecutor_GetCandidate(t *testing.T) {
+func TestToolExecutor_GetCandidate_NilRepo(t *testing.T) {
 	exec := agent.NewToolExecutor(nil, nil, nil, nil, nil)
 
 	result, err := exec.ExecuteTool(
@@ -46,11 +46,12 @@ func TestToolExecutor_GetCandidate(t *testing.T) {
 		},
 	)
 
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Should fail with error when agentRepo is nil
+	if err == nil {
+		t.Fatal("expected error for nil agent repository")
 	}
-	if !result.Success {
-		t.Errorf("expected success, got error: %s", result.Error)
+	if result != nil && result.Success {
+		t.Error("expected failure for nil agent repository")
 	}
 }
 
