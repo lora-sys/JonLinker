@@ -157,6 +157,10 @@ func main() {
 	if mqSvc != nil {
 		mqSvc.SetEinoRunner(einoRunner)
 		log.Printf("Eino Runner wired to MessageQueueService")
+
+		ctxOptimizer := service.NewContextOptimizerService(toolCache, messageRepo, matchRepo, agentRepo)
+		mqSvc.SetContextOptimizer(ctxOptimizer)
+		log.Printf("Context Optimizer wired to MessageQueueService")
 	}
 
 	r.GET("/health", healthHandler.Health)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"joblinker/internal/model"
@@ -110,8 +111,25 @@ func (s *PreferenceExtractionService) containsJobTypeContext(content string) boo
 		strings.Contains(lower, "part-time")
 }
 
+var salaryPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\$[\d,]+(?:\.\d+)?`),      // $120,000 or $120000.00
+	regexp.MustCompile(`(\d+)\s*k\b`),              // 120k
+	regexp.MustCompile(`salary[:\s]*(\d[\d,]*)`),   // salary: 120,000
+}
+
 func extractValueFromContent(content string, preferenceType string) string {
-	return fmt.Sprintf("extracted_%s_value", preferenceType)
+	if preferenceType == "salary" {
+		for _, re := range salaryPatterns {
+			if match := re.FindString(content); match != "" {
+				return strings.TrimSpace(match)
+			}
+		}
+	}
+	// Fallback: return first 100 chars of content
+	if len(content) > 100 {
+		return content[:100]
+	}
+	return content
 }
 
 func extractPrefLocationValue(content string) string {

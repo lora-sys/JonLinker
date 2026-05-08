@@ -50,7 +50,7 @@ type MessageHandler struct {
 	matchRepo   *repository.MatchRepository
 	agentRepo   *repository.AgentRepository
 	rmq         *rabbitmq.RabbitMQ
-	clients     map[string]*websocket.Conn
+	clients     map[string]map[string]*websocket.Conn // matchID -> clientID -> conn
 	mu          sync.RWMutex
 }
 
@@ -60,7 +60,7 @@ func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *rep
 		matchRepo:   matchRepo,
 		agentRepo:   agentRepo,
 		rmq:         rmq,
-		clients:     make(map[string]*websocket.Conn),
+		clients:     make(map[string]map[string]*websocket.Conn),
 	}
 }
 
@@ -178,12 +178,18 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 
 	clientID := userID.String()
 	h.mu.Lock()
-	h.clients[clientID] = conn
+	if h.clients[matchID] == nil {
+		h.clients[matchID] = make(map[string]*websocket.Conn)
+	}
+	h.clients[matchID][clientID] = conn
 	h.mu.Unlock()
 
 	defer func() {
 		h.mu.Lock()
-		delete(h.clients, clientID)
+		delete(h.clients[matchID], clientID)
+		if len(h.clients[matchID]) == 0 {
+			delete(h.clients, matchID)
+		}
 		h.mu.Unlock()
 		conn.Close()
 	}()
@@ -273,8 +279,26 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 }
 
 func (h *MessageHandler) processMessage(matchID, senderID string, msg *A2AMessage) *A2AMessage {
-	// Generate appropriate response based on intent
-	response := &A2AMessage{
+	// Route through RabbitMQ for AI-generated response
+	if h.rmq != nil {
+		go func() {
+			agentMsg := &rabbitmq.AgentMessage{
+				MessageID:  uuid.New().String(),
+				SenderID:   senderID,
+				ReceiverID: "",
+				Intent:     msg.Payload.Intent,
+				MatchID:    matchID,
+				Payload:    nil,
+				Timestamp:  time.Now(),
+			}
+			if err := h.rmq.PublishAgentMessage(context.Background(), agentMsg); err != nil {
+				log.Printf("Failed to publish message to RabbitMQ: %v", err)
+			}
+		}()
+	}
+
+	// Return acknowledgement; AI-generated response arrives asynchronously via RabbitMQ consumer
+	return &A2AMessage{
 		Header: MessageHeader{
 			MessageID:  uuid.New().String(),
 			Timestamp:  time.Now().Format(time.RFC3339),
@@ -282,54 +306,25 @@ func (h *MessageHandler) processMessage(matchID, senderID string, msg *A2AMessag
 			ReceiverID: senderID,
 			ReplyTo:    msg.Header.MessageID,
 		},
+		Payload: MessagePayload{
+			Intent: IntentInquiry,
+			Parameters: &MessageParams{
+				Role: "acknowledge",
+			},
+		},
 	}
-
-	switch msg.Payload.Intent {
-	case IntentIntroduction:
-		response.Payload.Intent = IntentInterest
-		response.Payload.Parameters = &MessageParams{
-			Role: "system_response",
-		}
-	case IntentInterest:
-		response.Payload.Intent = IntentNegotiation
-		response.Payload.Negotiation = &NegotiationInfo{
-			Type:     "salary",
-			Current:  100000,
-			Target:   120000,
-			Currency: "USD",
-		}
-	case IntentNegotiation:
-		// Use salary negotiator to generate response
-		negotiator := NewSalaryNegotiator(80000, 150000, 120000)
-		result := negotiator.SimulateNegotiation(100000)
-		response.Payload.Negotiation = &NegotiationInfo{
-			Type:        "salary",
-			Current:     result.FinalOffer,
-			Target:      result.AgreedSalary,
-			Currency:    "USD",
-			Concessions: result.CounterOffers,
-		}
-	case IntentOffer:
-		response.Payload.Intent = IntentAccept
-		response.Payload.Parameters = &MessageParams{
-			Role: "accept",
-		}
-	default:
-		response.Payload.Intent = IntentInquiry
-		response.Payload.Parameters = &MessageParams{
-			Role: "acknowledge",
-		}
-	}
-
-	return response
 }
 
 func (h *MessageHandler) broadcastToMatch(matchID string, msg *A2AMessage) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	conns, ok := h.clients[matchID]
+	if !ok {
+		return
+	}
 	data, _ := xml.MarshalIndent(msg, "", "  ")
-	for _, conn := range h.clients {
+	for _, conn := range conns {
 		conn.WriteMessage(websocket.TextMessage, data)
 	}
 }
@@ -338,6 +333,11 @@ func (h *MessageHandler) broadcastToMatch(matchID string, msg *A2AMessage) {
 func (h *MessageHandler) broadcastToMatchWithFormat(matchID string, msg *A2AMessage, wsSerializer *proto.WebSocketFrameSerializer, sequenceNum *uint64) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+
+	conns, ok := h.clients[matchID]
+	if !ok {
+		return
+	}
 
 	// Serialize the A2AMessage to XML payload
 	xmlData, _ := xml.MarshalIndent(msg, "", "  ")
@@ -359,12 +359,12 @@ func (h *MessageHandler) broadcastToMatchWithFormat(matchID string, msg *A2AMess
 			return
 		}
 
-		for _, conn := range h.clients {
+		for _, conn := range conns {
 			conn.WriteMessage(websocket.BinaryMessage, protoData)
 		}
 	} else {
 		// JSON/XML mode
-		for _, conn := range h.clients {
+		for _, conn := range conns {
 			conn.WriteMessage(websocket.TextMessage, xmlData)
 		}
 	}
