@@ -23,11 +23,11 @@ curl -s http://localhost:8080/health
 
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-specs/019-backend-refactor-22fixes/plan.md
+specs/007-gateway-protobuf-a2a/plan.md
 
-Current feature scope: Backend Refactor — Fix 22 Issues across 7 phases.
-TDD-driven (Red-Green-Refactor). Chroma collection resolution, data extraction,
-AI integration, hardcoded value removal, schema completion, test cleanup, dead code removal.
+Current feature scope: Frontend Gateway + Protobuf + A2A Integration — 7 phases.
+Gateway header unification, WebSocket context passing, FSM state sync, agent role detection,
+Playwright CLI integration testing.
 
 ## API Gateway Middleware
 

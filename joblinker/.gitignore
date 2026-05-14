@@ -31,6 +31,7 @@ bin/
 *.swo
 *~
 
+*.png
 # OS
 .DS_Store
 Thumbs.db
@@ -40,6 +41,8 @@ Thumbs.db
 *.key
 secrets/
 credentials/
+claude
+.opencode
 
 # Test coverage
 coverage/

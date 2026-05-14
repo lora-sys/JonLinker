@@ -44,13 +44,27 @@ function StageProgress({ currentStage }: { currentStage: FSMStage }) {
         const isFuture = idx > currentIdx;
 
         return (
-          <div key={stage.key} className="flex items-center gap-3">
-            {isCompleted && <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />}
-            {isCurrent && <Loader2 className="w-5 h-5 text-blue-500 animate-spin shrink-0" />}
-            {isFuture && <Circle className="w-5 h-5 text-gray-300 shrink-0" />}
-            <span className={`text-sm ${
+          <div key={stage.key} className="relative flex items-center gap-3">
+            {/* Progress bar line connecting stages */}
+            {idx < STAGES.length - 1 && (
+              <div className="absolute left-[10px] top-6 w-0.5 h-6 -mb-6">
+                <div className={`w-full h-full transition-all duration-500 ${
+                  isCompleted ? 'bg-green-400' : isCurrent ? 'bg-blue-200' : 'bg-gray-200'
+                }`} />
+              </div>
+            )}
+            <div className="relative z-10">
+              {isCompleted && <CheckCircle className="w-5 h-5 text-green-500 shrink-0 animate-in zoom-in-95" />}
+              {isCurrent && (
+                <div className="w-5 h-5 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                </div>
+              )}
+              {isFuture && <Circle className="w-5 h-5 text-gray-300 shrink-0" />}
+            </div>
+            <span className={`text-sm transition-all duration-300 ${
               isCompleted ? 'text-green-700 line-through' :
-              isCurrent ? 'text-blue-700 font-medium' :
+              isCurrent ? 'text-blue-700 font-medium animate-pulse' :
               'text-gray-400'
             }`}>
               {stage.label}

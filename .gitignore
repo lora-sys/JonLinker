@@ -10,3 +10,4 @@ joblinker/frontend/tests/
 .claude
 .windsurfrules
 .playwright-cli
+joblinker/specs

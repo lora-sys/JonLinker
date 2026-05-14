@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { Send, Square, RotateCcw } from 'lucide-react';
 
 interface TextareaInputProps {
@@ -25,6 +25,7 @@ export function TextareaInput({
   error = null,
 }: TextareaInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isSending, setIsSending] = useState(false);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -40,12 +41,19 @@ export function TextareaInput({
     autoResize();
   }, [value, autoResize]);
 
+  const handleSubmit = useCallback(() => {
+    if (!value.trim() || disabled) return;
+    setIsSending(true);
+    onSubmit();
+    setTimeout(() => setIsSending(false), 300);
+  }, [value, disabled, onSubmit]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         if (!disabled && value.trim()) {
-          onSubmit();
+          handleSubmit();
         }
       }
       if (e.key === 'Escape' && isStreaming) {
@@ -53,7 +61,7 @@ export function TextareaInput({
         onStop?.();
       }
     },
-    [disabled, value, onSubmit, isStreaming, onStop]
+    [disabled, value, handleSubmit, isStreaming, onStop]
   );
 
   return (
@@ -81,7 +89,7 @@ export function TextareaInput({
           onKeyDown={handleKeyDown}
           placeholder="Type a message... (Shift+Enter for new line)"
           rows={1}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 text-sm leading-6"
+          className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 text-sm leading-6 transition-all duration-200 ${isSending ? 'scale-98 opacity-80' : ''}`}
           disabled={disabled}
           aria-label="Message input"
         />
@@ -89,19 +97,19 @@ export function TextareaInput({
         {isStreaming ? (
           <button
             onClick={onStop}
-            className="p-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shrink-0"
+            className="p-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 shrink-0 animate-pulse"
             aria-label="Stop generating"
           >
             <Square className="w-4 h-4" />
           </button>
         ) : (
           <button
-            onClick={onSubmit}
+            onClick={handleSubmit}
             disabled={!value.trim() || disabled}
-            className="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            className={`p-2.5 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shrink-0 ${isSending ? 'bg-blue-700 scale-95' : 'bg-blue-600 hover:bg-blue-700'}`}
             aria-label="Send message"
           >
-            <Send className="w-4 h-4" />
+            <Send className={`w-4 h-4 ${isSending ? 'animate-bounce' : ''}`} />
           </button>
         )}
       </div>

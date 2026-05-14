@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/privacy',
   '/api/auth/login',
   '/api/auth/register',
+  '/api/chat',
   '/',
 ];
 

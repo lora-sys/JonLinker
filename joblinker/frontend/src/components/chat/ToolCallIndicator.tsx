@@ -39,9 +39,14 @@ export function ToolCallIndicator({ tool }: ToolCallIndicatorProps) {
         aria-expanded={expanded}
       >
         <Icon className={`w-4 h-4 ${config.color} ${config.spin ? 'animate-spin' : ''}`} aria-hidden="true" />
-        <span className={`${config.color} font-medium flex-1 text-left`}>
+        <span className={`${config.color} font-medium flex-1 text-left animate-pulse`}>
           {tool.status === 'done' ? `${label} - Complete` : `${label}...`}
         </span>
+        {tool.status === 'in_progress' && (
+          <div className="w-16 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 animate-pulse origin-left" style={{ width: '60%' }} />
+          </div>
+        )}
         {expanded ? (
           <ChevronUp className="w-4 h-4 text-gray-400" />
         ) : (

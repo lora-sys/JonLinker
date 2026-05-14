@@ -115,6 +115,7 @@ export type MatchStatus =
 export interface Match {
   id: string;
   seeker_agent_id: string;
+  recruiter_agent_id: string;
   job_id: string;
   score: number;
   status: MatchStatus;
