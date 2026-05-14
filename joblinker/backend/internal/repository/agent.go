@@ -8,6 +8,17 @@ import (
 	"gorm.io/gorm"
 )
 
+// tenantScope returns a GORM scope that filters by tenant_id.
+// If tenantID is empty, no filtering is applied (admin cross-tenant).
+func tenantScope(tenantID string) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		if tenantID == "" {
+			return db
+		}
+		return db.Where("tenant_id = ?", tenantID)
+	}
+}
+
 type AgentRepository struct {
 	db *gorm.DB
 }
@@ -41,29 +52,32 @@ func (r *AgentRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Agent{}, "id = ?", id).Error
 }
 
-func (r *AgentRepository) ListByUserID(userID uuid.UUID) ([]*model.Agent, error) {
+func (r *AgentRepository) ListByUserID(userID uuid.UUID, tenantID string) ([]*model.Agent, error) {
 	var agents []*model.Agent
-	if err := r.db.Where("user_id = ?", userID).Find(&agents).Error; err != nil {
+	db := r.db.Scopes(tenantScope(tenantID)).Where("user_id = ?", userID)
+	if err := db.Find(&agents).Error; err != nil {
 		return nil, err
 	}
 	return agents, nil
 }
 
-func (r *AgentRepository) ListByStatus(status model.AgentStatus, limit, offset int) ([]*model.Agent, int64, error) {
+func (r *AgentRepository) ListByStatus(status model.AgentStatus, tenantID string, limit, offset int) ([]*model.Agent, int64, error) {
 	var agents []*model.Agent
 	var total int64
-	r.db.Model(&model.Agent{}).Where("status = ?", status).Count(&total)
-	if err := r.db.Where("status = ?", status).Limit(limit).Offset(offset).Find(&agents).Error; err != nil {
+	db := r.db.Scopes(tenantScope(tenantID)).Where("status = ?", status)
+	db.Model(&model.Agent{}).Count(&total)
+	if err := db.Limit(limit).Offset(offset).Find(&agents).Error; err != nil {
 		return nil, 0, err
 	}
 	return agents, total, nil
 }
 
-func (r *AgentRepository) ListAll(limit, offset int) ([]*model.Agent, int64, error) {
+func (r *AgentRepository) ListAll(tenantID string, limit, offset int) ([]*model.Agent, int64, error) {
 	var agents []*model.Agent
 	var total int64
-	r.db.Model(&model.Agent{}).Count(&total)
-	if err := r.db.Limit(limit).Offset(offset).Preload("User").Find(&agents).Error; err != nil {
+	db := r.db.Scopes(tenantScope(tenantID))
+	db.Model(&model.Agent{}).Count(&total)
+	if err := db.Limit(limit).Offset(offset).Preload("User").Find(&agents).Error; err != nil {
 		return nil, 0, err
 	}
 	return agents, total, nil

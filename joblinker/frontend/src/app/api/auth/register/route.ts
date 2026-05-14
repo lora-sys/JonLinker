@@ -20,9 +20,9 @@ export async function POST(request: Request) {
     // Set auth cookie for middleware
     const nextResponse = NextResponse.json(data, { status: response.status });
     nextResponse.cookies.set('joblinker-auth', JSON.stringify({ token: data.token, userId: data.user?.id }), {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: '/',
     });

@@ -83,8 +83,8 @@ func (r *MatchRepository) FindBySeekerAndJob(seekerAgentID, jobID uuid.UUID) (*m
 	return &match, nil
 }
 
-func (r *MatchRepository) UpdateFSMState(matchID uuid.UUID, state string) error {
-	return r.db.Model(&model.Match{}).Where("id = ?", matchID).Update("fsm_state", state).Error
+func (r *MatchRepository) UpdateStatus(matchID uuid.UUID, status model.MatchStatus) error {
+	return r.db.Model(&model.Match{}).Where("id = ?", matchID).Update("status", status).Error
 }
 
 func (r *MatchRepository) ListByAgentIDs(agentIDs []uuid.UUID) ([]*model.Match, error) {

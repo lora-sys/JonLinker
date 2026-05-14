@@ -20,6 +20,7 @@ type User struct {
 	Email          string     `json:"email" gorm:"uniqueIndex;not null;size:255"`
 	PasswordHash   string     `json:"-" gorm:"not null;size:255"`
 	Role           UserRole   `json:"role" gorm:"type:varchar(20);not null"`
+	TenantID       uuid.UUID  `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	OrganizationID *uuid.UUID `json:"organization_id" gorm:"type:uuid"`
 	CreatedAt      time.Time  `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt      time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
@@ -54,6 +55,7 @@ const (
 type Agent struct {
 	ID        uuid.UUID    `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	UserID    uuid.UUID    `json:"user_id" gorm:"type:uuid;not null;index"`
+	TenantID  uuid.UUID    `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	Type      AgentType    `json:"type" gorm:"type:varchar(20);not null"`
 	Status    AgentStatus  `json:"status" gorm:"type:varchar(20);not null;index"`
 	FSMState  AgentFSMState `json:"fsm_state" gorm:"type:varchar(20);not null;default:'idle'"`
@@ -142,6 +144,7 @@ const (
 type Job struct {
 	ID           uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	AgentID      uuid.UUID `json:"agent_id" gorm:"type:uuid;not null;index"`
+	TenantID     uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	StructuredJSON string  `json:"structured" gorm:"type:jsonb;not null"`
 	VectorID     string    `json:"vector_id" gorm:"size:255"`
 	Status       JobStatus `json:"status" gorm:"type:varchar(20);not null;index"`
@@ -153,6 +156,7 @@ type Job struct {
 type Resume struct {
 	ID             uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	AgentID        uuid.UUID `json:"agent_id" gorm:"type:uuid;uniqueIndex;not null"`
+	TenantID       uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	StructuredJSON string    `json:"structured" gorm:"type:jsonb;not null"`
 	VectorID       string    `json:"vector_id" gorm:"size:255"`
 	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
@@ -163,21 +167,24 @@ type Resume struct {
 type MatchStatus string
 
 const (
-	MatchStatusPending        MatchStatus = "pending"
+	MatchStatusPending       MatchStatus = "pending"
+	MatchStatusSearching     MatchStatus = "searching"
 	MatchStatusMutualInterest MatchStatus = "mutual_interest"
-	MatchStatusNegotiating    MatchStatus = "negotiating"
-	MatchStatusOffered        MatchStatus = "offered"
+	MatchStatusNegotiating   MatchStatus = "negotiating"
+	MatchStatusInterviewing  MatchStatus = "interviewing"
+	MatchStatusOffered       MatchStatus = "offered"
 	MatchStatusHired         MatchStatus = "hired"
 	MatchStatusRejected      MatchStatus = "rejected"
+	MatchStatusPaused        MatchStatus = "paused"
 )
 
 type Match struct {
 	ID            uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	SeekerAgentID uuid.UUID   `json:"seeker_agent_id" gorm:"type:uuid;not null;index"`
 	JobID         uuid.UUID   `json:"job_id" gorm:"type:uuid;not null;index"`
+	TenantID      uuid.UUID   `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	Score         float64     `json:"score" gorm:"type:decimal(5,4);not null"`
-	Status        MatchStatus `json:"status" gorm:"type:varchar(30);not null;index"`
-	FSMState      string      `json:"fsm_state" gorm:"type:varchar(30);default:'idle'"`
+	Status        MatchStatus `json:"status" gorm:"type:varchar(30);not null;index;default:'pending'"`
 	CreatedAt     time.Time   `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt     time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
 	SeekerAgent   *Agent      `json:"seeker_agent,omitempty" gorm:"foreignKey:SeekerAgentID"`
@@ -187,6 +194,7 @@ type Match struct {
 type Message struct {
 	ID           uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	MatchID      uuid.UUID `json:"match_id" gorm:"type:uuid;not null;index"`
+	TenantID     uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	SenderAgentID uuid.UUID `json:"sender_agent_id" gorm:"type:uuid;not null"`
 	ContentXML   string    `json:"content_xml" gorm:"type:text;not null"`
 	IntentType   string    `json:"intent_type" gorm:"size:50"`
@@ -215,6 +223,7 @@ const (
 type Interview struct {
 	ID           uuid.UUID        `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	MatchID      uuid.UUID        `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
+	TenantID     uuid.UUID        `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	ScheduledAt  time.Time        `json:"scheduled_at" gorm:"not null"`
 	Format       InterviewFormat  `json:"format" gorm:"type:varchar(20);not null"`
 	Location     string           `json:"location" gorm:"size:500"`
@@ -239,6 +248,7 @@ const (
 type Offer struct {
 	ID               uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	MatchID          uuid.UUID   `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
+	TenantID         uuid.UUID   `json:"tenant_id" gorm:"type:uuid;not null;index"`
 	CompensationJSON string      `json:"compensation" gorm:"type:jsonb;not null"`
 	StartDate        time.Time   `json:"start_date" gorm:"type:date;not null"`
 	Status           OfferStatus `json:"status" gorm:"type:varchar(20);not null"`

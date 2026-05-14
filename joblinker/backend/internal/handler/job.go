@@ -31,7 +31,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	agents, _ := h.agentRepo.ListByUserID(userID)
+	agents, _ := h.agentRepo.ListByUserID(userID, "")
 	var agentID uuid.UUID
 	for _, a := range agents {
 		if a.Type == model.AgentTypeRecruiter {

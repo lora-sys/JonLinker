@@ -21,9 +21,20 @@ interface WSEvent {
   created_at?: string;
 }
 
+interface StoredMessage {
+  id: string;
+  sender_agent_id: string;
+  content_xml: string;
+  intent_type: string;
+  created_at: string;
+}
+
 export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   const [input, setInput] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [initialMessagesLoaded, setInitialMessagesLoaded] = useState(false);
   const wsRef = useRef<ReturnType<typeof useWebSocket> | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     messages: aiMessages,
@@ -42,6 +53,45 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
 
   const isLoading = aiStatus === 'streaming' || aiStatus === 'submitted';
 
+  // Poll REST API for message history (fallback when WebSocket fails)
+  const loadMessagesFromREST = useCallback(async () => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('joblinker-auth') : null;
+      let token = '';
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          token = parsed.state?.token || parsed.token || '';
+        } catch {
+          token = raw;
+        }
+      }
+
+      const res = await fetch(`/api/messages/${matchId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const storedMessages: StoredMessage[] = await res.json();
+        if (storedMessages.length > 0 && !initialMessagesLoaded) {
+          const loadedMsgs = storedMessages.map(msg => {
+            const content = parseXmlContent(msg.content_xml);
+            const role = msg.sender_agent_id === 'system' ? 'system' : 'assistant';
+            return {
+              id: msg.id,
+              role: role as 'user' | 'assistant' | 'system',
+              parts: [{ type: 'text' as const, text: content }],
+            };
+          });
+          setMessages(loadedMsgs);
+          setInitialMessagesLoaded(true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load messages from REST:', err);
+    }
+  }, [matchId, initialMessagesLoaded, setMessages]);
+
+  // Load cached thread
   useEffect(() => {
     const cached = loadThread(matchId);
     if (cached && cached.messages.length > 0) {
@@ -50,11 +100,23 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
         role: m.role as 'user' | 'assistant' | 'system',
         parts: [{ type: 'text' as const, text: m.content }],
       })));
+      setInitialMessagesLoaded(true);
     }
   }, [matchId, setMessages]);
 
+  // Initial REST load and periodic polling as fallback
+  useEffect(() => {
+    loadMessagesFromREST();
+    // Poll every 5 seconds as fallback
+    pollIntervalRef.current = setInterval(loadMessagesFromREST, 5000);
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [loadMessagesFromREST]);
+
   const ws = useWebSocket({
     url: enabled ? buildWSUrl(matchId) : '',
+    token: getAuthToken(),
     autoConnect: enabled,
     onMessage: (event: WSEvent) => {
       switch (event.type) {
@@ -67,12 +129,16 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             });
           }
           break;
+        case 'connected':
+          setIsConnected(true);
+          break;
       }
     },
   });
 
   useEffect(() => {
     wsRef.current = ws;
+    setIsConnected(ws.status === 'Connected');
   }, [ws]);
 
   const handleSubmit = useCallback((e?: React.FormEvent) => {
@@ -81,8 +147,6 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     sendMessage({ role: 'user', parts: [{ type: 'text' as const, text: input.trim() }] });
     setInput('');
   }, [input, isLoading, sendMessage]);
-
-  const isConnected = ws.status === 'Connected';
 
   const status = isLoading ? 'streaming' as const : 'done' as const;
 
@@ -102,8 +166,6 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     handleSubmit,
     stop,
     reload: () => regenerate(),
-    loadMoreMessages: () => {},
-    hasMoreMessages: false,
   };
 }
 
@@ -111,17 +173,19 @@ function buildWSUrl(matchId: string): string {
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   const url = new URL(apiBase);
   const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  const raw = typeof window !== 'undefined' ? localStorage.getItem('joblinker-auth') : null;
-  let token = '';
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      token = parsed.state?.token || parsed.token || '';
-    } catch {
-      token = raw;
-    }
+  return `${protocol}//${url.host}/api/messages/${matchId}/ws`;
+}
+
+function getAuthToken(): string {
+  if (typeof window === 'undefined') return '';
+  const raw = localStorage.getItem('joblinker-auth');
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.state?.token || parsed.token || '';
+  } catch {
+    return raw;
   }
-  return `${protocol}//${url.host}/api/messages/${matchId}/ws?token=${encodeURIComponent(token)}`;
 }
 
 function parseXmlContent(contentXml: string): string {

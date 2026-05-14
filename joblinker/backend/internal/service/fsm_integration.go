@@ -9,6 +9,7 @@ import (
 
 	"joblinker/internal/agent"
 	"joblinker/internal/config"
+	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"joblinker/pkg/proto"
 )
@@ -127,10 +128,10 @@ func (s *FSMIntegration) TransitionFSM(matchID uuid.UUID, intent string) (agent.
 	// Create FSM from current state - use match ID as agentID for routing
 	fsm := agent.NewFSM(matchID)
 
-	// Load existing state from match if not idle
-	oldStateStr := match.FSMState
+	// Load existing state from match status
+	oldStateStr := string(match.Status)
 	var oldState agent.State = agent.StateIdle
-	if oldStateStr != "" && oldStateStr != "idle" {
+	if oldStateStr != "" && oldStateStr != "pending" {
 		oldState = agent.State(oldStateStr)
 		fsm.SetState(oldState)
 	}
@@ -153,7 +154,7 @@ func (s *FSMIntegration) TransitionFSM(matchID uuid.UUID, intent string) (agent.
 	newState := fsm.CurrentState()
 
 	// Persist state change
-	if err := s.matchRepo.UpdateFSMState(matchID, string(newState)); err != nil {
+	if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatus(newState)); err != nil {
 		return newState, false, err
 	}
 
@@ -171,10 +172,10 @@ func (s *FSMIntegration) GetCurrentState(matchID uuid.UUID) (agent.State, error)
 	if err != nil {
 		return agent.StateIdle, err
 	}
-	if match.FSMState == "" {
+	if match.Status == "" {
 		return agent.StateIdle, nil
 	}
-	return agent.State(match.FSMState), nil
+	return agent.State(match.Status), nil
 }
 
 // ValidateTransition checks if a transition is valid without executing it

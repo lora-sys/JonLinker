@@ -8,9 +8,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"joblinker/internal/config"
 	"joblinker/pkg/proto"
 )
+
+// TenantScope returns a GORM scope that filters by tenant_id.
+// If tenantID is empty, no filtering is applied (for admin cross-tenant queries).
+func TenantScope(tenantID string) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		if tenantID == "" {
+			return db
+		}
+		return db.Where("tenant_id = ?", tenantID)
+	}
+}
+
+// GetCurrentTenantID extracts the tenant ID from the Gin context.
+// Returns empty string if not set (should not happen after auth middleware).
+func GetCurrentTenantID(c *gin.Context) string {
+	if tenantID, exists := c.Get("tenantID"); exists {
+		return tenantID.(string)
+	}
+	return ""
+}
 
 // GatewayMiddleware extracts and validates tenant headers from all requests
 // This middleware provides:
@@ -36,12 +57,8 @@ func GatewayMiddleware() gin.HandlerFunc {
 		agentID := c.GetHeader("X-Agent-ID")
 		tenantID := c.GetHeader("X-Tenant-ID")
 
-		// Set defaults if not provided (for backward compatibility)
 		if userID == "" {
 			userID = "anonymous"
-		}
-		if tenantID == "" {
-			tenantID = "default"
 		}
 
 		// Store in context for handlers to access

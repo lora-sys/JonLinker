@@ -286,40 +286,17 @@ Generate a professional counter-offer or decision to accept/walk away. Return JS
 		Message     string `json:"message"`
 	}
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		// Fallback to rule-based negotiation
-		neg := NewSalaryNegotiatorSimple(minSalary, targetSalary, currentOffer)
-		return neg.GenerateCounter()
+		if currentOffer < minSalary {
+			return -1, "Below minimum requirements.", nil
+		}
+		if currentOffer >= targetSalary {
+			return targetSalary, "Offer accepted.", nil
+		}
+		counter := currentOffer + (targetSalary-currentOffer)/2
+		return counter, "Counter offer proposed.", nil
 	}
 
 	return result.CounterOffer, result.Message, nil
 }
 
-// SalaryNegotiatorSimple is a simple rule-based negotiator
-type SalaryNegotiatorSimple struct {
-	MinSalary    int
-	TargetSalary int
-	CurrentOffer int
-}
 
-func NewSalaryNegotiatorSimple(min, target, current int) *SalaryNegotiatorSimple {
-	return &SalaryNegotiatorSimple{
-		MinSalary:    min,
-		TargetSalary: target,
-		CurrentOffer: current,
-	}
-}
-
-func (n *SalaryNegotiatorSimple) GenerateCounter() (int, string, error) {
-	if n.CurrentOffer < n.MinSalary {
-		return -1, "This offer is below my minimum requirements.", nil
-	}
-	if n.CurrentOffer >= n.TargetSalary {
-		return n.TargetSalary, "I can accept this offer.", nil
-	}
-	// Generate counter between current and target
-	counter := n.CurrentOffer + (n.TargetSalary-n.CurrentOffer)/2
-	if counter < n.MinSalary {
-		counter = n.MinSalary
-	}
-	return counter, fmt.Sprintf("I'd need at least $%d to proceed.", counter), nil
-}

@@ -11,6 +11,7 @@ export interface WSMessage {
 
 interface UseWebSocketOptions {
   url: string;
+  token?: string;
   onMessage?: (msg: WSMessage) => void;
   onStatusChange?: (status: WSConnectionStatus) => void;
   autoConnect?: boolean;
@@ -23,6 +24,7 @@ const MAX_PENDING = 100;
 
 export function useWebSocket({
   url,
+  token,
   onMessage,
   onStatusChange,
   autoConnect = true,
@@ -75,7 +77,8 @@ export function useWebSocket({
     setStatusWithNotify(retryCountRef.current === 0 ? 'Connecting' : 'Reconnecting');
 
     try {
-      const ws = new WebSocket(url);
+      const protocols = token ? [token] : [];
+      const ws = new WebSocket(url, protocols);
       wsRef.current = ws;
 
       ws.onopen = () => {
