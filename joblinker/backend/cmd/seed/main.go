@@ -153,29 +153,31 @@ func createAgents(db *gorm.DB, users []model.User) map[string]model.Agent {
 	agents := make(map[string]model.Agent)
 
 	agentConfigs := []struct {
-		userEmail   string
-		agentType   model.AgentType
-		name        string
-		title       string
-		company     string
-		skills      []string
-		experience  string
+		userEmail       string
+		agentType       model.AgentType
+		name            string
+		title           string
+		company         string
+		skills          []string
+		experience      string
+		experienceYears int
+		location        string
 	}{
 		// Recruiter Agents
-		{"hr.alice@techcorp.com", model.AgentTypeRecruiter, "Alice Chen", "Senior Recruiter", "TechCorp Inc.", []string{"sourcing", "interviewing", "onboarding"}, "5 years"},
-		{"hr.bob@techcorp.com", model.AgentTypeRecruiter, "Bob Smith", "Technical Recruiter", "TechCorp Inc.", []string{"technical screening", "code review", "system design"}, "4 years"},
-		{"hr.carol@startuphub.com", model.AgentTypeRecruiter, "Carol Johnson", "Head of People", "StartupHub", []string{"culture fit", "startup experience", "full-cycle recruiting"}, "6 years"},
-		{"hr.david@enterprise.com", model.AgentTypeRecruiter, "David Lee", "Corporate Recruiter", "Enterprise Co.", []string{"enterprise sales", "B2B", "corporate recruiting"}, "7 years"},
-		{"hr.frank@innovation.com", model.AgentTypeRecruiter, "Frank Miller", "Lead Recruiter", "Innovation Labs", []string{"AI/ML", "startups", "technical recruiting"}, "8 years"},
+		{"hr.alice@techcorp.com", model.AgentTypeRecruiter, "Alice Chen", "Senior Recruiter", "TechCorp Inc.", []string{"sourcing", "interviewing", "onboarding"}, "5 years", 5, "San Francisco, CA"},
+		{"hr.bob@techcorp.com", model.AgentTypeRecruiter, "Bob Smith", "Technical Recruiter", "TechCorp Inc.", []string{"technical screening", "code review", "system design"}, "4 years", 4, "San Francisco, CA"},
+		{"hr.carol@startuphub.com", model.AgentTypeRecruiter, "Carol Johnson", "Head of People", "StartupHub", []string{"culture fit", "startup experience", "full-cycle recruiting"}, "6 years", 6, "Austin, TX"},
+		{"hr.david@enterprise.com", model.AgentTypeRecruiter, "David Lee", "Corporate Recruiter", "Enterprise Co.", []string{"enterprise sales", "B2B", "corporate recruiting"}, "7 years", 7, "Chicago, IL"},
+		{"hr.frank@innovation.com", model.AgentTypeRecruiter, "Frank Miller", "Lead Recruiter", "Innovation Labs", []string{"AI/ML", "startups", "technical recruiting"}, "8 years", 8, "Boston, MA"},
 
 		// Seeker Agents
-		{"seeker.frank@email.com", model.AgentTypeSeeker, "Frank Garcia", "Senior Software Engineer", "Independent", []string{"Go", "Python", "Kubernetes", "AWS", "Microservices"}, "8 years"},
-		{"seeker.grace@email.com", model.AgentTypeSeeker, "Grace Kim", "Full Stack Developer", "Independent", []string{"React", "Node.js", "PostgreSQL", "TypeScript", "GraphQL"}, "5 years"},
-		{"seeker.henry@email.com", model.AgentTypeSeeker, "Henry Patel", "DevOps Engineer", "Independent", []string{"Terraform", "Docker", "CI/CD", "Linux", "Monitoring"}, "6 years"},
-		{"seeker.ivy@email.com", model.AgentTypeSeeker, "Ivy Zhang", "Frontend Engineer", "Independent", []string{"React", "Vue", "CSS", "Figma", "Animation"}, "4 years"},
-		{"seeker.jack@email.com", model.AgentTypeSeeker, "Jack Thompson", "Backend Engineer", "Independent", []string{"Java", "Spring Boot", "Kafka", "Redis", "Microservices"}, "7 years"},
-		{"seeker.kate@email.com", model.AgentTypeSeeker, "Kate Brown", "Data Scientist", "Independent", []string{"Python", "TensorFlow", "SQL", "Statistics", "Machine Learning"}, "5 years"},
-		{"seeker.liam@email.com", model.AgentTypeSeeker, "Liam O'Connor", "Product Manager", "Independent", []string{"Product Strategy", "Agile", "User Research", "Analytics", "SQL"}, "6 years"},
+		{"seeker.frank@email.com", model.AgentTypeSeeker, "Frank Garcia", "Senior Software Engineer", "Independent", []string{"Go", "Python", "Kubernetes", "AWS", "Microservices"}, "8 years", 8, "San Francisco, CA"},
+		{"seeker.grace@email.com", model.AgentTypeSeeker, "Grace Kim", "Full Stack Developer", "Independent", []string{"React", "Node.js", "PostgreSQL", "TypeScript", "GraphQL"}, "5 years", 5, "Austin, TX"},
+		{"seeker.henry@email.com", model.AgentTypeSeeker, "Henry Patel", "DevOps Engineer", "Independent", []string{"Terraform", "Docker", "CI/CD", "Linux", "Monitoring"}, "6 years", 6, "Remote"},
+		{"seeker.ivy@email.com", model.AgentTypeSeeker, "Ivy Zhang", "Frontend Engineer", "Independent", []string{"React", "Vue", "CSS", "Figma", "Animation"}, "4 years", 4, "New York, NY"},
+		{"seeker.jack@email.com", model.AgentTypeSeeker, "Jack Thompson", "Backend Engineer", "Independent", []string{"Java", "Spring Boot", "Kafka", "Redis", "Microservices"}, "7 years", 7, "Austin, TX"},
+		{"seeker.kate@email.com", model.AgentTypeSeeker, "Kate Brown", "Data Scientist", "Independent", []string{"Python", "TensorFlow", "SQL", "Statistics", "Machine Learning"}, "5 years", 5, "Chicago, IL"},
+		{"seeker.liam@email.com", model.AgentTypeSeeker, "Liam O'Connor", "Product Manager", "Independent", []string{"Product Strategy", "Agile", "User Research", "Analytics", "SQL"}, "6 years", 6, "Boston, MA"},
 	}
 
 	for _, config := range agentConfigs {
@@ -192,11 +194,12 @@ func createAgents(db *gorm.DB, users []model.User) map[string]model.Agent {
 		}
 
 		configJSON, _ := json.Marshal(map[string]interface{}{
-			"name":       config.name,
-			"title":      config.title,
-			"company":    config.company,
-			"skills":     config.skills,
-			"experience": config.experience,
+			"name":             config.name,
+			"title":            config.title,
+			"company":          config.company,
+			"skills":           config.skills,
+			"experience_years": config.experienceYears,
+			"location":         config.location,
 		})
 
 		agent := model.Agent{
@@ -246,8 +249,8 @@ func createJobs(db *gorm.DB, agents map[string]model.Agent) []model.Job {
 
 		structuredJSON, _ := json.Marshal(map[string]interface{}{
 			"title":            j.title,
-			"description":       j.description,
-			"requirements":      j.requirements,
+			"description":      j.description,
+			"skills":           j.requirements,
 			"location":         j.location,
 			"salary_range": map[string]interface{}{
 				"min":      j.salaryMin,
@@ -255,7 +258,7 @@ func createJobs(db *gorm.DB, agents map[string]model.Agent) []model.Job {
 				"currency": "USD",
 			},
 			"work_type":        j.workType,
-			"experience_level": "mid",
+			"experience_years": 5,
 		})
 
 		job := model.Job{

@@ -1,6 +1,6 @@
 import { Activity, AlertTriangle, CheckCircle, Users, Shield, Zap } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { getServerToken } from '@/lib/auth-utils';
+import { fetchServerWithResult } from '@/lib/api-server';
 
 interface MetricsSummary {
   active_seekers: number;
@@ -45,44 +45,22 @@ interface DashboardData {
 }
 
 async function getAdminData(): Promise<DashboardData | null> {
-  const token = await getServerToken();
-
-  if (!token) {
-    return null;
-  }
-
   try {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
-    const [metricsRes, auditRes, errorsRes, agentMetricsRes] = await Promise.all([
-      fetch(`${backendUrl}/api/admin/metrics`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-      fetch(`${backendUrl}/api/admin/audit?limit=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-      fetch(`${backendUrl}/api/admin/errors?limit=50`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-      fetch(`${backendUrl}/api/admin/agent-metrics`, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      }),
-    ]);
-
-    if (!metricsRes.ok) return null;
-
     const [metrics, auditLogs, errors, agentMetrics] = await Promise.all([
-      metricsRes.json(),
-      auditRes.json().catch(() => []),
-      errorsRes.json().catch(() => []),
-      agentMetricsRes.json().catch(() => []),
+      fetchServerWithResult<MetricsSummary>('/api/admin/metrics'),
+      fetchServerWithResult<AuditLog[]>('/api/admin/audit?limit=50'),
+      fetchServerWithResult<ErrorEvent[]>('/api/admin/errors?limit=50'),
+      fetchServerWithResult<AgentMetric[]>('/api/admin/agent-metrics'),
     ]);
 
-    return { metrics, auditLogs, errors, agentMetrics };
+    if (!metrics.data) return null;
+
+    return {
+      metrics: metrics.data,
+      auditLogs: auditLogs.data || [],
+      errors: errors.data || [],
+      agentMetrics: agentMetrics.data || [],
+    };
   } catch {
     return null;
   }

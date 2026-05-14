@@ -42,6 +42,8 @@ run_test "TC-2: Agent & Job Creation" "$SCRIPT_DIR/tc-2-agents.sh"
 run_test "TC-3: Auto Match" "$SCRIPT_DIR/tc-3-match.sh"
 run_test "TC-4: A2A Dialogue" "$SCRIPT_DIR/tc-4-conversation.sh"
 run_test "TC-5: Tools & Memory" "$SCRIPT_DIR/tc-5-tools.sh"
+run_test "TC-6: Gateway & Health" "$SCRIPT_DIR/tc-6-gateway.sh"
+run_test "TC-7: Data Isolation" "$SCRIPT_DIR/tc-7-isolation.sh"
 
 # Cleanup
 playwright-cli close-all 2>/dev/null || true

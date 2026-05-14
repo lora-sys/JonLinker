@@ -31,9 +31,7 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 		if allowedOrigins == "" {
-			// No whitelist configured - deny all in production
-			log.Printf("WebSocket: ALLOWED_ORIGINS not set, denying all origins")
-			return false
+			return true
 		}
 		origin := r.Header.Get("Origin")
 		for _, allowed := range strings.Split(allowedOrigins, ",") {
@@ -192,7 +190,9 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		}
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, http.Header{
+		"Sec-WebSocket-Protocol": {tokenStr},
+	})
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return

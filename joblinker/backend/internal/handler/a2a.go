@@ -93,7 +93,9 @@ func (h *A2AHandler) HandleA2AWebSocket(c *gin.Context) {
 
 	log.Printf("A2A WebSocket authenticated: agentID=%s, matchId=%s", agentID, matchID)
 
-	conn, err := a2aUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := a2aUpgrader.Upgrade(c.Writer, c.Request, http.Header{
+		"Sec-WebSocket-Protocol": {tokenStr},
+	})
 	if err != nil {
 		log.Printf("A2A WebSocket upgrade failed: %v", err)
 		return

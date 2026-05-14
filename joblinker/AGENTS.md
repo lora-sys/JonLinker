@@ -2,21 +2,18 @@
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
 
-specs/020-production-hardening/plan.md
+specs/022-frontend-hardening/plan.md
 
-Current feature scope: Production Hardening — 5 phases.
-Security fix (JWT secret, httpOnly cookie, multi-tenant isolation),
-A2A dual-agent dialogue fix, Eino tool real data connection,
-WebSocket route split, MQ Service decomposition, observability,
-Playwright CLI E2E acceptance testing.
+Current feature scope: Frontend Hardening & E2E Integration Coverage.
+Phase 1: GatewayClient auth integration + client-side fetch() migration
+Phase 2: E2E test enhancement (gateway, auth, isolation coverage)
+Phase 3: Full E2E test suite execution and verification
 
 ## Key Design Decisions
 
-1. Multi-tenant: tenant_id on all tables, enforced in repository layer
-2. A2A: bidirectional loop with structured JSON protocol detection
-3. Eino: keep but connect to real repositories (no mock data)
-4. WebSocket: /api/messages/:matchId/ws for humans, /api/a2a/:matchId/ws for agents
-5. Config: centralized in internal/config/config.go, remove scattered os.Getenv
-6. State machine: single source of truth in Match.Status
-7. Rate limiting: in-memory sliding window, IP + userID dual key
+1. API calls from client components use `apiClient` from `lib/api_client.ts` (wraps GatewayClient) instead of raw fetch()
+2. Server Components fetch data server-side with server auth token, skipping GatewayClient headers
+3. E2E tests use playwright-cli for browser automation + curl/python for reliable API verification
+4. GatewayClient singleton initialized lazily via auth store on login; X-User-ID/X-Tenant-ID headers set from auth state
+5. Next.js API routes act as BFF, converting auth cookie to Bearer token; client components bypass them via apiClient
 <!-- SPECKIT END -->

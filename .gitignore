@@ -11,3 +11,10 @@ joblinker/frontend/tests/
 .windsurfrules
 .playwright-cli
 joblinker/specs
+.specify
+
+# Playwright CLI artifacts
+*.yaml
+seeker.json
+recruiter.json
+*.png

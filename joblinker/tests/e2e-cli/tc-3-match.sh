@@ -10,14 +10,14 @@ RECR_TOKEN=$(cat /tmp/e2e-recruiter-token.txt)
 JOB_ID=$(cat /tmp/e2e-job-id.txt)
 SEEKER_AGENT_ID=$(cat /tmp/e2e-seeker-agent-id.txt)
 
-# Create auto match
+# Create auto match (returns {matches: [{id,score,...}], created_count, skipped_count})
 MATCH_RESP=$(curl -s -X POST http://localhost:8080/api/matches/auto \
   -H "Authorization: Bearer $SEEKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"job_id\":\"$JOB_ID\"}")
-MATCH_ID=$(echo "$MATCH_RESP" | jq -r '.id')
-MATCH_SCORE=$(echo "$MATCH_RESP" | jq -r '.score')
-MATCH_STATUS=$(echo "$MATCH_RESP" | jq -r '.status')
+  -d "{\"job_ids\":[\"$JOB_ID\"]}")
+MATCH_ID=$(echo "$MATCH_RESP" | jq -r '.matches[0].id // .id // empty')
+MATCH_SCORE=$(echo "$MATCH_RESP" | jq -r '.matches[0].score // .score // "0"')
+MATCH_STATUS=$(echo "$MATCH_RESP" | jq -r '.matches[0].status // .status // "unknown"')
 
 echo "Match: $MATCH_ID (score=$MATCH_SCORE, status=$MATCH_STATUS)"
 
@@ -28,7 +28,10 @@ if [ -z "$MATCH_ID" ] || [ "$MATCH_ID" = "null" ]; then
 fi
 echo "✅ Match created: $MATCH_ID"
 
-# Score should be dynamic (not 0.9)
+# Score should be dynamic (not 1.0 or hardcoded)
+if [ "$MATCH_SCORE" = "1" ] || [ "$MATCH_SCORE" = "0.9" ] || [ "$MATCH_SCORE" = "1.0" ]; then
+  echo "⚠️ Score is $MATCH_SCORE — may be hardcoded (seeker skills should partially match job skills)"
+fi
 assert_not_equal "$MATCH_SCORE" "0.9" "Match score (anti-hardcode)"
 
 # Score should be in valid range

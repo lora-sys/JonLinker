@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 
 	"joblinker/internal/model"
@@ -165,7 +166,12 @@ func (s *MatchService) CalculateScore(seekerAgentID, jobID uuid.UUID) (float64, 
 
 func calculateSkillsMatch(seekerSkills, jobSkills []string) float64 {
 	if len(jobSkills) == 0 {
+		log.Printf("[score] calculateSkillsMatch: jobSkills empty, falling back to 1.0 (seekerSkills=%v)", seekerSkills)
 		return 1.0
+	}
+	if len(seekerSkills) == 0 {
+		log.Printf("[score] calculateSkillsMatch: seekerSkills empty, falling back to 0")
+		return 0
 	}
 	matchCount := 0
 	for _, seekerSkill := range seekerSkills {
@@ -181,6 +187,7 @@ func calculateSkillsMatch(seekerSkills, jobSkills []string) float64 {
 
 func calculateLocationMatch(seekerLoc, jobLoc string) float64 {
 	if jobLoc == "" || seekerLoc == "" {
+		log.Printf("[score] calculateLocationMatch: empty seekerLoc=%q jobLoc=%q, falling back to 1.0", seekerLoc, jobLoc)
 		return 1.0
 	}
 	// Remote-friendly jobs match any location
@@ -201,6 +208,7 @@ func calculateLocationMatch(seekerLoc, jobLoc string) float64 {
 
 func calculateExperienceMatch(seekerYears, jobYears int) float64 {
 	if jobYears == 0 {
+		log.Printf("[score] calculateExperienceMatch: jobYears=0, falling back to 1.0 (seekerYears=%d)", seekerYears)
 		return 1.0
 	}
 	// Within ±2 years of requirement = full match

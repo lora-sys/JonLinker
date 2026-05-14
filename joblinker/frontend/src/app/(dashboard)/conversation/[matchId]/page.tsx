@@ -10,7 +10,7 @@ import { TextareaInput } from '@/components/conversation/TextareaInput';
 import { FlowPanel, type FSMStage } from '@/components/conversation/FlowPanel';
 import { InterviewCard } from '@/components/interview/InterviewCard';
 import { OfferCard } from '@/components/offer/OfferCard';
-import { getAuthToken } from '@/lib/api-utils';
+import { apiClient } from '@/lib/api_client';
 import type { Match, Interview, Offer } from '@/types';
 
 interface PageProps {
@@ -45,26 +45,21 @@ export default function ConversationPage({ params }: PageProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = getAuthToken();
-        const matchHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        const matchRes = await fetch(`/api/matches/${matchId}`, { headers: matchHeaders });
-        if (matchRes.ok) {
-          const matchData = await matchRes.json();
-          setMatch(matchData);
+        const matchData = await apiClient.get<Match>(`/api/matches/${matchId}`);
+        setMatch(matchData);
 
-          if (matchData.status === 'interview_scheduled') {
-            try {
-              const interviewRes = await fetch(`/api/interviews/${matchId}`, { headers: matchHeaders });
-              if (interviewRes.ok) setInterview(await interviewRes.json());
-            } catch {}
-          }
+        if (matchData.status === 'interview_scheduled') {
+          try {
+            const interviewData = await apiClient.get<Interview>(`/api/interviews/${matchId}`);
+            setInterview(interviewData);
+          } catch {}
+        }
 
-          if (matchData.status === 'offer_sent' || matchData.status === 'offered') {
-            try {
-              const offerRes = await fetch(`/api/offers/${matchId}`, { headers: matchHeaders });
-              if (offerRes.ok) setOffer(await offerRes.json());
-            } catch {}
-          }
+        if (matchData.status === 'offer_sent' || matchData.status === 'offered') {
+          try {
+            const offerData = await apiClient.get<Offer>(`/api/offers/${matchId}`);
+            setOffer(offerData);
+          } catch {}
         }
       } catch (err) {
         console.error('Failed to fetch conversation data:', err);
@@ -83,13 +78,9 @@ export default function ConversationPage({ params }: PageProps) {
 
   const handleInterviewConfirm = async () => {
     try {
-      const token = getAuthToken();
-      await fetch(`/api/interviews/${matchId}/confirm`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const res = await fetch(`/api/interviews/${matchId}`);
-      if (res.ok) setInterview(await res.json());
+      await apiClient.post(`/api/interviews/${matchId}/confirm`);
+      const interviewData = await apiClient.get<Interview>(`/api/interviews/${matchId}`);
+      setInterview(interviewData);
     } catch (err) {
       console.error('Failed to confirm interview:', err);
     }
@@ -97,13 +88,9 @@ export default function ConversationPage({ params }: PageProps) {
 
   const handleInterviewCancel = async () => {
     try {
-      const token = getAuthToken();
-      await fetch(`/api/interviews/${matchId}/cancel`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const res = await fetch(`/api/interviews/${matchId}`);
-      if (res.ok) setInterview(await res.json());
+      await apiClient.post(`/api/interviews/${matchId}/cancel`);
+      const interviewData = await apiClient.get<Interview>(`/api/interviews/${matchId}`);
+      setInterview(interviewData);
     } catch (err) {
       console.error('Failed to cancel interview:', err);
     }
@@ -111,26 +98,17 @@ export default function ConversationPage({ params }: PageProps) {
 
   const handleOfferAccept = async () => {
     try {
-      const token = getAuthToken();
-      await fetch(`/api/offers/${matchId}/accept`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const res = await fetch(`/api/offers/${matchId}`);
-      if (res.ok) setOffer(await res.json());
+      await apiClient.post(`/api/offers/${matchId}/accept`);
+      const offerData = await apiClient.get<Offer>(`/api/offers/${matchId}`);
+      setOffer(offerData);
     } catch (err) {
       console.error('Failed to accept offer:', err);
     }
   };
 
   const handleMilestoneConfirm = async () => {
-    const token = getAuthToken();
-    if (!token) return;
     try {
-      await fetch(`/api/matches/${matchId}/confirm`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiClient.post(`/api/matches/${matchId}/confirm`);
       setNotification('Milestone confirmed!');
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {

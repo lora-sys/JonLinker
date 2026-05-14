@@ -1,5 +1,3 @@
-'use client';
-
 import DashboardClient from '@/components/ui/DashboardClient';
 
 export default function DashboardPage() {

@@ -40,6 +40,30 @@ function setUserContext(userId: string, agentId?: string) {
 
 class ApiClient {
   private token: string | null = null;
+  private userId: string | null = null;
+
+  constructor() {
+    this.loadAuth();
+  }
+
+  private loadAuth() {
+    if (typeof document === 'undefined') return;
+    const match = document.cookie.split('; ').find(row => row.startsWith('joblinker-auth='));
+    if (match) {
+      try {
+        const auth = JSON.parse(decodeURIComponent(match.split('=')[1]));
+        if (auth.token) {
+          this.token = auth.token;
+          const gateway = getGateway();
+          gateway.setToken(auth.token);
+        }
+        if (auth.userId) {
+          this.userId = auth.userId;
+          setUserContext(auth.userId);
+        }
+      } catch {}
+    }
+  }
 
   setToken(token: string | null) {
     this.token = token;
