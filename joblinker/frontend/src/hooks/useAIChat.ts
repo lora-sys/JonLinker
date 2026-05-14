@@ -119,7 +119,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     url: enabled ? buildWSUrl(matchId) : '',
     token: getAuthToken(),
     autoConnect: enabled,
-    onMessage: (event: WSEvent) => {
+    onMessage: useCallback((event: WSEvent) => {
       switch (event.type) {
         case 'message':
         case 'ai_response_sent':
@@ -134,13 +134,13 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
           setIsConnected(true);
           break;
       }
-    },
+    }, [sendMessage]),
   });
 
   useEffect(() => {
     wsRef.current = ws;
     setIsConnected(ws.status === 'Connected');
-  }, [ws]);
+  }, [ws.status]);
 
   const handleSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
@@ -157,6 +157,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     setInput,
     status,
     isConnected,
+    wsStatus: ws.status,
     error: aiError?.message || null,
     append: (msg: { role: 'user' | 'assistant' | 'system'; content: string }) => {
       sendMessage({

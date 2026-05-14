@@ -34,6 +34,7 @@ export default function ConversationPage({ params }: PageProps) {
     setInput,
     status,
     isConnected,
+    wsStatus,
     error,
     handleSubmit,
     stop,
@@ -179,7 +180,7 @@ export default function ConversationPage({ params }: PageProps) {
       <ConversationHeader
         matchId={matchId}
         fsmStage={fsmStage}
-        isConnected={isConnected}
+        wsStatus={wsStatus}
       />
 
       {/* Main content - dual column */}

@@ -1,15 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Wifi, WifiOff, Loader } from 'lucide-react';
 import type { FSMStage } from './FlowPanel';
+import type { WSConnectionStatus } from '@/hooks/useWebSocket';
 
 interface ConversationHeaderProps {
   matchId: string;
   recruiterName?: string;
   seekerName?: string;
   fsmStage?: FSMStage;
-  isConnected?: boolean;
+  wsStatus?: WSConnectionStatus;
 }
 
 const stageColors: Record<string, string> = {
@@ -26,7 +27,7 @@ export function ConversationHeader({
   recruiterName = 'Recruiter Agent',
   seekerName = 'Seeker Agent',
   fsmStage = 'INTRODUCTION',
-  isConnected = false,
+  wsStatus = 'Disconnected',
 }: ConversationHeaderProps) {
   return (
     <header className="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-4 shrink-0">
@@ -54,13 +55,21 @@ export function ConversationHeader({
 
       {/* WS Status */}
       <div className="flex items-center gap-1.5">
-        {isConnected ? (
+        {wsStatus === 'Connected' ? (
           <Wifi className="w-4 h-4 text-green-500" />
+        ) : wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? (
+          <Loader className="w-4 h-4 text-amber-500 animate-spin" />
         ) : (
           <WifiOff className="w-4 h-4 text-gray-400" />
         )}
-        <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-gray-400'}`}>
-          {isConnected ? 'Live' : 'Offline'}
+        <span className={`text-xs ${
+          wsStatus === 'Connected' ? 'text-green-600' :
+          wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? 'text-amber-600' :
+          'text-gray-400'
+        }`}>
+          {wsStatus === 'Connected' ? 'Live' :
+           wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? 'Reconnecting' :
+           'Offline'}
         </span>
       </div>
     </header>
