@@ -89,12 +89,32 @@ export default function ConversationPage({ params }: PageProps) {
       try {
         const matchData = await apiClient.get<Match>(`/api/matches/${matchId}`);
         setMatch(matchData);
-        setFsmStage(matchStatusToStage(matchData.status));
+        const stage = matchStatusToStage(matchData.status);
+        // Only upgrade, never downgrade
+        setFsmStage(prev => {
+          const order: FSMStage[] = ['INTRODUCTION','JOB_DESCRIPTION','SALARY_NEGOTIATION','INTERVIEWING','OFFER','COMPLETED'];
+          return order.indexOf(stage) > order.indexOf(prev) ? stage : prev;
+        });
       } catch {}
     };
     const id = setInterval(poll, 5000);
     return () => clearInterval(id);
   }, [matchId]);
+
+  // Derive FSM stage from message count as fallback
+  useEffect(() => {
+    const msgs = messages.filter(m => m.role !== 'user').length;
+    const stage: FSMStage = 
+      msgs >= 6 ? 'OFFER' :
+      msgs >= 4 ? 'INTERVIEWING' :
+      msgs >= 2 ? 'SALARY_NEGOTIATION' :
+      msgs >= 1 ? 'JOB_DESCRIPTION' :
+      'INTRODUCTION';
+    setFsmStage(prev => {
+      const order: FSMStage[] = ['INTRODUCTION','JOB_DESCRIPTION','SALARY_NEGOTIATION','INTERVIEWING','OFFER','COMPLETED'];
+      return order.indexOf(stage) > order.indexOf(prev) ? stage : prev;
+    });
+  }, [messages]);
 
   useEffect(() => {
     if (messages.length > 0) {

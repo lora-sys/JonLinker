@@ -209,43 +209,31 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		log.Printf("Failed to store response message: %v", err)
 	}
 
-	// Bidirectional A2A: Check if receiver is an agent
-	// If so, route response back to create a dialogueloop
-	if msg.ReceiverID != "" {
-		receiverAgentID, err := uuid.Parse(msg.ReceiverID)
-		if err == nil {
-			// Check if receiver is an agent
-			if receiverAgent, err := s.agentRepo.GetByID(receiverAgentID); err == nil && receiverAgent != nil {
-				// Receiver is an agent - create response message back to receiver
-				log.Printf("Bidirectional A2A: routing response to receiver agent %s", msg.ReceiverID)
+	// AUTONOMOUS A2A: If inside conversation rounds limit, re-publish to queue
+	// so the other agent responds, continuing the dialogue autonomously
+	if currentRound < 10 {
+		nextMsg := &rabbitmq.AgentMessage{
+			MessageID:  responseMsg.ID.String(),
+			SenderID:   responseAgentID.String(),
+			ReceiverID: senderAgent.ID.String(), // send back to original sender
+			Intent:     response.Intent,
+			MatchID:    msg.MatchID,
+			Payload:    response.Payload,
+			Timestamp:  time.Now(),
+		}
 
-				// Create message for the receiver agent
-				receiverMsg := &rabbitmq.AgentMessage{
-					MessageID:  uuid.New().String(),
-					SenderID:   responseAgentID.String(),
-					ReceiverID: msg.ReceiverID,
-					Intent:     response.Intent,
-					MatchID:    msg.MatchID,
-					Payload:    response.Payload,
-					Timestamp:  time.Now(),
-				}
-
-				// Route back to the queue for the receiver agent
-				if s.rmq != nil {
-					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					defer cancel()
-					if err := s.rmq.PublishAgentMessage(ctx, receiverMsg); err != nil {
-						log.Printf("Failed to route message to receiver agent: %v", err)
-					} else {
-						log.Printf("Bidirectional A2A: message routed to agent %s", msg.ReceiverID)
-					}
-				}
+		if s.rmq != nil {
+			ctxPub, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.rmq.PublishAgentMessage(ctxPub, nextMsg); err != nil {
+				log.Printf("Autonomous A2A: failed to publish next round: %v", err)
+			} else {
+				log.Printf("Autonomous A2A: round %d/%d published for match %s", currentRound, 10, matchID)
 			}
 		}
+	} else {
+		log.Printf("Autonomous A2A: max rounds reached for match %s", matchID)
 	}
-
-	// Note: We do NOT publish response back to queue - that would cause a loop
-	// The WebSocket handler will push the response to connected clients directly
 
 	log.Printf("Auto-response: %s -> %s (intent: %s)", response.Intent, msg.SenderID, msg.Intent)
 	return nil

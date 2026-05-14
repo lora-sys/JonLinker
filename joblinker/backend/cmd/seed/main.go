@@ -329,65 +329,8 @@ func createMatches(db *gorm.DB, agents map[string]model.Agent, jobs []model.Job)
 }
 
 func createMessages(db *gorm.DB, agents map[string]model.Agent, matches []model.Match) {
-	if len(matches) < 4 {
-		return
-	}
-
-	var recruiterAgent, seekerAgent model.Agent
-	for _, a := range agents {
-		if a.Type == model.AgentTypeRecruiter {
-			recruiterAgent = a
-			break
-		}
-	}
-	for _, a := range agents {
-		if a.Type == model.AgentTypeSeeker {
-			seekerAgent = a
-			break
-		}
-	}
-
-	messages := []struct {
-		matchIndex int
-		sender     model.Agent
-		intent     string
-		content    string
-	}{
-		{0, seekerAgent, "INTRODUCTION", "Hi, I'm interested in the Senior Software Engineer position. I have 8 years of experience in Go, Python, and Kubernetes with extensive AWS deployment experience."},
-		{0, recruiterAgent, "INTEREST", "Thank you for your interest! Your experience with distributed systems and cloud infrastructure is exactly what we're looking for. Would you be available for a technical interview?"},
-		{0, seekerAgent, "CONFIRM", "Yes, I'm available this week. Please let me know what times work best."},
-		{3, seekerAgent, "INTRODUCTION", "Hello, I saw your Full Stack Developer opening. My React/Node.js/PostgreSQL experience seems like a great fit."},
-		{3, recruiterAgent, "INTEREST", "Hi! We've reviewed your profile and are impressed. We'd love to schedule an initial call to discuss the role further."},
-		{8, seekerAgent, "NEGOTIATION", "Thank you for the offer! I'd like to discuss the compensation package. My target is $165,000 but I'm open to negotiation."},
-		{8, recruiterAgent, "NEGOTIATION", "I appreciate your feedback. We can offer $160,000 base plus a $10,000 signing bonus. Would that work for you?"},
-	}
-
-	for _, m := range messages {
-		if m.matchIndex >= len(matches) {
-			continue
-		}
-
-		contentXML := fmt.Sprintf(`<message>
-			<header>
-				<sender_id>%s</sender_id>
-				<receiver_id>%s</receiver_id>
-			</header>
-			<payload>
-				<intent>%s</intent>
-				<content><text>%s</text></content>
-			</payload>
-		</message>`, m.sender.ID.String(), recruiterAgent.ID.String(), m.intent, m.content)
-
-		msg := model.Message{
-			ID:            uuid.New(),
-			MatchID:       matches[m.matchIndex].ID,
-			SenderAgentID: m.sender.ID,
-			ContentXML:    contentXML,
-			IntentType:   m.intent,
-			CreatedAt:    time.Now(),
-		}
-		db.Create(&msg)
-	}
+	// No hardcoded seed messages - AI agents generate real conversation autonomously
+	log.Printf("createMessages: skipped hardcoded messages (A2A agents generate real dialogue)")
 }
 
 func createInterviews(db *gorm.DB, matches []model.Match) {

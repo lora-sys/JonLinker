@@ -95,6 +95,30 @@ func (s *FSMIntegration) BroadcastStateChange(matchID string, oldState, newState
 	}
 }
 
+// MatchStatus <-> FSM State mappings
+var matchStatusToFSMState = map[model.MatchStatus]agent.State{
+	model.MatchStatusPending:       agent.StateIdle,
+	model.MatchStatusSearching:     agent.StateSearching,
+	model.MatchStatusMutualInterest: agent.StateSearching,
+	model.MatchStatusNegotiating:   agent.StateNegotiating,
+	model.MatchStatusInterviewing:  agent.StateInterviewing,
+	model.MatchStatusOffered:       agent.StateOfferReceived,
+	model.MatchStatusHired:         agent.StateHired,
+	model.MatchStatusRejected:      agent.StateRejected,
+	model.MatchStatusPaused:        agent.StatePaused,
+}
+
+var fsmStateToMatchStatus = map[agent.State]model.MatchStatus{
+	agent.StateIdle:          model.MatchStatusPending,
+	agent.StateSearching:     model.MatchStatusMutualInterest,
+	agent.StateNegotiating:   model.MatchStatusNegotiating,
+	agent.StateInterviewing:  model.MatchStatusInterviewing,
+	agent.StateOfferReceived: model.MatchStatusOffered,
+	agent.StateHired:         model.MatchStatusHired,
+	agent.StateRejected:      model.MatchStatusRejected,
+	agent.StatePaused:        model.MatchStatusPaused,
+}
+
 // IntentToEvent maps AI intent strings to FSM events
 var IntentToEvent = map[string]agent.Event{
 	"INQUIRY":             agent.EventStartSearch,
@@ -129,13 +153,13 @@ func (s *FSMIntegration) TransitionFSM(matchID uuid.UUID, intent string) (agent.
 	// Create FSM from current state - use match ID as agentID for routing
 	fsm := agent.NewFSM(matchID)
 
-	// Load existing state from match status
-	oldStateStr := string(match.Status)
-	var oldState agent.State = agent.StateIdle
-	if oldStateStr != "" && oldStateStr != "pending" {
-		oldState = agent.State(oldStateStr)
-		fsm.SetState(oldState)
+	// Map MatchStatus -> FSM state
+	fsmState, ok := matchStatusToFSMState[match.Status]
+	if !ok {
+		fsmState = agent.StateIdle
 	}
+	fsm.SetState(fsmState)
+	oldFSMState := fsmState
 
 	// Map intent to event
 	event, exists := IntentToEvent[intent]
@@ -152,19 +176,26 @@ func (s *FSMIntegration) TransitionFSM(matchID uuid.UUID, intent string) (agent.
 		return fsm.CurrentState(), false, err
 	}
 
-	newState := fsm.CurrentState()
+	newFSMState := fsm.CurrentState()
+
+	// Map FSM state -> MatchStatus
+	newStatus, ok := fsmStateToMatchStatus[newFSMState]
+	if !ok {
+		newStatus = match.Status // keep current if no mapping
+	}
 
 	// Persist state change
-	if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatus(newState)); err != nil {
-		return newState, false, err
+	if err := s.matchRepo.UpdateStatus(matchID, newStatus); err != nil {
+		return newFSMState, false, err
 	}
 
 	// Broadcast state change if transition occurred
-	if newState != oldState {
-		s.BroadcastStateChange(matchID.String(), oldState, newState, intent)
+	if newFSMState != oldFSMState {
+		s.BroadcastStateChange(matchID.String(), oldFSMState, newFSMState, intent)
+		log.Printf("FSM: match=%s %s -> %s (via %s)", matchID, oldFSMState, newFSMState, intent)
 	}
 
-	return newState, true, nil
+	return newFSMState, true, nil
 }
 
 // GetCurrentState returns the current FSM state for a match
