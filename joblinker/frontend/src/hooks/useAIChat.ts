@@ -102,7 +102,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     // Build agent XML and POST through Gateway
     const xml = `<message><payload><intent>INQUIRY</intent><parameters>{"message":"${text.replace(/"/g, '\\"')}"}</parameters></payload></message>`;
     try {
-      await apiClient.post(`/api/conversation/${matchId}`, {
+      await apiClient.post(`/api/messages/${matchId}`, {
         content_xml: xml,
         intent_type: 'INQUIRY',
       });

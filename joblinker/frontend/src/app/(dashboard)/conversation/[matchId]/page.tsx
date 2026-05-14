@@ -11,7 +11,18 @@ import { FlowPanel, type FSMStage } from '@/components/conversation/FlowPanel';
 import { InterviewCard } from '@/components/interview/InterviewCard';
 import { OfferCard } from '@/components/offer/OfferCard';
 import { apiClient } from '@/lib/api_client';
-import type { Match, Interview, Offer } from '@/types';
+import type { Match, Interview, Offer, MatchStatus } from '@/types';
+
+function matchStatusToStage(status: MatchStatus): FSMStage {
+  switch (status) {
+    case 'mutual_interest': return 'JOB_DESCRIPTION';
+    case 'negotiating': return 'SALARY_NEGOTIATION';
+    case 'interview_scheduled': return 'INTERVIEWING';
+    case 'offer_sent': case 'offered': return 'OFFER';
+    case 'hired': case 'rejected': return 'COMPLETED';
+    default: return 'INTRODUCTION';
+  }
+}
 
 interface PageProps {
   params: Promise<{ matchId: string }>;
@@ -48,6 +59,7 @@ export default function ConversationPage({ params }: PageProps) {
       try {
         const matchData = await apiClient.get<Match>(`/api/matches/${matchId}`);
         setMatch(matchData);
+        setFsmStage(matchStatusToStage(matchData.status));
 
         if (matchData.status === 'interview_scheduled') {
           try {
@@ -69,6 +81,19 @@ export default function ConversationPage({ params }: PageProps) {
       }
     };
     fetchData();
+  }, [matchId]);
+
+  // Poll match status to update FSM stage
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const matchData = await apiClient.get<Match>(`/api/matches/${matchId}`);
+        setMatch(matchData);
+        setFsmStage(matchStatusToStage(matchData.status));
+      } catch {}
+    };
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
   }, [matchId]);
 
   useEffect(() => {
