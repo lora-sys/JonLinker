@@ -195,15 +195,8 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	// Generate auto-response based on intent
 	response := s.generateAutoResponse(msg, match, senderAgent)
 
-	// Determine who responds - recruiter for INTRODUCTION, seeker for others
-	responseAgentID := senderAgent.ID
-	if msg.Intent == "INTRODUCTION" {
-		// For introduction, recruiter should respond - get from job's agent
-		job, err := s.jobRepo.GetByID(match.JobID)
-		if err == nil && job != nil {
-			responseAgentID = job.AgentID
-		}
-	}
+	// Determine who responds - always the OTHER agent (A2A alternation)
+	responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
 
 	responseMsg := &model.Message{
 		ID:            uuid.New(),
@@ -256,6 +249,19 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 
 	log.Printf("Auto-response: %s -> %s (intent: %s)", response.Intent, msg.SenderID, msg.Intent)
 	return nil
+}
+
+// getOtherAgentID returns the ID of the OTHER agent in the match (for A2A alternation)
+func (s *MessageQueueService) getOtherAgentID(match *model.Match, senderID uuid.UUID) uuid.UUID {
+	// If sender is the seeker, return the recruiter agent (from job)
+	if match.SeekerAgentID == senderID {
+		job, err := s.jobRepo.GetByID(match.JobID)
+		if err == nil && job != nil {
+			return job.AgentID
+		}
+	}
+	// Otherwise return the seeker agent
+	return match.SeekerAgentID
 }
 
 func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
@@ -580,10 +586,10 @@ func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, m
 		return nil // Fallback to legacy AI
 	}
 
-	// Parse Eino response to AutoResponse format
-	// The response is free-form text, we convert it to structured format
+	// Advance intent based on conversation context
+	nextIntent := s.advanceIntent(msg.Intent)
 	return &AutoResponse{
-		Intent:  msg.Intent, // Keep same intent for flow continuity
+		Intent:  nextIntent,
 		Payload: map[string]interface{}{"message": response},
 	}
 }
@@ -608,21 +614,39 @@ func scenarioFromPromptType(scenario model.PromptScenarioType) prompt.Scenario {
 	}
 }
 
-func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoResponse {
-	now := time.Now()
+// advanceIntent progresses the conversation to the next logical intent
+func (s *MessageQueueService) advanceIntent(currentIntent string) string {
 	switch currentIntent {
+	case "INQUIRY":
+		return "INTRODUCTION"
 	case "INTRODUCTION":
-		return &AutoResponse{Intent: "INTEREST", Payload: map[string]interface{}{"message": "Thank you for your introduction. We are interested in your profile."}}
+		return "INTEREST"
 	case "INTEREST":
-		return &AutoResponse{Intent: "NEGOTIATION", Payload: map[string]interface{}{"message": "Let's discuss compensation details."}}
+		return "NEGOTIATION"
 	case "NEGOTIATION":
-		return &AutoResponse{Intent: "OFFER", Payload: map[string]interface{}{"message": "We'd like to extend an offer."}}
-	case "OFFER":
-		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "acceptance"}}
-	case "SCHEDULE":
-		return &AutoResponse{Intent: "CONFIRM", Payload: map[string]interface{}{"type": "interview_confirmed", "scheduled_at": now.AddDate(0, 0, 14).Format(time.RFC3339)}}
+		return "OFFER"
+	case "OFFER", "SCHEDULE":
+		return "CONFIRM"
 	default:
-		return &AutoResponse{Intent: "INQUIRY", Payload: map[string]interface{}{"message": "Thank you for your message."}}
+		return "INTRODUCTION"
+	}
+}
+
+func (s *MessageQueueService) fallbackResponse(currentIntent string) *AutoResponse {
+	nextIntent := s.advanceIntent(currentIntent)
+	switch nextIntent {
+	case "INTRODUCTION":
+		return &AutoResponse{Intent: nextIntent, Payload: map[string]interface{}{"message": "Thank you for your interest. Let me share the job details with you."}}
+	case "INTEREST":
+		return &AutoResponse{Intent: nextIntent, Payload: map[string]interface{}{"message": "Great! Let me tell you more about the position and discuss next steps."}}
+	case "NEGOTIATION":
+		return &AutoResponse{Intent: nextIntent, Payload: map[string]interface{}{"message": "Let's discuss compensation and benefits."}}
+	case "OFFER":
+		return &AutoResponse{Intent: nextIntent, Payload: map[string]interface{}{"message": "We'd like to extend an offer."}}
+	case "CONFIRM":
+		return &AutoResponse{Intent: nextIntent, Payload: map[string]interface{}{"type": "confirmation"}}
+	default:
+		return &AutoResponse{Intent: "INTRODUCTION", Payload: map[string]interface{}{"message": "Thank you for your message."}}
 	}
 }
 
