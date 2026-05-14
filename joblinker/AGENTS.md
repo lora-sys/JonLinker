@@ -2,12 +2,12 @@
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
 
-specs/022-frontend-hardening/plan.md
+specs/024-compile-fix-e2e/plan.md
 
-Current feature scope: Frontend Hardening & E2E Integration Coverage.
-Phase 1: GatewayClient auth integration + client-side fetch() migration
-Phase 2: E2E test enhancement (gateway, auth, isolation coverage)
-Phase 3: Full E2E test suite execution and verification
+Current feature scope: TypeScript Compile Fixes & Playwright CLI E2E Coverage.
+Phase 1: Fix all compile errors (api_client.ts, MatchStatus, useChat types)
+Phase 2: Playwright CLI pure-browser E2E tests T01-T16
+All tests use playwright-cli commands only — no curl, python, or bash scripts
 
 ## Key Design Decisions
 

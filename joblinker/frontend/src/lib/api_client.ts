@@ -30,11 +30,18 @@ function getGateway(): GatewayClient {
   return internalGateway;
 }
 
-function setUserContext(userId: string, agentId?: string) {
+function setUserContext(userId: string, agentId?: string, tenantId?: string) {
   const gateway = getGateway();
-  gateway.headers['X-User-ID'] = userId;
+  if (userId) {
+    gateway.headers['X-User-ID'] = userId;
+  }
   if (agentId) {
     gateway.headers['X-Agent-ID'] = agentId;
+  }
+  if (tenantId && tenantId !== 'default') {
+    gateway.headers['X-Tenant-ID'] = tenantId;
+  } else {
+    delete gateway.headers['X-Tenant-ID'];
   }
 }
 
@@ -47,21 +54,11 @@ class ApiClient {
   }
 
   private loadAuth() {
-    if (typeof document === 'undefined') return;
-    const match = document.cookie.split('; ').find(row => row.startsWith('joblinker-auth='));
-    if (match) {
-      try {
-        const auth = JSON.parse(decodeURIComponent(match.split('=')[1]));
-        if (auth.token) {
-          this.token = auth.token;
-          const gateway = getGateway();
-          gateway.setToken(auth.token);
-        }
-        if (auth.userId) {
-          this.userId = auth.userId;
-          setUserContext(auth.userId);
-        }
-      } catch {}
+    const token = getAuthToken();
+    if (token) {
+      this.token = token;
+      const gateway = getGateway();
+      gateway.setToken(token);
     }
   }
 
@@ -71,8 +68,8 @@ class ApiClient {
     gateway.setToken(token);
   }
 
-  setUserId(userId: string, agentId?: string) {
-    setUserContext(userId, agentId);
+  setUserId(userId: string, agentId?: string, tenantId?: string) {
+    setUserContext(userId, agentId, tenantId);
   }
 
   private getToken(): string | null {

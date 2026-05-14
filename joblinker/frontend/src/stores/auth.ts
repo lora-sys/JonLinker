@@ -3,6 +3,17 @@ import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
 import { apiClient } from '@/lib/api_client';
 
+function parseTenantId(token: string): string | undefined {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return undefined;
+    const decoded = JSON.parse(atob(payload));
+    return decoded.tenant_id || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -24,7 +35,7 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, token) => {
         apiClient.setToken(token);
-        apiClient.setUserId(user.id);
+        apiClient.setUserId(user.id, undefined, parseTenantId(token));
         set({ user, token, isAuthenticated: true });
       },
 

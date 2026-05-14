@@ -108,6 +108,8 @@ export type MatchStatus =
   | 'pending'
   | 'mutual_interest'
   | 'negotiating'
+  | 'interview_scheduled'
+  | 'offer_sent'
   | 'offered'
   | 'hired'
   | 'rejected';

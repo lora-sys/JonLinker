@@ -21,8 +21,6 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
     handleSubmit,
     stop,
     reload,
-    loadMoreMessages,
-    hasMoreMessages,
   } = useAIChat({ matchId });
 
   // Convert AI SDK messages to ChatMessage format for MessageList
@@ -97,8 +95,8 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
         messages={messages}
         status={status}
         isLoading={messages.length === 0 && isStreaming}
-        onLoadMore={loadMoreMessages}
-        hasMore={hasMoreMessages}
+        onLoadMore={() => reload()}
+        hasMore={false}
       />
 
       {/* Input */}

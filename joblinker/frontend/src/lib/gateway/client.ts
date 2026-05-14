@@ -55,13 +55,16 @@ export class GatewayClient {
 
   private buildHeaders(config: GatewayConfig): Record<string, string> {
     const tenantCtx = getTenantContext(config);
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-User-ID': tenantCtx.userId,
       'X-Agent-ID': tenantCtx.agentId || '',
-      'X-Tenant-ID': tenantCtx.tenantId,
       'X-Request-ID': crypto.randomUUID(),
     };
+    if (tenantCtx.tenantId && tenantCtx.tenantId !== 'default') {
+      headers['X-Tenant-ID'] = tenantCtx.tenantId;
+    }
+    return headers;
   }
 
   // Get headers with fresh X-Request-ID for each request
@@ -76,10 +79,15 @@ export class GatewayClient {
     this.token = token;
   }
 
-  setUserContext(userId: string, agentId?: string) {
+  setUserContext(userId: string, agentId?: string, tenantId?: string) {
     this._headers['X-User-ID'] = userId;
     if (agentId) {
       this._headers['X-Agent-ID'] = agentId;
+    }
+    if (tenantId && tenantId !== 'default') {
+      this._headers['X-Tenant-ID'] = tenantId;
+    } else {
+      delete this._headers['X-Tenant-ID'];
     }
   }
 

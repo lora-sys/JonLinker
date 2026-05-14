@@ -39,7 +39,7 @@ export default function AgentCreatePage() {
         preferences: preferences || undefined,
       };
 
-      const data = await apiClient.post('/api/agents', {
+      const data = await apiClient.post<{ id: string }>('/api/agents', {
         type: agentType,
         config: JSON.stringify(config),
       });
