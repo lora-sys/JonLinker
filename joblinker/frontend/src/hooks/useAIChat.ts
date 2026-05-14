@@ -10,6 +10,7 @@ import type { ChatMessage } from '@/types/ai';
 interface UseAIChatOptions {
   matchId: string;
   enabled?: boolean;
+  seekerAgentId?: string;
 }
 
 interface StoredMessage {
@@ -20,7 +21,7 @@ interface StoredMessage {
   created_at: string;
 }
 
-export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
+export function useAIChat({ matchId, enabled = true, seekerAgentId }: UseAIChatOptions) {
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const loadedIdsRef = useRef<Set<string>>(new Set());
@@ -46,6 +47,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
 
         const newMsgs = data
           .filter(m => !loadedIdsRef.current.has(m.id))
+          .filter(m => m.sender_agent_id !== seekerAgentId) // skip own messages (added locally)
           .map(m => {
             loadedIdsRef.current.add(m.id);
             const content = parseXmlContent(m.content_xml);
@@ -67,7 +69,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     poll();
     const id = setInterval(poll, 3000);
     return () => { active = false; clearInterval(id); };
-  }, [matchId, setMessages]);
+  }, [matchId, setMessages, seekerAgentId]);
 
   // WebSocket for FSM state changes only (optional)
   const { status: wsStatus } = useWebSocket({

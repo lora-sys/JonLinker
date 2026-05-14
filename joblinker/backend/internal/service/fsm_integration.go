@@ -97,6 +97,7 @@ func (s *FSMIntegration) BroadcastStateChange(matchID string, oldState, newState
 
 // IntentToEvent maps AI intent strings to FSM events
 var IntentToEvent = map[string]agent.Event{
+	"INQUIRY":             agent.EventStartSearch,
 	"INTRODUCTION":        agent.EventStartSearch,
 	"INTEREST_EXPRESSED": agent.EventInterestExpressed,
 	"INTEREST":           agent.EventInterestExpressed,

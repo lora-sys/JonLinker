@@ -50,7 +50,7 @@ export default function ConversationPage({ params }: PageProps) {
     handleSubmit,
     stop,
     reload,
-  } = useAIChat({ matchId });
+  } = useAIChat({ matchId, seekerAgentId: match?.seeker_agent_id });
 
   const isStreaming = status === 'streaming';
 
@@ -145,12 +145,12 @@ export default function ConversationPage({ params }: PageProps) {
   const determineAgentRole = useCallback((msg: { role: string; id?: string; sender_agent_id?: string }): AgentRole => {
     if (msg.role === 'user') return 'seeker';
     if (msg.role === 'system') return 'system';
-    // Use match recruiter/seeker agent IDs for accurate role detection
     if (match) {
       const senderId = msg.sender_agent_id || msg.id;
-      if (senderId === match.recruiter_agent_id) return 'recruiter';
       if (senderId === match.seeker_agent_id) return 'seeker';
+      if (senderId === match.recruiter_agent_id) return 'recruiter';
     }
+    // Default: messages loaded from backend are from the other agent (recruiter)
     return 'recruiter';
   }, [match]);
 
