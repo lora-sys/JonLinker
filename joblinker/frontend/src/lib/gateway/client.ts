@@ -60,6 +60,15 @@ export class GatewayClient {
       'X-User-ID': tenantCtx.userId,
       'X-Agent-ID': tenantCtx.agentId || '',
       'X-Tenant-ID': tenantCtx.tenantId,
+      'X-Request-ID': crypto.randomUUID(),
+    };
+  }
+
+  // Get headers with fresh X-Request-ID for each request
+  private getRequestHeaders(): Record<string, string> {
+    return {
+      ...this._headers,
+      'X-Request-ID': crypto.randomUUID(),
     };
   }
 
@@ -105,7 +114,7 @@ export class GatewayClient {
 
     // Build request config
     const url = `${this.baseURL}${path}`;
-    const headers: Record<string, string> = { ...this._headers };
+    const headers = this.getRequestHeaders();
 
     // Add Protobuf Accept header if enabled for internal communication
     if (isInternalProtobufEnabled()) {
@@ -228,30 +237,23 @@ export class GatewayClient {
     return this.request<R>(routeDef, params);
   }
 
-  // WebSocket connection - token passed as query param since headers not supported
+  // WebSocket connection - token passed via Sec-WebSocket-Protocol header
   connectWebSocket(
     routeDef: { method: HttpMethod; path: string },
     params?: Record<string, string>
   ): WebSocket {
     let path = routeDef.path;
 
-    // Substitute params and add token as query param
+    // Substitute path params
     if (params) {
-      const queryParams = new URLSearchParams();
       Object.entries(params).forEach(([key, value]) => {
         path = path.replace(`:${key}`, String(value));
       });
-      if (this.token) {
-        queryParams.set('token', this.token);
-      }
-      const query = queryParams.toString();
-      if (query) {
-        path += `?${query}`;
-      }
     }
 
     const wsUrl = `${this.baseURL.replace(/^http/, 'ws')}${path}`;
-    return new WebSocket(wsUrl);
+    const protocols = this.token ? [this.token] : [];
+    return new WebSocket(wsUrl, protocols);
   }
 }
 

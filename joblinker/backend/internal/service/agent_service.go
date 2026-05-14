@@ -68,7 +68,7 @@ func (s *AgentService) DeleteAgent(id uuid.UUID) error {
 }
 
 func (s *AgentService) ListUserAgents(userID uuid.UUID) ([]*model.Agent, error) {
-	return s.agentRepo.ListByUserID(userID)
+	return s.agentRepo.ListByUserID(userID, "")
 }
 
 func (s *AgentService) UpdateStatus(id uuid.UUID, status model.AgentStatus) (*model.Agent, error) {

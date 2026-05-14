@@ -57,6 +57,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
 		Role:         model.UserRole(req.Role),
+		TenantID:     uuid.New(),
 	}
 	if err := h.userRepo.Create(user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
@@ -114,10 +115,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 func (h *AuthHandler) generateToken(user *model.User) string {
 	claims := jwt.MapClaims{
-		"sub":  user.ID.String(),
-		"role": string(user.Role),
-		"exp":  time.Now().Add(24 * time.Hour).Unix(),
-		"iat":  time.Now().Unix(),
+		"sub":       user.ID.String(),
+		"role":      string(user.Role),
+		"tenant_id": user.TenantID.String(),
+		"exp":       time.Now().Add(24 * time.Hour).Unix(),
+		"iat":       time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(middleware.GetJwtSecret())

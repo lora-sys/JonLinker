@@ -36,11 +36,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      // Set localStorage for hooks
-      localStorage.setItem('joblinker-auth', JSON.stringify({ state: { token: data.token, user: data.user } }));
-      // Set auth cookie for middleware compatibility
-      document.cookie = `joblinker-auth=${JSON.stringify({ token: data.token, userId: data.user?.id })}; path=/; max-age=${60*60*24*7}`;
-      // Also set Zustand auth state
+      // Zustand persist handles localStorage + cookie is set server-side
       setAuth(data.user, data.token);
       router.push('/dashboard');
     } catch (err) {

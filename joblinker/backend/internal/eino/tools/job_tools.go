@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
+	"joblinker/internal/model"
+	"joblinker/internal/repository"
 )
 
 // QueryJobsInput represents input for the query_jobs tool
@@ -278,6 +282,104 @@ func GetAllTools() []tool.InvokableTool {
 	si := ScheduleInterview(func(ctx context.Context, input ScheduleInterviewInput) (ScheduleInterviewOutput, error) {
 		return ScheduleInterviewOutput{
 			InterviewID: "interview-123", Status: "scheduled", Message: "Interview scheduled",
+		}, nil
+	})
+	tools = append(tools, si)
+
+	return tools
+}
+
+// NewRealTools creates production tools backed by real repository data
+func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.AgentRepository, matchRepo *repository.MatchRepository, offerRepo *repository.OfferRepository, interviewRepo *repository.InterviewRepository) []tool.InvokableTool {
+	tools := make([]tool.InvokableTool, 0)
+
+	qj := QueryJobs(func(ctx context.Context, input QueryJobsInput) (QueryJobsOutput, error) {
+		jobs, err := jobRepo.Search(ctx, "", input.Skills, input.Location, input.SalaryMin, "", input.Limit)
+		if err != nil {
+			return QueryJobsOutput{Jobs: []JobInfo{}}, nil
+		}
+		var results []JobInfo
+		for _, j := range jobs {
+			var info JobInfo
+			info.ID = j.ID.String()
+			json.Unmarshal([]byte(j.StructuredJSON), &info)
+			results = append(results, info)
+		}
+		return QueryJobsOutput{Jobs: results}, nil
+	})
+	tools = append(tools, qj)
+
+	sc := SearchCandidates(func(ctx context.Context, input SearchCandidatesInput) (SearchCandidatesOutput, error) {
+		agents, err := agentRepo.SearchBySkills(ctx, input.Skills, input.Location, input.ExperienceMin, input.Limit)
+		if err != nil {
+			return SearchCandidatesOutput{Candidates: []CandidateInfo{}}, nil
+		}
+		var results []CandidateInfo
+		for _, a := range agents {
+			results = append(results, CandidateInfo{
+				ID: a.ID.String(), Name: a.ConfigJSON,
+				Experience: 0, Location: "",
+			})
+		}
+		return SearchCandidatesOutput{Candidates: results}, nil
+	})
+	tools = append(tools, sc)
+
+	gc := GetCandidate(func(ctx context.Context, input GetCandidateInput) (GetCandidateOutput, error) {
+		agentID, err := uuid.Parse(input.CandidateID)
+		if err != nil {
+			return GetCandidateOutput{}, fmt.Errorf("invalid candidate id")
+		}
+		agent, err := agentRepo.GetByID(agentID)
+		if err != nil {
+			return GetCandidateOutput{}, fmt.Errorf("candidate not found")
+		}
+		return GetCandidateOutput{
+			Candidate: CandidateDetail{
+				ID: agent.ID.String(), Name: agent.ConfigJSON,
+			},
+		}, nil
+	})
+	tools = append(tools, gc)
+
+	co := CreateOffer(func(ctx context.Context, input CreateOfferInput) (CreateOfferOutput, error) {
+		matchID, err := uuid.Parse(input.MatchID)
+		if err != nil {
+			return CreateOfferOutput{}, fmt.Errorf("invalid match id")
+		}
+		offer := &model.Offer{
+			ID:      uuid.New(),
+			MatchID: matchID,
+			Status:  model.OfferStatusPending,
+		}
+		if err := offerRepo.Create(offer); err != nil {
+			return CreateOfferOutput{}, fmt.Errorf("failed to create offer: %w", err)
+		}
+		return CreateOfferOutput{
+			OfferID: offer.ID.String(), Status: string(offer.Status), Message: "Offer created",
+		}, nil
+	})
+	tools = append(tools, co)
+
+	si := ScheduleInterview(func(ctx context.Context, input ScheduleInterviewInput) (ScheduleInterviewOutput, error) {
+		matchID, err := uuid.Parse(input.MatchID)
+		if err != nil {
+			return ScheduleInterviewOutput{}, fmt.Errorf("invalid match id")
+		}
+		scheduledAt, err := time.Parse(time.RFC3339, input.Datetime)
+		if err != nil {
+			scheduledAt = time.Now().Add(24 * time.Hour)
+		}
+		interview := &model.Interview{
+			ID: uuid.New(), MatchID: matchID,
+			ScheduledAt: scheduledAt,
+			Status:      model.InterviewStatusScheduled,
+		}
+		if err := interviewRepo.Create(interview); err != nil {
+			return ScheduleInterviewOutput{}, fmt.Errorf("failed to schedule interview: %w", err)
+		}
+		return ScheduleInterviewOutput{
+			InterviewID: interview.ID.String(), Status: string(interview.Status), Message: "Interview scheduled",
 		}, nil
 	})
 	tools = append(tools, si)

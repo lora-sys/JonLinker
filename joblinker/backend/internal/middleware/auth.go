@@ -10,18 +10,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret []byte
-
-func getJwtSecret() []byte {
-	if jwtSecret == nil {
-		jwtSecret = []byte(getEnvOrFail("JWT_SECRET"))
-	}
-	return jwtSecret
-}
-
-// GetJwtSecret returns the JWT secret, initializing it from env if not yet set.
+// GetJwtSecret returns the JWT secret from the environment variable.
+// The caller must ensure JWT_SECRET is set at startup.
 func GetJwtSecret() []byte {
-	return getJwtSecret()
+	return []byte(os.Getenv("JWT_SECRET"))
 }
 
 func Auth() gin.HandlerFunc {
@@ -43,7 +35,7 @@ func Auth() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return getJwtSecret(), nil
+			return GetJwtSecret(), nil
 		})
 		if err != nil || !token.Valid {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
@@ -56,8 +48,16 @@ func Auth() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		tenantID, _ := claims["tenant_id"].(string)
+		// Cross-check X-Tenant-ID header if provided
+		if headerTenant := c.GetHeader("X-Tenant-ID"); headerTenant != "" && tenantID != "" && headerTenant != tenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Tenant ID mismatch"})
+			c.Abort()
+			return
+		}
 		c.Set("userID", claims["sub"])
 		c.Set("role", claims["role"])
+		c.Set("tenantID", tenantID)
 		c.Next()
 	}
 }

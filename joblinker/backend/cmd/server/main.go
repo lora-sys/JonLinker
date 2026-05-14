@@ -42,9 +42,20 @@ func getEnvInt(key string, fallback int) int {
 	return fallback
 }
 
+func getEnvOrFail(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("Required environment variable %s is not set", key)
+	}
+	return value
+}
+
 func main() {
 	// Load .env file if present (from same directory as binary)
 	godotenv.Load()
+
+	// Validate required environment variables at startup
+	getEnvOrFail("JWT_SECRET")
 
 	// Initialize Chroma client
 	chromaHost := getEnv("CHROMA_HOST", "localhost")
@@ -116,8 +127,6 @@ func main() {
 	securityRepo := repository.NewSecurityEventRepository().WithDB(db)
 	errorLogRepo := repository.NewErrorLogRepository().WithDB(db)
 	_ = errorLogRepo // used by middleware via LogError
-	rateLimitRepo := repository.NewRateLimitRepository().WithDB(db)
-
 	// Observability repositories
 	metricsRepo := repository.NewAgentMetricsRepository().WithDB(db)
 	auditRepo := repository.NewAuditLogRepository().WithDB(db)
@@ -160,8 +169,10 @@ func main() {
 	offerHandler := handler.NewOfferHandler(offerSvc)
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
 	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq)
-	resumeHandler := handler.NewResumeHandler()
-	healthHandler := handler.NewHealthHandler()
+	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
+	_ = handler.NewResumeHandler()
+	sqlDB, _ := db.DB()
+	healthHandler := handler.NewHealthHandler(sqlDB)
 
 	// Wire Eino Runner to MessageQueueService (T029)
 	if mqSvc != nil {
@@ -190,7 +201,7 @@ func main() {
 
 	api := r.Group("/api")
 	api.Use(middleware.Auth())
-	api.Use(middleware.RateLimit(rateLimitRepo))
+	api.Use(middleware.RateLimit())
 	api.Use(middleware.ProtoResponseMiddleware())
 	api.Use(middleware.ProtoMiddleware())
 	{
@@ -209,6 +220,10 @@ func main() {
 		api.GET("/matches/:id", matchHandler.Get)
 		api.POST("/matches/auto", matchHandler.AutoCreate)
 		api.POST("/matches/:id/confirm", matchHandler.Confirm)
+
+		api.GET("/messages", messageHandler.GetMessages)
+		api.GET("/messages/:matchId", messageHandler.GetMessages)
+		api.POST("/messages/:matchId", messageHandler.SendMessage)
 
 		api.GET("/interviews", interviewHandler.List)
 		api.POST("/interviews", interviewHandler.Create)
@@ -235,18 +250,14 @@ func main() {
 			admin.GET("/errors", adminHandler.GetErrors)
 			admin.POST("/errors/:id/resolve", adminHandler.ResolveError)
 		}
-
-		// Messages REST (auth required)
-		api.GET("/messages", messageHandler.GetMessages)
-		api.GET("/messages/:matchId", messageHandler.GetConversation)
-		api.POST("/messages/:matchId", messageHandler.SendMessage)
-
-		// Resume generation (AI-powered)
-		api.POST("/resumes/generate", resumeHandler.Generate)
 	}
 
-	// Messages WebSocket (token in query param, no auth middleware)
+	// Human WebSocket (JWT auth via query param fallback)
+	r.GET("/api/messages/ws", messageHandler.HandleWebSocket)
 	r.GET("/api/messages/:matchId/ws", messageHandler.HandleWebSocket)
+
+	// A2A Agent WebSocket (HMAC internal auth, no rate limit, XML protocol)
+	r.GET("/api/a2a/:matchId/ws", a2aHandler.HandleA2AWebSocket)
 
 	port := os.Getenv("PORT")
 	if port == "" {

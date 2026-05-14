@@ -2,70 +2,65 @@ package middleware
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
-	"joblinker/internal/repository"
-
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 const (
-	MaxMessagesPerMinute = 10
-	WindowDuration      = time.Minute
+	MaxRequestsPerMinute = 60
+	WindowDuration       = time.Minute
 )
 
-func RateLimit(rateLimitRepo *repository.RateLimitRepository) gin.HandlerFunc {
+type rateEntry struct {
+	count   int
+	windowStart time.Time
+}
+
+type MemoryRateLimiter struct {
+	mu      sync.Mutex
+	entries map[string]*rateEntry
+}
+
+var globalRateLimiter = &MemoryRateLimiter{
+	entries: make(map[string]*rateEntry),
+}
+
+func (rl *MemoryRateLimiter) allow(key string, max int, window time.Duration) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	entry, exists := rl.entries[key]
+
+	if !exists || now.Sub(entry.windowStart) > window {
+		rl.entries[key] = &rateEntry{count: 1, windowStart: now}
+		return true
+	}
+
+	entry.count++
+	return entry.count <= max
+}
+
+func RateLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userIDVal, exists := c.Get("userID")
-		if !exists {
-			c.Next()
-			return
+		// Rate limit by IP + userID (if available)
+		key := c.ClientIP()
+		if userID, exists := c.Get("userID"); exists {
+			if uid, ok := userID.(string); ok && uid != "" && uid != "anonymous" {
+				key = uid
+			}
 		}
 
-		userIDStr, ok := userIDVal.(string)
-		if !ok {
-			c.Next()
-			return
-		}
-
-		userID, err := uuid.Parse(userIDStr)
-		if err != nil {
-			c.Next()
-			return
-		}
-
-		count, err := rateLimitRepo.GetMessageCount(userID, WindowDuration)
-		if err != nil {
-			LogError(c, err, userIDStr, "")
-			c.Next()
-			return
-		}
-
-		if count >= MaxMessagesPerMinute {
-			c.JSON(http.StatusTooManyRequests, ErrorResponse{
-				Error:         "Too many messages. Please wait before sending more.",
-				Code:          ErrCodeRateLimited,
-				CorrelationID: getCorrelationID(c),
+		if !globalRateLimiter.allow(key, MaxRequestsPerMinute, WindowDuration) {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error": "Rate limit exceeded. Please wait before sending more requests.",
 			})
 			c.Abort()
 			return
 		}
 
-		_, err = rateLimitRepo.Increment(userID, WindowDuration)
-		if err != nil {
-			LogError(c, err, userIDStr, "")
-		}
-
 		c.Next()
 	}
-}
-
-func getCorrelationID(c *gin.Context) string {
-	if requestID, exists := c.Get("requestID"); exists {
-		if id, ok := requestID.(string); ok {
-			return id
-		}
-	}
-	return ""
 }

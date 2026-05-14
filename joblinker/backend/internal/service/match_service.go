@@ -75,7 +75,7 @@ func (s *MatchService) TransitionToNegotiating(id uuid.UUID) (*model.Match, erro
 }
 
 func (s *MatchService) ListUserMatches(userID uuid.UUID) ([]*model.Match, error) {
-	agents, err := s.agentRepo.ListByUserID(userID)
+	agents, err := s.agentRepo.ListByUserID(userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ type AutoMatchResult struct {
 }
 
 func (s *MatchService) AutoCreateMatches(userID uuid.UUID, jobIDs []uuid.UUID) (*AutoMatchResult, error) {
-	agents, err := s.agentRepo.ListByUserID(userID)
+	agents, err := s.agentRepo.ListByUserID(userID, "")
 	if err != nil {
 		return nil, err
 	}

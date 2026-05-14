@@ -52,7 +52,7 @@ func (s *PrivacyService) DeleteUserAccount(userID uuid.UUID) error {
 	}
 
 	// Get user's agents
-	agents, err := s.agentRepo.ListByUserID(userID)
+	agents, err := s.agentRepo.ListByUserID(userID, "")
 	if err != nil {
 		return fmt.Errorf("failed to get user agents: %w", err)
 	}

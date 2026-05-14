@@ -258,11 +258,6 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	return nil
 }
 
-type AutoResponse struct {
-	Intent  string
-	Payload map[string]interface{}
-}
-
 func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
 	// Determine scenario type from intent
 	scenario := intentToScenario(msg.Intent)

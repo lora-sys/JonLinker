@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"log"
@@ -138,17 +139,18 @@ type WSMessage struct {
 
 func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 	matchID := c.Param("matchId")
-	if matchID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "match_id required"})
-		return
-	}
 
-	// Get userID from query param token (WebSocket can't use headers)
-	tokenStr := c.Query("token")
+	// Get token from Sec-WebSocket-Protocol header (preferred) or query param (fallback)
+	tokenStr := c.GetHeader("Sec-WebSocket-Protocol")
+	if tokenStr == "" {
+		tokenStr = c.Query("token")
+	}
 	if tokenStr == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "token required"})
 		return
 	}
+
+	log.Printf("WebSocket HandleWebSocket: matchId=%q", matchID)
 
 	userID, err := extractUserIDFromToken(tokenStr)
 	if err != nil {
@@ -156,25 +158,51 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Verify user has access to this match
-	match, err := h.matchRepo.GetByID(uuid.MustParse(matchID))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
-		return
+	// Parse Gateway identity query params (WebSocket can't use headers)
+	userIDParam := c.Query("user_id")
+	agentIDParam := c.Query("agent_id")
+	tenantIDParam := c.Query("tenant_id")
+
+	// Set in Gin context for downstream use
+	if userIDParam != "" {
+		c.Set("userID", userIDParam)
+	}
+	if agentIDParam != "" {
+		c.Set("agentID", agentIDParam)
+	}
+	if tenantIDParam != "" {
+		c.Set("tenantID", tenantIDParam)
 	}
 
-	// Verify agent ownership
-	agent, err := h.agentRepo.GetByID(match.SeekerAgentID)
-	if err != nil || agent.UserID != userID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
-		return
+	// If matchId is provided, verify access to this match
+	var agent *model.Agent
+	if matchID != "" && matchID != "ws" {
+		// Verify user has access to this match
+		match, matchErr := h.matchRepo.GetByID(uuid.MustParse(matchID))
+		if matchErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
+			return
+		}
+
+		// Verify agent ownership
+		agent, err = h.agentRepo.GetByID(match.SeekerAgentID)
+		if err != nil || agent.UserID != userID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			return
+		}
 	}
 
-		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
+
+	// Send initial connection success message BEFORE adding to clients map
+	conn.WriteJSON(WSMessage{
+		Type:    "connected",
+		Payload: map[string]interface{}{"match_id": matchID},
+	})
 
 	clientID := userID.String()
 	h.mu.Lock()
@@ -194,12 +222,6 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		conn.Close()
 	}()
 
-	// Send initial connection success message
-	conn.WriteJSON(WSMessage{
-		Type:    "connected",
-		Payload: map[string]interface{}{"match_id": matchID},
-	})
-
 	// Initialize WebSocket frame serializer for Protobuf support
 	wsSerializer := proto.NewWebSocketFrameSerializer()
 	var sequenceNum uint64 = 0
@@ -217,6 +239,36 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 
 		var xmlMsg A2AMessage
 		var processErr error
+
+		// Handle control messages
+		if format == "json" {
+			var msg struct {
+				Type    string `json:"type"`
+				MatchID string `json:"match_id"`
+			}
+			if err := json.Unmarshal(data, &msg); err == nil {
+				if msg.Type == "join_match" && msg.MatchID != "" {
+					// Move client to the specified match room
+					log.Printf("Client %s joining match %s", userID.String(), msg.MatchID)
+					h.mu.Lock()
+					// Remove from old room
+					delete(h.clients[matchID], userID.String())
+					// Add to new room
+					if h.clients[msg.MatchID] == nil {
+						h.clients[msg.MatchID] = make(map[string]*websocket.Conn)
+					}
+					h.clients[msg.MatchID][userID.String()] = conn
+					// Update matchID for this connection
+					matchID = msg.MatchID
+					h.mu.Unlock()
+					conn.WriteJSON(WSMessage{
+						Type:    "joined",
+						Payload: map[string]interface{}{"match_id": matchID},
+					})
+					continue
+				}
+			}
+		}
 
 		if format == "protobuf" && config.IsWebSocketProtobufEnabled() {
 			// Protobuf mode: deserialize WebSocketFrame
@@ -260,15 +312,21 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 			continue
 		}
 
-		// Store message in database
-		message := &model.Message{
-			ID:            uuid.New(),
-			MatchID:       uuid.MustParse(matchID),
-			SenderAgentID: agent.ID,
-			ContentXML:    string(data),
-			IntentType:    xmlMsg.Payload.Intent,
+		// Store message in database only if we have a valid matchID
+		if matchID != "" && matchID != "ws" {
+			var senderAgentID uuid.UUID
+			if agent != nil {
+				senderAgentID = agent.ID
+			}
+			message := &model.Message{
+				ID:            uuid.New(),
+				MatchID:       uuid.MustParse(matchID),
+				SenderAgentID: senderAgentID,
+				ContentXML:    string(data),
+				IntentType:    xmlMsg.Payload.Intent,
+			}
+			h.messageRepo.Create(message)
 		}
-		h.messageRepo.Create(message)
 
 		// Process message and generate response
 		response := h.processMessage(matchID, userID.String(), &xmlMsg)
@@ -451,7 +509,7 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 
 	// Get all agents for this user
-	agents, err := h.agentRepo.ListByUserID(userID)
+	agents, err := h.agentRepo.ListByUserID(userID, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve agents"})
 		return
@@ -518,102 +576,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 }
 
 // SalaryNegotiator handles salary and compensation negotiations
-type SalaryNegotiator struct {
-	minSalary    int
-	maxSalary    int
-	targetSalary int
-	currentOffer int
-}
 
-func NewSalaryNegotiator(min, max, target int) *SalaryNegotiator {
-	return &SalaryNegotiator{
-		minSalary:    min,
-		maxSalary:    max,
-		targetSalary: target,
-		currentOffer: max,
-	}
-}
-
-type NegotiationResult struct {
-	AgreedSalary  int
-	FinalOffer    int
-	CounterOffers int
-	Conceded      bool
-	Reached       bool
-}
-
-// GenerateCounterOffer creates a counter offer based on strategy and negotiation state
-func (n *SalaryNegotiator) GenerateCounterOffer(currentOffer int, rounds int) int {
-	if currentOffer < n.minSalary {
-		return -1 // Walk away
-	}
-
-	gap := n.maxSalary - currentOffer
-	concessionRate := 0.15 + (float64(rounds) * 0.05)
-	if concessionRate > 0.35 {
-		concessionRate = 0.35
-	}
-
-	counterOffer := currentOffer + int(float64(gap)*concessionRate)
-	if counterOffer < n.targetSalary {
-		counterOffer = n.targetSalary
-	}
-
-	return counterOffer
-}
-
-// EvaluateOffer checks if an offer meets minimum requirements
-func (n *SalaryNegotiator) EvaluateOffer(offer int) int {
-	if offer < n.minSalary {
-		return 0 // Reject
-	}
-	if offer >= n.targetSalary {
-		return 2 // Accept
-	}
-	return 1 // Counter
-}
-
-// SimulateNegotiation runs a complete salary negotiation
-func (n *SalaryNegotiator) SimulateNegotiation(initialOffer int) *NegotiationResult {
-	result := &NegotiationResult{
-		FinalOffer: initialOffer,
-	}
-
-	rounds := 0
-	currentOffer := initialOffer
-
-	for rounds < 5 {
-		decision := n.EvaluateOffer(currentOffer)
-		switch decision {
-		case 2: // Accept
-			result.Reached = true
-			result.AgreedSalary = currentOffer
-			return result
-		case 0: // Reject
-			result.Reached = false
-			return result
-		case 1: // Counter
-			rounds++
-			result.CounterOffers++
-			currentOffer = n.GenerateCounterOffer(currentOffer, rounds)
-			if currentOffer < 0 {
-				result.Reached = false
-				return result
-			}
-			result.FinalOffer = currentOffer
-		}
-	}
-
-	// Max rounds reached
-	if currentOffer >= n.minSalary {
-		result.Reached = true
-		result.Conceded = true
-		result.AgreedSalary = currentOffer
-	} else {
-		result.Reached = false
-	}
-	return result
-}
 
 func extractUserIDFromToken(tokenStr string) (uuid.UUID, error) {
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
