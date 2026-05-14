@@ -18,7 +18,7 @@ interface UseWebSocketOptions {
   maxRetries?: number;
 }
 
-const BACKOFF_DELAYS = [5000, 10000, 20000, 60000]; // 5s, 10s, 20s, 60s max
+const BACKOFF_DELAYS = [10000]; // 10s, single retry
 const PING_INTERVAL = 30000; // 30s
 const MAX_PENDING = 100;
 
@@ -28,7 +28,7 @@ export function useWebSocket({
   onMessage,
   onStatusChange,
   autoConnect = true,
-  maxRetries = 5,
+  maxRetries = 2,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryCountRef = useRef(0);

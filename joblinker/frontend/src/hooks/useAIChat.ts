@@ -4,6 +4,7 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useWebSocket } from './useWebSocket';
+import { buildMatchWSUrl, type WSGatewayParams } from '@/lib/websocket';
 import { loadThread, saveThread } from '@/lib/ai/thread-storage';
 import type { ChatMessage } from '@/types/ai';
 
@@ -170,10 +171,17 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
 }
 
 function buildWSUrl(matchId: string): string {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  const url = new URL(apiBase);
-  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${url.host}/api/messages/${matchId}/ws`;
+  const token = getAuthToken();
+  const gatewayParams: WSGatewayParams = { tenantId: 'default' };
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('joblinker-auth') : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const userId = parsed.state?.user?.id || parsed.userId;
+      if (userId) gatewayParams.userId = userId;
+    }
+  } catch {}
+  return buildMatchWSUrl(matchId, token, gatewayParams);
 }
 
 function getAuthToken(): string {
