@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { Send, Square, RotateCcw } from 'lucide-react';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MessageList } from './MessageList';
+import type { MessageStatus } from '@/types/ai';
 
 interface ChatWindowProps {
   matchId: string;
@@ -33,12 +34,13 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
       role: m.role as 'user' | 'assistant' | 'system',
       content: text,
       createdAt: new Date(),
-      status: 'done' as const,
+      status: 'done' as MessageStatus,
     };
   });
 
-  const isStreaming = status === 'streaming';
+  const isStreaming = status === 'streaming' || status === 'submitted';
   const isDisabled = isStreaming;
+  const mappedStatus: MessageStatus = isStreaming ? 'streaming' : 'done';
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -93,7 +95,7 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
       {/* Messages */}
       <MessageList
         messages={messages}
-        status={status}
+        status={mappedStatus}
         isLoading={messages.length === 0 && isStreaming}
         onLoadMore={() => reload()}
         hasMore={false}

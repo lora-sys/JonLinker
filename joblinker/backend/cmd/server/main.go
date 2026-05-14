@@ -224,6 +224,7 @@ func main() {
 		api.GET("/messages", messageHandler.GetMessages)
 		api.GET("/messages/:matchId", messageHandler.GetMessages)
 		api.POST("/messages/:matchId", messageHandler.SendMessage)
+		api.GET("/conversation/:matchId", messageHandler.GetConversation)
 
 		api.GET("/interviews", interviewHandler.List)
 		api.POST("/interviews", interviewHandler.Create)

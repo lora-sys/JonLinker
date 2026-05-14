@@ -2,24 +2,14 @@
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport } from 'ai';
 import { useWebSocket } from './useWebSocket';
 import { buildMatchWSUrl, type WSGatewayParams } from '@/lib/websocket';
-import { loadThread, saveThread } from '@/lib/ai/thread-storage';
+import { apiClient } from '@/lib/api_client';
 import type { ChatMessage } from '@/types/ai';
 
 interface UseAIChatOptions {
   matchId: string;
   enabled?: boolean;
-}
-
-interface WSEvent {
-  type: string;
-  data?: Record<string, unknown>;
-  content?: string;
-  sender_id?: string;
-  message_id?: string;
-  created_at?: string;
 }
 
 interface StoredMessage {
@@ -33,173 +23,122 @@ interface StoredMessage {
 export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
-  const [initialMessagesLoaded, setInitialMessagesLoaded] = useState(false);
-  const wsRef = useRef<ReturnType<typeof useWebSocket> | null>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const loadedIdsRef = useRef<Set<string>>(new Set());
 
+  // useChat as UI container only — no HTTP requests
   const {
     messages: aiMessages,
     status: aiStatus,
     stop,
-    regenerate,
     setMessages,
-    sendMessage,
     error: aiError,
-  } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-      body: { matchId },
-    }),
-  });
+  } = useChat();
 
   const isLoading = aiStatus === 'streaming' || aiStatus === 'submitted';
 
-  // Poll REST API for message history (fallback when WebSocket fails)
-  const loadMessagesFromREST = useCallback(async () => {
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('joblinker-auth') : null;
-      let token = '';
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          token = parsed.state?.token || parsed.token || '';
-        } catch {
-          token = raw;
-        }
-      }
+  // Load initial messages + poll every 3s
+  useEffect(() => {
+    let active = true;
+    const poll = async () => {
+      try {
+        const data = await apiClient.get<StoredMessage[]>(`/api/conversation/${matchId}`);
+        if (!active || !Array.isArray(data)) return;
 
-      const res = await fetch(`/api/messages/${matchId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const storedMessages: StoredMessage[] = await res.json();
-        if (storedMessages.length > 0 && !initialMessagesLoaded) {
-          const loadedMsgs = storedMessages.map(msg => {
-            const content = parseXmlContent(msg.content_xml);
-            const role = msg.sender_agent_id === 'system' ? 'system' : 'assistant';
+        const newMsgs = data
+          .filter(m => !loadedIdsRef.current.has(m.id))
+          .map(m => {
+            loadedIdsRef.current.add(m.id);
+            const content = parseXmlContent(m.content_xml);
+            const role = m.sender_agent_id === 'system' ? 'system' as const : 'assistant' as const;
             return {
-              id: msg.id,
-              role: role as 'user' | 'assistant' | 'system',
+              id: m.id,
+              role,
               parts: [{ type: 'text' as const, text: content }],
             };
           });
-          setMessages(loadedMsgs);
-          setInitialMessagesLoaded(true);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load messages from REST:', err);
-    }
-  }, [matchId, initialMessagesLoaded, setMessages]);
 
-  // Load cached thread
-  useEffect(() => {
-    const cached = loadThread(matchId);
-    if (cached && cached.messages.length > 0) {
-      setMessages(cached.messages.map(m => ({
-        id: m.id,
-        role: m.role as 'user' | 'assistant' | 'system',
-        parts: [{ type: 'text' as const, text: m.content }],
-      })));
-      setInitialMessagesLoaded(true);
-    }
+        if (newMsgs.length > 0) {
+          setMessages(prev => [...prev, ...newMsgs]);
+        }
+      } catch {
+        // silent — poll will retry
+      }
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { active = false; clearInterval(id); };
   }, [matchId, setMessages]);
 
-  // Initial REST load and periodic polling as fallback
-  useEffect(() => {
-    loadMessagesFromREST();
-    // Poll every 5 seconds as fallback
-    pollIntervalRef.current = setInterval(loadMessagesFromREST, 5000);
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
-  }, [loadMessagesFromREST]);
-
-  const ws = useWebSocket({
-    url: enabled ? buildWSUrl(matchId) : '',
-    token: getAuthToken(),
+  // WebSocket for FSM state changes only (optional)
+  const { status: wsStatus } = useWebSocket({
+    url: enabled ? buildMatchWSUrl(matchId, getToken(), { tenantId: 'default' }) : '',
+    token: getToken(),
     autoConnect: enabled,
-    onMessage: useCallback((event: WSEvent) => {
-      switch (event.type) {
-        case 'message':
-        case 'ai_response_sent':
-          if (event.content && event.sender_id !== 'user') {
-            sendMessage({
-              role: 'assistant',
-              parts: [{ type: 'text' as const, text: parseXmlContent(event.content) }],
-            });
-          }
-          break;
-        case 'connected':
-          setIsConnected(true);
-          break;
-      }
-    }, [sendMessage]),
+    maxRetries: 2,
+    onMessage: useCallback(() => {
+      // FSM state notifications handled elsewhere
+    }, []),
   });
 
   useEffect(() => {
-    wsRef.current = ws;
-    setIsConnected(ws.status === 'Connected');
-  }, [ws.status]);
+    setIsConnected(wsStatus === 'Connected');
+  }, [wsStatus]);
 
-  const handleSubmit = useCallback((e?: React.FormEvent) => {
+  // Submit: direct REST POST through Gateway, useChat.sendMessage NOT called
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
-    sendMessage({ role: 'user', parts: [{ type: 'text' as const, text: input.trim() }] });
-    setInput('');
-  }, [input, isLoading, sendMessage]);
+    const text = input.trim();
+    if (!text || isLoading) return;
 
-  const status = isLoading ? 'streaming' as const : 'done' as const;
+    // Add user message to UI immediately
+    const tempId = crypto.randomUUID();
+    setMessages(prev => [...prev, {
+      id: tempId,
+      role: 'user',
+      parts: [{ type: 'text' as const, text }],
+    }]);
+    setInput('');
+
+    // Build agent XML and POST through Gateway
+    const xml = `<message><payload><intent>INQUIRY</intent><parameters>{"message":"${text.replace(/"/g, '\\"')}"}</parameters></payload></message>`;
+    try {
+      await apiClient.post(`/api/conversation/${matchId}`, {
+        content_xml: xml,
+        intent_type: 'INQUIRY',
+      });
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    }
+  }, [input, isLoading, matchId, setMessages]);
 
   return {
     messages: aiMessages,
     input,
     setInput,
-    status,
+    status: aiStatus,
     isConnected,
-    wsStatus: ws.status,
+    wsStatus,
     error: aiError?.message || null,
-    append: (msg: { role: 'user' | 'assistant' | 'system'; content: string }) => {
-      sendMessage({
-        role: msg.role,
-        parts: [{ type: 'text' as const, text: msg.content }],
-      });
-    },
     handleSubmit,
     stop,
-    reload: () => regenerate(),
+    reload: () => { loadedIdsRef.current.clear(); },
   };
 }
 
-function buildWSUrl(matchId: string): string {
-  const token = getAuthToken();
-  const gatewayParams: WSGatewayParams = { tenantId: 'default' };
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('joblinker-auth') : null;
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const userId = parsed.state?.user?.id || parsed.userId;
-      if (userId) gatewayParams.userId = userId;
-    }
-  } catch {}
-  return buildMatchWSUrl(matchId, token, gatewayParams);
-}
-
-function getAuthToken(): string {
+function getToken(): string {
   if (typeof window === 'undefined') return '';
-  const raw = localStorage.getItem('joblinker-auth');
-  if (!raw) return '';
   try {
+    const raw = localStorage.getItem('joblinker-auth');
+    if (!raw) return '';
     const parsed = JSON.parse(raw);
     return parsed.state?.token || parsed.token || '';
-  } catch {
-    return raw;
-  }
+  } catch { return ''; }
 }
 
 function parseXmlContent(contentXml: string): string {
   try {
     if (contentXml.includes('<message>')) {
+      // <parameters>{"message":"Hello"}</parameters> (AI-generated)
       const paramsMatch = contentXml.match(/<parameters>([^<]+)<\/parameters>/);
       if (paramsMatch?.[1]) {
         try {
@@ -212,6 +151,11 @@ function parseXmlContent(contentXml: string): string {
         } catch {
           return paramsMatch[1];
         }
+      }
+      // <content><text>Hello</text></content> (seed data format)
+      const textMatch = contentXml.match(/<text>([^<]*)<\/text>/);
+      if (textMatch?.[1]) {
+        return textMatch[1];
       }
       const intentMatch = contentXml.match(/intent="([^"]+)"/);
       const intentTagMatch = contentXml.match(/<intent>([^<]+)<\/intent>/);

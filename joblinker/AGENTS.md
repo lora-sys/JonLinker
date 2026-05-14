@@ -2,12 +2,13 @@
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
 
-specs/024-compile-fix-e2e/plan.md
+specs/025-agent-chat-arch/plan.md
 
-Current feature scope: TypeScript Compile Fixes & Playwright CLI E2E Coverage.
-Phase 1: Fix all compile errors (api_client.ts, MatchStatus, useChat types)
-Phase 2: Playwright CLI pure-browser E2E tests T01-T16
-All tests use playwright-cli commands only — no curl, python, or bash scripts
+Current feature scope: Agent Chat Architecture — Backend Single Source of Truth.
+Phase 1: Rewrite useAIChat — REST poll + submit, useChat as UI only
+Phase 2: Delete /api/chat/route.ts (frontend AI bypass)
+Phase 3: Register GetConversation backend route
+Phase 4: Playwright CLI E2E full flow testing
 
 ## Key Design Decisions
 
