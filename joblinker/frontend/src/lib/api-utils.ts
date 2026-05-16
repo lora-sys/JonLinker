@@ -1,25 +1,26 @@
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') {
-    return null;
+    return null
   }
   try {
-    const stored = localStorage.getItem('joblinker-auth');
+    const stored = localStorage.getItem('joblinker-auth')
     if (stored) {
-      const parsed = JSON.parse(stored);
+      const parsed = JSON.parse(stored)
       // Zustand persist wraps state in 'state' key
-      const token = parsed.state?.token || parsed.token;
-      return token || null;
+      const token = parsed.state?.token || parsed.token
+      return token || null
     }
-  } catch {
+  }
+  catch {
     // ignore
   }
-  return null;
+  return null
 }
 
 export function getAuthHeader(): Record<string, string> {
-  const token = getAuthToken();
+  const token = getAuthToken()
   if (token) {
-    return { 'Authorization': `Bearer ${token}` };
+    return { Authorization: `Bearer ${token}` }
   }
-  return {};
+  return {}
 }

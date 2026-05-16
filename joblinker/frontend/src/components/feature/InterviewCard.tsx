@@ -1,10 +1,11 @@
-import type { Interview } from '@/types';
-import { Video, Phone, Building2, Calendar, Clock, ExternalLink } from 'lucide-react';
+import { Building2, Calendar, Clock, ExternalLink, Phone, Video } from 'lucide-react'
+
+import type { Interview } from '@/types'
 
 interface InterviewCardProps {
-  interview: Interview;
-  onConfirm?: () => void;
-  onCancel?: () => void;
+  interview: Interview
+  onConfirm?: () => void
+  onCancel?: () => void
 }
 
 export function InterviewCard({ interview, onConfirm, onCancel }: InterviewCardProps) {
@@ -14,42 +15,44 @@ export function InterviewCard({ interview, onConfirm, onCancel }: InterviewCardP
         month: 'long',
         day: 'numeric',
         year: 'numeric',
-      });
-    } catch {
-      return dateStr;
+      })
     }
-  };
+    catch {
+      return dateStr
+    }
+  }
 
   const formatTime = (dateStr: string) => {
     try {
       return new Date(dateStr).toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-      });
-    } catch {
-      return '';
+      })
     }
-  };
+    catch {
+      return ''
+    }
+  }
 
   const typeIcons: Record<string, React.ReactNode> = {
     video: <Video className="w-4 h-4" />,
     phone: <Phone className="w-4 h-4" />,
     onsite: <Building2 className="w-4 h-4" />,
-  };
+  }
 
   const statusColors: Record<string, string> = {
     scheduled: 'bg-blue-100 text-blue-700 border-blue-200',
     confirmed: 'bg-green-100 text-green-700 border-green-200',
     completed: 'bg-slate-100 text-slate-600 border-slate-200',
     cancelled: 'bg-red-100 text-red-700 border-red-200',
-  };
+  }
 
   const statusLabels: Record<string, string> = {
     scheduled: 'Scheduled',
     confirmed: 'Confirmed',
     completed: 'Completed',
     cancelled: 'Cancelled',
-  };
+  }
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -78,19 +81,21 @@ export function InterviewCard({ interview, onConfirm, onCancel }: InterviewCardP
 
           {interview.location && (
             <div className="mt-3">
-              {interview.format === 'video' ? (
-                <a
-                  href={interview.location}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Join Meeting
-                </a>
-              ) : (
-                <p className="text-sm text-slate-500">{interview.location}</p>
-              )}
+              {interview.format === 'video'
+                ? (
+                    <a
+                      href={interview.location}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Join Meeting
+                    </a>
+                  )
+                : (
+                    <p className="text-sm text-slate-500">{interview.location}</p>
+                  )}
             </div>
           )}
         </div>
@@ -117,7 +122,7 @@ export function InterviewCard({ interview, onConfirm, onCancel }: InterviewCardP
         </div>
       )}
     </div>
-  );
+  )
 }
 
-export default InterviewCard;
+export default InterviewCard

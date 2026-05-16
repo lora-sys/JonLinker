@@ -1,7 +1,7 @@
-'use client';
+'use client'
 
-import React, { useEffect, useState } from 'react';
-import Image from 'next/image';
+import Image from 'next/image'
+import React, { useEffect, useState } from 'react'
 
 function AnimatedLogo() {
   return (
@@ -30,7 +30,7 @@ function AnimatedLogo() {
         </defs>
       </svg>
     </div>
-  );
+  )
 }
 
 function SkeletonCard() {
@@ -49,33 +49,33 @@ function SkeletonCard() {
         <div className="h-6 w-20 rounded-full bg-slate-200/40 animate-pulse" />
       </div>
     </div>
-  );
+  )
 }
 
 function FloatingOrb({ className = '' }: { className?: string }) {
-  return <div className={`absolute rounded-full bg-gradient-to-br from-blue-400/20 to-sky-300/10 blur-2xl ${className}`} />;
+  return <div className={`absolute rounded-full bg-gradient-to-br from-blue-400/20 to-sky-300/10 blur-2xl ${className}`} />
 }
 
 export default function LoadingPage() {
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState(0);
+  const [progress, setProgress] = useState(0)
+  const [phase, setPhase] = useState(0)
 
   useEffect(() => {
     const progressInterval = setInterval(() => {
-      setProgress((p) => (p >= 100 ? 0 : p + Math.random() * 20 + 10));
-    }, 400);
+      setProgress(p => (p >= 100 ? 0 : p + Math.random() * 20 + 10))
+    }, 400)
 
     const phaseInterval = setInterval(() => {
-      setPhase((p) => (p + 1) % 3);
-    }, 1200);
+      setPhase(p => (p + 1) % 3)
+    }, 1200)
 
     return () => {
-      clearInterval(progressInterval);
-      clearInterval(phaseInterval);
-    };
-  }, []);
+      clearInterval(progressInterval)
+      clearInterval(phaseInterval)
+    }
+  }, [])
 
-  const phases = ['Connecting', 'Loading', 'Ready'];
+  const phases = ['Connecting', 'Loading', 'Ready']
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/40 to-white flex flex-col items-center justify-center relative overflow-hidden">
@@ -112,7 +112,10 @@ export default function LoadingPage() {
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${progress < 100 ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`} />
               {phases[phase % 3]}
             </span>
-            <span>{Math.round(Math.min(progress, 100))}%</span>
+            <span>
+              {Math.round(Math.min(progress, 100))}
+              %
+            </span>
           </div>
         </div>
 
@@ -143,5 +146,5 @@ export default function LoadingPage() {
       </div>
 
     </div>
-  );
+  )
 }

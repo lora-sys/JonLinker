@@ -8,21 +8,22 @@ export const AI_CONFIG = {
   },
   maxTokens: 4096,
   temperature: 0.7,
-} as const;
+} as const
 
 export function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('joblinker-auth');
+  const token = localStorage.getItem('joblinker-auth')
   const authToken = token
     ? (() => {
         try {
-          const parsed = JSON.parse(token);
-          return parsed.state?.token || parsed.token;
-        } catch {
-          return token;
+          const parsed = JSON.parse(token)
+          return parsed.state?.token || parsed.token
+        }
+        catch {
+          return token
         }
       })()
-    : '';
+    : ''
   return {
     Authorization: `Bearer ${authToken}`,
-  };
+  }
 }

@@ -1,12 +1,13 @@
-'use client';
+'use client'
 
-import { Card } from '@/components/ui/Card';
-import type { Offer as DomainOffer } from '@/types';
+import type { Offer as DomainOffer } from '@/types'
 
-type OfferCardProps = {
-  offer: DomainOffer;
-  onRespond?: (id: string, response: 'accept' | 'decline' | 'negotiate') => void;
-};
+import { Card } from '@/components/ui/Card'
+
+interface OfferCardProps {
+  offer: DomainOffer
+  onRespond?: (id: string, response: 'accept' | 'decline' | 'negotiate') => void
+}
 
 export function OfferCard({ offer, onRespond }: OfferCardProps) {
   const formatCurrency = (amount: number, currency = 'USD') => {
@@ -14,8 +15,8 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
       style: 'currency',
       currency,
       maximumFractionDigits: 0,
-    }).format(amount);
-  };
+    }).format(amount)
+  }
 
   const formatDate = (dateStr: string) => {
     try {
@@ -23,11 +24,12 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      });
-    } catch {
-      return dateStr;
+      })
     }
-  };
+    catch {
+      return dateStr
+    }
+  }
 
   const statusColors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
@@ -35,9 +37,9 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
     declined: 'bg-red-100 text-red-800',
     negotiating: 'bg-blue-100 text-blue-800',
     withdrawn: 'bg-gray-100 text-gray-800',
-  };
+  }
 
-  const comp = offer.compensation;
+  const comp = offer.compensation
 
   return (
     <Card variant="outlined" padding="lg" className="hover:shadow-md transition-shadow">
@@ -47,7 +49,9 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
             {offer.match?.job?.structured?.title || 'Offer'}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Received {formatDate(offer.created_at)}
+            Received
+            {' '}
+            {formatDate(offer.created_at)}
           </p>
         </div>
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[offer.status] || 'bg-gray-100 text-gray-800'}`}>
@@ -74,9 +78,15 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
 
         {comp.equity && comp.equity.shares > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-gray-100">
-            <span className="text-sm text-gray-600">Equity ({comp.equity.vesting_period})</span>
+            <span className="text-sm text-gray-600">
+              Equity (
+              {comp.equity.vesting_period}
+              )
+            </span>
             <span className="font-semibold text-gray-900">
-              {comp.equity.shares.toLocaleString()} shares
+              {comp.equity.shares.toLocaleString()}
+              {' '}
+              shares
             </span>
           </div>
         )}
@@ -84,7 +94,9 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
 
       <div className="mb-4">
         <p className="text-sm text-gray-600">
-          <span className="font-medium">Start Date:</span> {formatDate(offer.start_date)}
+          <span className="font-medium">Start Date:</span>
+          {' '}
+          {formatDate(offer.start_date)}
         </p>
       </div>
 
@@ -124,5 +136,5 @@ export function OfferCard({ offer, onRespond }: OfferCardProps) {
         </div>
       )}
     </Card>
-  );
+  )
 }

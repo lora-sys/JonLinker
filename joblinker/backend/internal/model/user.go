@@ -59,7 +59,7 @@ type Agent struct {
 	Type      AgentType    `json:"type" gorm:"type:varchar(20);not null"`
 	Status    AgentStatus  `json:"status" gorm:"type:varchar(20);not null;index"`
 	FSMState  AgentFSMState `json:"fsm_state" gorm:"type:varchar(20);not null;default:'idle'"`
-	ConfigJSON string       `json:"config" gorm:"type:jsonb"`
+	ConfigJSON json.RawMessage `json:"config" gorm:"type:jsonb"`
 	CreatedAt time.Time    `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt time.Time    `json:"updated_at" gorm:"autoUpdateTime"`
 	User      *User        `json:"user,omitempty" gorm:"foreignKey:UserID"`
@@ -67,11 +67,11 @@ type Agent struct {
 
 // ToolConfigJSON returns the tools configuration from ConfigJSON
 func (a *Agent) ToolConfigJSON() (map[string]interface{}, error) {
-	if a.ConfigJSON == "" || a.ConfigJSON == "null" {
+	if len(a.ConfigJSON) == 0 || string(a.ConfigJSON) == "null" {
 		return nil, nil
 	}
 	var cfg map[string]interface{}
-	if err := json.Unmarshal([]byte(a.ConfigJSON), &cfg); err != nil {
+	if err := json.Unmarshal(a.ConfigJSON, &cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -145,7 +145,7 @@ type Job struct {
 	ID           uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	AgentID      uuid.UUID `json:"agent_id" gorm:"type:uuid;not null;index"`
 	TenantID     uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	StructuredJSON string  `json:"structured" gorm:"type:jsonb;not null"`
+	StructuredJSON json.RawMessage `json:"structured" gorm:"type:jsonb;not null"`
 	VectorID     string    `json:"vector_id" gorm:"size:255"`
 	Status       JobStatus `json:"status" gorm:"type:varchar(20);not null;index"`
 	CreatedAt    time.Time `json:"created_at" gorm:"autoCreateTime"`
@@ -157,7 +157,7 @@ type Resume struct {
 	ID             uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	AgentID        uuid.UUID `json:"agent_id" gorm:"type:uuid;uniqueIndex;not null"`
 	TenantID       uuid.UUID `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	StructuredJSON string    `json:"structured" gorm:"type:jsonb;not null"`
+	StructuredJSON json.RawMessage `json:"structured" gorm:"type:jsonb;not null"`
 	VectorID       string    `json:"vector_id" gorm:"size:255"`
 	CreatedAt      time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt      time.Time `json:"updated_at" gorm:"autoUpdateTime"`
@@ -179,16 +179,18 @@ const (
 )
 
 type Match struct {
-	ID            uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	SeekerAgentID uuid.UUID   `json:"seeker_agent_id" gorm:"type:uuid;not null;index"`
-	JobID         uuid.UUID   `json:"job_id" gorm:"type:uuid;not null;index"`
-	TenantID      uuid.UUID   `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	Score         float64     `json:"score" gorm:"type:decimal(5,4);not null"`
-	Status        MatchStatus `json:"status" gorm:"type:varchar(30);not null;index;default:'pending'"`
-	CreatedAt     time.Time   `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt     time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
-	SeekerAgent   *Agent      `json:"seeker_agent,omitempty" gorm:"foreignKey:SeekerAgentID"`
-	Job           *Job        `json:"job,omitempty" gorm:"foreignKey:JobID"`
+	ID              uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	SeekerAgentID   uuid.UUID   `json:"seeker_agent_id" gorm:"type:uuid;not null;index"`
+	RecruiterAgentID *uuid.UUID `json:"recruiter_agent_id,omitempty" gorm:"type:uuid;index"`
+	JobID           uuid.UUID   `json:"job_id" gorm:"type:uuid;not null;index"`
+	TenantID        uuid.UUID   `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	Score           float64     `json:"score" gorm:"type:decimal(5,4);not null"`
+	Status          MatchStatus `json:"status" gorm:"type:varchar(30);not null;index;default:'pending'"`
+	CreatedAt       time.Time   `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt       time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
+	SeekerAgent     *Agent      `json:"seeker_agent,omitempty" gorm:"foreignKey:SeekerAgentID"`
+	RecruiterAgent  *Agent      `json:"recruiter_agent,omitempty" gorm:"foreignKey:RecruiterAgentID"`
+	Job             *Job        `json:"job,omitempty" gorm:"foreignKey:JobID"`
 }
 
 type Message struct {
@@ -228,7 +230,7 @@ type Interview struct {
 	Format       InterviewFormat  `json:"format" gorm:"type:varchar(20);not null"`
 	Location     string           `json:"location" gorm:"size:500"`
 	Status       InterviewStatus `json:"status" gorm:"type:varchar(20);not null"`
-	Feedback     string           `json:"feedback" gorm:"type:jsonb;default:null"`
+	Feedback     json.RawMessage  `json:"feedback" gorm:"type:jsonb;default:null"`
 	ReminderSent bool             `json:"reminder_sent" gorm:"default:false"`
 	CreatedAt    time.Time        `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt    time.Time        `json:"updated_at" gorm:"autoUpdateTime"`
@@ -246,16 +248,17 @@ const (
 )
 
 type Offer struct {
-	ID               uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	MatchID          uuid.UUID   `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
-	TenantID         uuid.UUID   `json:"tenant_id" gorm:"type:uuid;not null;index"`
-	CompensationJSON string      `json:"compensation" gorm:"type:jsonb;not null"`
-	StartDate        time.Time   `json:"start_date" gorm:"type:date;not null"`
-	Status           OfferStatus `json:"status" gorm:"type:varchar(20);not null"`
-	RespondedAt      *time.Time  `json:"responded_at"`
-	CreatedAt        time.Time   `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt        time.Time   `json:"updated_at" gorm:"autoUpdateTime"`
-	Match            *Match      `json:"match,omitempty" gorm:"foreignKey:MatchID"`
+	ID               uuid.UUID       `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	MatchID          uuid.UUID       `json:"match_id" gorm:"type:uuid;uniqueIndex;not null"`
+	TenantID         uuid.UUID       `json:"tenant_id" gorm:"type:uuid;not null;index"`
+	CompensationJSON json.RawMessage `json:"compensation" gorm:"type:jsonb;not null"`
+	StartDate        time.Time       `json:"start_date" gorm:"type:date;not null"`
+	Status           OfferStatus     `json:"status" gorm:"type:varchar(20);not null"`
+	ExpiresAt        *time.Time      `json:"expires_at,omitempty"`
+	RespondedAt      *time.Time      `json:"responded_at"`
+	CreatedAt        time.Time       `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt        time.Time       `json:"updated_at" gorm:"autoUpdateTime"`
+	Match            *Match          `json:"match,omitempty" gorm:"foreignKey:MatchID"`
 }
 
 type SecurityEvent struct {

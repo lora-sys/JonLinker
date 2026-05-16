@@ -1,16 +1,18 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { ArrowLeft, Wifi, WifiOff, Loader } from 'lucide-react';
-import type { FSMStage } from './FlowPanel';
-import type { WSConnectionStatus } from '@/hooks/useWebSocket';
+import { ArrowLeft, Loader, Wifi, WifiOff } from 'lucide-react'
+import Link from 'next/link'
+
+import type { WSConnectionStatus } from '@/hooks/useWebSocket'
+
+import type { FSMStage } from './FlowPanel'
 
 interface ConversationHeaderProps {
-  matchId: string;
-  recruiterName?: string;
-  seekerName?: string;
-  fsmStage?: FSMStage;
-  wsStatus?: WSConnectionStatus;
+  matchId: string
+  recruiterName?: string
+  seekerName?: string
+  fsmStage?: FSMStage
+  wsStatus?: WSConnectionStatus
 }
 
 const stageColors: Record<string, string> = {
@@ -20,10 +22,9 @@ const stageColors: Record<string, string> = {
   INTERVIEWING: 'bg-purple-100 text-purple-700',
   OFFER: 'bg-green-100 text-green-700',
   COMPLETED: 'bg-gray-100 text-gray-700',
-};
+}
 
 export function ConversationHeader({
-  matchId,
   recruiterName = 'Recruiter Agent',
   seekerName = 'Seeker Agent',
   fsmStage = 'INTRODUCTION',
@@ -49,29 +50,39 @@ export function ConversationHeader({
       {/* FSM Badge */}
       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
         stageColors[fsmStage] || 'bg-gray-100 text-gray-700'
-      }`}>
+      }`}
+      >
         {fsmStage.replace(/_/g, ' ')}
       </span>
 
       {/* WS Status */}
       <div className="flex items-center gap-1.5">
-        {wsStatus === 'Connected' ? (
-          <Wifi className="w-4 h-4 text-green-500" />
-        ) : wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? (
-          <Loader className="w-4 h-4 text-amber-500 animate-spin" />
-        ) : (
-          <WifiOff className="w-4 h-4 text-gray-400" />
-        )}
+        {wsStatus === 'Connected'
+          ? (
+              <Wifi className="w-4 h-4 text-green-500" />
+            )
+          : wsStatus === 'Reconnecting' || wsStatus === 'Connecting'
+            ? (
+                <Loader className="w-4 h-4 text-amber-500 animate-spin" />
+              )
+            : (
+                <WifiOff className="w-4 h-4 text-gray-400" />
+              )}
         <span className={`text-xs ${
-          wsStatus === 'Connected' ? 'text-green-600' :
-          wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? 'text-amber-600' :
-          'text-gray-400'
-        }`}>
-          {wsStatus === 'Connected' ? 'Live' :
-           wsStatus === 'Reconnecting' || wsStatus === 'Connecting' ? 'Reconnecting' :
-           'Offline'}
+          wsStatus === 'Connected'
+            ? 'text-green-600'
+            : wsStatus === 'Reconnecting' || wsStatus === 'Connecting'
+              ? 'text-amber-600'
+              : 'text-gray-400'
+        }`}
+        >
+          {wsStatus === 'Connected'
+            ? 'Live'
+            : wsStatus === 'Reconnecting' || wsStatus === 'Connecting'
+              ? 'Reconnecting'
+              : 'Offline'}
         </span>
       </div>
     </header>
-  );
+  )
 }

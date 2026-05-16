@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 
 interface NegotiateSliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
-  min?: number;
-  max?: number;
-  step?: number;
-  value?: number;
-  onChange?: (value: number) => void;
-  showValue?: boolean;
-  formatValue?: (value: number) => string;
+  min?: number
+  max?: number
+  step?: number
+  value?: number
+  onChange?: (value: number) => void
+  showValue?: boolean
+  formatValue?: (value: number) => string
 }
 
 export default function NegotiateSlider({
@@ -19,20 +19,20 @@ export default function NegotiateSlider({
   value: controlledValue,
   onChange,
   showValue = true,
-  formatValue = (v) => `$${v.toLocaleString()}`,
+  formatValue = v => `$${v.toLocaleString()}`,
   className = '',
   ...props
 }: NegotiateSliderProps) {
-  const [internalValue, setInternalValue] = useState((min + max) / 2);
-  const value = controlledValue !== undefined ? controlledValue : internalValue;
+  const [internalValue, setInternalValue] = useState((min + max) / 2)
+  const value = controlledValue !== undefined ? controlledValue : internalValue
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = Number(e.target.value);
-    setInternalValue(newValue);
-    onChange?.(newValue);
-  };
+    const newValue = Number(e.target.value)
+    setInternalValue(newValue)
+    onChange?.(newValue)
+  }
 
-  const percentage = ((value - min) / (max - min)) * 100;
+  const percentage = ((value - min) / (max - min)) * 100
 
   return (
     <div className={`space-y-2 ${className}`}>
@@ -63,5 +63,5 @@ export default function NegotiateSlider({
         <span>{formatValue(max)}</span>
       </div>
     </div>
-  );
+  )
 }

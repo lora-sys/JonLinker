@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
@@ -33,7 +34,7 @@ func NewOfferService(
 func (s *OfferService) GenerateOffer(matchID uuid.UUID, compensationJSON string, startDate string) (*model.Offer, error) {
 	offer := &model.Offer{
 		MatchID:           matchID,
-		CompensationJSON: compensationJSON,
+		CompensationJSON: json.RawMessage(compensationJSON),
 		StartDate:        parseDate(startDate),
 		Status:           model.OfferStatusPending,
 	}

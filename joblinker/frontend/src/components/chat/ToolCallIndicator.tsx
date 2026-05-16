@@ -1,25 +1,26 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
-import type { ToolCall } from '@/types/ai';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+
+import type { ToolCall } from '@/types/ai'
 
 interface ToolCallIndicatorProps {
-  tool: ToolCall;
+  tool: ToolCall
 }
 
 export function ToolCallIndicator({ tool }: ToolCallIndicatorProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false)
 
   const statusConfig = {
     pending: { icon: Loader2, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200', spin: true },
     in_progress: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', spin: true },
     done: { icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', spin: false },
     error: { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', spin: false },
-  };
+  }
 
-  const config = statusConfig[tool.status];
-  const Icon = config.icon;
+  const config = statusConfig[tool.status]
+  const Icon = config.icon
 
   const toolNameLabels: Record<string, string> = {
     job_query: 'Searching for jobs',
@@ -27,9 +28,9 @@ export function ToolCallIndicator({ tool }: ToolCallIndicatorProps) {
     interview_schedule: 'Scheduling interview',
     candidate_search: 'Searching candidates',
     salary_analysis: 'Analyzing salary',
-  };
+  }
 
-  const label = toolNameLabels[tool.toolName] || `Calling tool: ${tool.toolName}`;
+  const label = toolNameLabels[tool.toolName] || `Calling tool: ${tool.toolName}`
 
   return (
     <div className={`rounded-lg border ${config.border} ${config.bg} overflow-hidden`}>
@@ -47,11 +48,13 @@ export function ToolCallIndicator({ tool }: ToolCallIndicatorProps) {
             <div className="h-full bg-blue-500 animate-pulse origin-left" style={{ width: '60%' }} />
           </div>
         )}
-        {expanded ? (
-          <ChevronUp className="w-4 h-4 text-gray-400" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400" />
-        )}
+        {expanded
+          ? (
+              <ChevronUp className="w-4 h-4 text-gray-400" />
+            )
+          : (
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            )}
       </button>
 
       {expanded && (
@@ -81,5 +84,5 @@ export function ToolCallIndicator({ tool }: ToolCallIndicatorProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -16,6 +16,7 @@ import (
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/internal/service"
 	"joblinker/pkg/proto"
 	"joblinker/pkg/rabbitmq"
 
@@ -49,18 +50,70 @@ type MessageHandler struct {
 	matchRepo   *repository.MatchRepository
 	agentRepo   *repository.AgentRepository
 	rmq         *rabbitmq.RabbitMQ
+	mqSvc       *service.MessageQueueService
 	clients     map[string]map[string]*websocket.Conn // matchID -> clientID -> conn
 	mu          sync.RWMutex
 }
 
-func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, rmq *rabbitmq.RabbitMQ) *MessageHandler {
+func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, rmq *rabbitmq.RabbitMQ, mqSvc *service.MessageQueueService) *MessageHandler {
 	return &MessageHandler{
 		messageRepo: messageRepo,
 		matchRepo:   matchRepo,
 		agentRepo:   agentRepo,
 		rmq:         rmq,
+		mqSvc:       mqSvc,
 		clients:     make(map[string]map[string]*websocket.Conn),
 	}
+}
+
+// BroadcastAgentResponse sends a payload to all WebSocket clients in a match room
+func (h *MessageHandler) BroadcastAgentResponse(matchID string, eventType string, payload interface{}) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	conns, ok := h.clients[matchID]
+	if !ok {
+		return
+	}
+
+	msg := WSMessage{
+		Type:    eventType,
+		Payload: payload,
+	}
+	for _, conn := range conns {
+		conn.WriteJSON(msg)
+	}
+}
+
+// HandleHumanConfirm is the REST endpoint for human confirmation
+func (h *MessageHandler) HandleHumanConfirm(c *gin.Context) {
+	matchID := c.Param("id")
+	if h.mqSvc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "message queue service not available"})
+		return
+	}
+
+	var req struct {
+		Approved bool   `json:"approved"`
+		Feedback string `json:"feedback,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	mid, err := uuid.Parse(matchID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match id"})
+		return
+	}
+
+	if err := h.mqSvc.HandleHumanConfirm(mid, req.Approved, req.Feedback); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "processed"})
 }
 
 // A2A Message types for XML protocol
@@ -175,24 +228,42 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 	// If matchId is provided, verify access to this match
 	var agent *model.Agent
 	if matchID != "" && matchID != "ws" {
-		// Verify user has access to this match
+		// Verify user has access to this match (either as seeker or recruiter)
 		match, matchErr := h.matchRepo.GetByID(uuid.MustParse(matchID))
 		if matchErr != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
 			return
 		}
 
-		// Verify agent ownership
-		agent, err = h.agentRepo.GetByID(match.SeekerAgentID)
-		if err != nil || agent.UserID != userID {
+		// Check: user must own seeker agent OR recruiter (job) agent
+		seekerAgent, _ := h.agentRepo.GetByID(match.SeekerAgentID)
+		hasAccess := false
+		if seekerAgent != nil && seekerAgent.UserID == userID {
+			agent = seekerAgent
+			hasAccess = true
+		} else if match.Job != nil {
+			// Check recruiter (job's agent)
+			agents, _ := h.agentRepo.ListByUserID(userID, "")
+			for _, a := range agents {
+				if a.ID == match.Job.AgentID {
+					agent = a
+					hasAccess = true
+					break
+				}
+			}
+		}
+		if !hasAccess {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 			return
 		}
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, http.Header{
-		"Sec-WebSocket-Protocol": {tokenStr},
-	})
+	// Only echo Sec-WebSocket-Protocol if the client sent one (RFC 6455 §4.2.2)
+	upgradeHeader := http.Header{}
+	if clientProtocol := c.GetHeader("Sec-WebSocket-Protocol"); clientProtocol != "" {
+		upgradeHeader["Sec-WebSocket-Protocol"] = []string{tokenStr}
+	}
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, upgradeHeader)
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
@@ -443,15 +514,37 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// Verify match access
+	// Verify match access — allow BOTH seeker and recruiter (job's agent) to send
 	match, err := h.matchRepo.GetByID(uuid.MustParse(matchID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
 		return
 	}
 
-	agent, err := h.agentRepo.GetByID(match.SeekerAgentID)
-	if err != nil || agent.UserID != userID {
+	// Find an agent for this user
+	agents, err := h.agentRepo.ListByUserID(userID, "")
+	if err != nil || len(agents) == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Check: user must own either the seeker agent OR the recruiter agent (Job.AgentID)
+	var senderAgentID uuid.UUID
+	hasAccess := false
+	for _, agent := range agents {
+		if agent.ID == match.SeekerAgentID {
+			senderAgentID = agent.ID
+			hasAccess = true
+			break
+		}
+		// Recruiter is the job's agent
+		if match.Job != nil && agent.ID == match.Job.AgentID {
+			senderAgentID = agent.ID
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}
@@ -467,7 +560,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 	message := &model.Message{
 		ID:            uuid.New(),
 		MatchID:       uuid.MustParse(matchID),
-		SenderAgentID: agent.ID,
+		SenderAgentID: senderAgentID,
 		ContentXML:    req.ContentXML,
 		IntentType:    req.IntentType,
 	}
@@ -482,7 +575,7 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 		go func() {
 			agentMsg := &rabbitmq.AgentMessage{
 				MessageID:  message.ID.String(),
-				SenderID:   agent.ID.String(),
+				SenderID:   senderAgentID.String(),
 				ReceiverID: "",
 				Intent:     req.IntentType,
 				MatchID:    matchID,
@@ -504,11 +597,10 @@ func (h *MessageHandler) SendMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, message)
 }
 
-// GetMessages retrieves all messages for a user (across all matches)
+// GetMessages retrieves all conversations for a user (grouped by match)
 func (h *MessageHandler) GetMessages(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 
-	// Get all agents for this user
 	agents, err := h.agentRepo.ListByUserID(userID, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve agents"})
@@ -520,32 +612,60 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 		agentIDs = append(agentIDs, agent.ID)
 	}
 
-	// Get all matches where user has an agent (either seeker or recruiter)
 	matches, err := h.matchRepo.ListByAgentIDs(agentIDs)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve matches"})
 		return
 	}
 
-	var allMessages []map[string]interface{}
+	type convMsg struct {
+		ID            string    `json:"id"`
+		MatchID       string    `json:"match_id"`
+		SenderAgentID string    `json:"sender_agent_id"`
+		ContentXML    string    `json:"content_xml"`
+		IntentType    string    `json:"intent_type"`
+		CreatedAt     time.Time `json:"created_at"`
+	}
+
+	conversations := make([]map[string]interface{}, 0, len(matches))
 	for _, match := range matches {
 		messages, err := h.messageRepo.ListByMatchID(match.ID)
 		if err != nil {
 			continue
 		}
-		for _, msg := range messages {
-			allMessages = append(allMessages, map[string]interface{}{
-				"id":             msg.ID,
-				"match_id":       msg.MatchID,
-				"sender_agent_id": msg.SenderAgentID,
-				"content_xml":    msg.ContentXML,
-				"intent_type":    msg.IntentType,
-				"created_at":     msg.CreatedAt,
-			})
+
+		jobTitle := ""
+		if match.Job != nil {
+			var jobData map[string]interface{}
+			if err := json.Unmarshal(match.Job.StructuredJSON, &jobData); err == nil {
+				if title, ok := jobData["title"].(string); ok {
+					jobTitle = title
+				}
+			}
 		}
+
+		var lastMsg *convMsg
+		for _, msg := range messages {
+			lastMsg = &convMsg{
+				ID:            msg.ID.String(),
+				MatchID:       msg.MatchID.String(),
+				SenderAgentID: msg.SenderAgentID.String(),
+				ContentXML:    msg.ContentXML,
+				IntentType:    msg.IntentType,
+				CreatedAt:     msg.CreatedAt,
+			}
+		}
+
+		conversations = append(conversations, map[string]interface{}{
+			"MatchID":     match.ID.String(),
+			"JobTitle":    jobTitle,
+			"LastMessage": lastMsg,
+			"UnreadCount": 0,
+			"UpdatedAt":   match.UpdatedAt,
+		})
 	}
 
-	c.JSON(http.StatusOK, allMessages)
+	c.JSON(http.StatusOK, gin.H{"conversations": conversations})
 }
 
 // GetConversation retrieves message history for a match
@@ -553,15 +673,33 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	matchID := c.Param("matchId")
 	userID := uuid.MustParse(c.GetString("userID"))
 
-	// Verify access
+	// Verify access — allow both seeker and recruiter
 	match, err := h.matchRepo.GetByID(uuid.MustParse(matchID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
 		return
 	}
 
-	agent, err := h.agentRepo.GetByID(match.SeekerAgentID)
-	if err != nil || agent.UserID != userID {
+	// Get user's agents
+	agents, err := h.agentRepo.ListByUserID(userID, "")
+	if err != nil || len(agents) == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+		return
+	}
+
+	// Check: user must own seeker agent OR recruiter (job) agent
+	hasAccess := false
+	for _, agent := range agents {
+		if agent.ID == match.SeekerAgentID {
+			hasAccess = true
+			break
+		}
+		if match.Job != nil && agent.ID == match.Job.AgentID {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 		return
 	}

@@ -1,12 +1,14 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Bell, Cpu, Shield, Trash2, User } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
-import Card from '@/components/ui/Card';
-import Button from '@/components/ui/Button';
-import { LoadingSkeleton, ErrorState } from '@/components/ui';
-import type { User as UserType } from '@/types';
+import { Bell, Cpu, Shield, Trash2, User } from 'lucide-react'
+import { useState } from 'react'
+
+import type { User as UserType } from '@/types'
+
+import { LoadingSkeleton } from '@/components/ui'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
+import { useAuthStore } from '@/stores/auth'
 
 function AccountSettingsSkeleton() {
   return (
@@ -19,10 +21,10 @@ function AccountSettingsSkeleton() {
         <LoadingSkeleton count={4} variant="list" />
       </div>
     </Card>
-  );
+  )
 }
 
-function AccountSettings({ user, onRefresh }: { user: UserType | null; onRefresh: () => void }) {
+function AccountSettings({ user, onRefresh: _onRefresh }: { user: UserType | null, onRefresh: () => void }) {
   return (
     <Card className="p-6 bg-white/80 backdrop-blur-xl border border-white/20">
       <h2 className="text-lg font-semibold text-slate-900 mb-6 flex items-center gap-2">
@@ -74,7 +76,7 @@ function AccountSettings({ user, onRefresh }: { user: UserType | null; onRefresh
         </div>
       </div>
     </Card>
-  );
+  )
 }
 
 function NotificationSettings() {
@@ -91,7 +93,7 @@ function NotificationSettings() {
           { label: 'Interview reminders', enabled: true },
           { label: 'Offer updates', enabled: false },
           { label: 'Marketing emails', enabled: false },
-        ].map((setting) => (
+        ].map(setting => (
           <div key={setting.label} className="flex items-center justify-between py-2">
             <span className="text-slate-700">{setting.label}</span>
             <button
@@ -109,7 +111,7 @@ function NotificationSettings() {
         ))}
       </div>
     </Card>
-  );
+  )
 }
 
 function AISettings() {
@@ -119,15 +121,15 @@ function AISettings() {
     model: 'gpt-4o-mini',
     temperature: '0.7',
     max_tokens: '4000',
-  });
-  const [saved, setSaved] = useState(false);
+  })
+  const [saved, setSaved] = useState(false)
 
   const handleSave = async () => {
     // Save to localStorage for now (backend would persist this)
-    localStorage.setItem('ai_config', JSON.stringify(aiConfig));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+    localStorage.setItem('ai_config', JSON.stringify(aiConfig))
+    setSaved(true)
+    setTimeout(setSaved, 2000, false)
+  }
 
   return (
     <Card className="p-6 bg-white/80 backdrop-blur-xl border border-white/20">
@@ -142,7 +144,7 @@ function AISettings() {
           <input
             type="password"
             value={aiConfig.api_key}
-            onChange={(e) => setAiConfig({ ...aiConfig, api_key: e.target.value })}
+            onChange={e => setAiConfig({ ...aiConfig, api_key: e.target.value })}
             placeholder="sk-..."
             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
@@ -153,7 +155,7 @@ function AISettings() {
           <input
             type="text"
             value={aiConfig.base_url}
-            onChange={(e) => setAiConfig({ ...aiConfig, base_url: e.target.value })}
+            onChange={e => setAiConfig({ ...aiConfig, base_url: e.target.value })}
             placeholder="https://api.openai.com/v1"
             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
@@ -164,7 +166,7 @@ function AISettings() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Model</label>
             <select
               value={aiConfig.model}
-              onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+              onChange={e => setAiConfig({ ...aiConfig, model: e.target.value })}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             >
               <option value="gpt-4o">GPT-4o</option>
@@ -182,7 +184,7 @@ function AISettings() {
               min="0"
               max="2"
               value={aiConfig.temperature}
-              onChange={(e) => setAiConfig({ ...aiConfig, temperature: e.target.value })}
+              onChange={e => setAiConfig({ ...aiConfig, temperature: e.target.value })}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
@@ -195,7 +197,7 @@ function AISettings() {
             min="100"
             max="128000"
             value={aiConfig.max_tokens}
-            onChange={(e) => setAiConfig({ ...aiConfig, max_tokens: e.target.value })}
+            onChange={e => setAiConfig({ ...aiConfig, max_tokens: e.target.value })}
             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
@@ -208,7 +210,7 @@ function AISettings() {
         </div>
       </div>
     </Card>
-  );
+  )
 }
 
 function DangerZone() {
@@ -226,12 +228,12 @@ function DangerZone() {
         Delete Account
       </Button>
     </Card>
-  );
+  )
 }
 
 export function SettingsContent({ initialUser }: { initialUser: UserType | null }) {
-  const storeUser = useAuthStore((state) => state.user);
-  const user = initialUser || storeUser;
+  const storeUser = useAuthStore(state => state.user)
+  const user = initialUser || storeUser
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -240,17 +242,19 @@ export function SettingsContent({ initialUser }: { initialUser: UserType | null 
           Settings
         </h1>
 
-        {user ? (
-          <div className="space-y-6">
-            <AccountSettings user={user} onRefresh={() => {}} />
-            <AISettings />
-            <NotificationSettings />
-            <DangerZone />
-          </div>
-        ) : (
-          <AccountSettingsSkeleton />
-        )}
+        {user
+          ? (
+              <div className="space-y-6">
+                <AccountSettings user={user} onRefresh={() => {}} />
+                <AISettings />
+                <NotificationSettings />
+                <DangerZone />
+              </div>
+            )
+          : (
+              <AccountSettingsSkeleton />
+            )}
       </div>
     </div>
-  );
+  )
 }

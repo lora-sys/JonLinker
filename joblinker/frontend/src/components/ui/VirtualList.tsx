@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import React, { useRef } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual'
+import React, { useRef } from 'react'
 
 interface VirtualListProps<T> {
-  items: T[];
-  height: number | string;
-  itemHeight?: number;
-  overscan?: number;
-  renderItem: (item: T, index: number) => React.ReactNode;
-  className?: string;
+  items: T[]
+  height: number | string
+  itemHeight?: number
+  overscan?: number
+  renderItem: (item: T, index: number) => React.ReactNode
+  className?: string
 }
 
 export default function VirtualList<T>({
@@ -20,14 +20,14 @@ export default function VirtualList<T>({
   renderItem,
   className = '',
 }: VirtualListProps<T>) {
-  const parentRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => itemHeight,
     overscan,
-  });
+  })
 
   return (
     <div
@@ -42,7 +42,7 @@ export default function VirtualList<T>({
           position: 'relative',
         }}
       >
-        {virtualizer.getVirtualItems().map((virtualItem) => (
+        {virtualizer.getVirtualItems().map(virtualItem => (
           <div
             key={virtualItem.key}
             style={{
@@ -59,5 +59,5 @@ export default function VirtualList<T>({
         ))}
       </div>
     </div>
-  );
+  )
 }

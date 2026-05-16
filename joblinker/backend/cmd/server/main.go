@@ -12,10 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"joblinker/internal/cache"
-	"joblinker/internal/eino/runner"
 	"joblinker/internal/handler"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
@@ -24,6 +24,14 @@ import (
 	"joblinker/pkg/ai"
 	"joblinker/pkg/chroma"
 	"joblinker/pkg/rabbitmq"
+
+	"joblinker/internal/eino/agent"
+	"joblinker/internal/eino/chatmodel"
+	"joblinker/internal/eino/memory"
+	eino_runner "joblinker/internal/eino/runner"
+	"joblinker/internal/eino/tools"
+
+	"github.com/cloudwego/eino/components/tool"
 )
 
 func getEnv(key, fallback string) string {
@@ -157,9 +165,42 @@ func main() {
 
 	// Initialize Eino Agent Runner (for T029 integration)
 	aiClient := ai.NewClient()
-	einoRunner := runner.NewAgentRunner(aiClient, nil)
+	einoRunner := eino_runner.NewAgentRunner(aiClient, nil)
 	log.Printf("Eino AgentRunner initialized with pool config: MaxAgents=%d, MinAgents=%d",
 		100, 5)
+
+	// Initialize ADK components
+	var adkRunner *eino_runner.ADKRunner
+	{
+		chatModel := chatmodel.NewEinoChatModel(aiClient)
+		einoTools := tools.NewRealTools(jobRepo, agentRepo, matchRepo, offerRepo, interviewRepo)
+		baseTools := make([]tool.BaseTool, len(einoTools))
+		for i, t := range einoTools {
+			baseTools[i] = t
+		}
+
+		seekerAgent, err := agent.NewSeekerChatModelAgent(context.Background(), chatModel, baseTools)
+		if err != nil {
+			log.Printf("WARNING: failed to create seeker ADK agent: %v", err)
+		} else {
+			recruiterAgent, err := agent.NewRecruiterChatModelAgent(context.Background(), chatModel, baseTools)
+			if err != nil {
+				log.Printf("WARNING: failed to create recruiter ADK agent: %v", err)
+			} else {
+				supervisor, err := agent.NewA2ASupervisor(context.Background(), seekerAgent, recruiterAgent)
+				if err != nil {
+					log.Printf("WARNING: failed to create A2A supervisor: %v", err)
+				} else {
+					redisClient := redis.NewClient(&redis.Options{
+						Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+					})
+					cpStore := memory.NewRedisCheckPointStore(redisClient, "adk:cp:")
+					adkRunner = eino_runner.NewADKRunner(context.Background(), supervisor, cpStore)
+					log.Printf("ADK Runner initialized with Supervisor + CheckPointStore")
+				}
+			}
+		}
+	}
 
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
@@ -168,20 +209,28 @@ func main() {
 	interviewHandler := handler.NewInterviewHandler(interviewSvc)
 	offerHandler := handler.NewOfferHandler(offerSvc)
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
-	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq)
+	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc)
 	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
-	_ = handler.NewResumeHandler()
+	resumeHandler := handler.NewResumeHandler()
 	sqlDB, _ := db.DB()
 	healthHandler := handler.NewHealthHandler(sqlDB)
 
-	// Wire Eino Runner to MessageQueueService (T029)
+	// Wire Eino Runner + ADK Runner + Broadcast to MessageQueueService
 	if mqSvc != nil {
 		mqSvc.SetEinoRunner(einoRunner)
 		log.Printf("Eino Runner wired to MessageQueueService")
 
+		if adkRunner != nil {
+			mqSvc.SetADKRunner(adkRunner)
+			log.Printf("ADK Runner wired to MessageQueueService")
+		}
+
 		ctxOptimizer := service.NewContextOptimizerService(toolCache, messageRepo, matchRepo, agentRepo)
 		mqSvc.SetContextOptimizer(ctxOptimizer)
 		log.Printf("Context Optimizer wired to MessageQueueService")
+
+		mqSvc.SetBroadcastCallback(messageHandler.BroadcastAgentResponse)
+		log.Printf("Broadcast callback wired to MessageQueueService")
 	}
 
 	r.GET("/health", healthHandler.Health)
@@ -215,11 +264,13 @@ func main() {
 		api.POST("/jobs", jobHandler.Create)
 		api.GET("/jobs/:id", jobHandler.Get)
 		api.PATCH("/jobs/:id", jobHandler.Update)
+		api.DELETE("/jobs/:id", jobHandler.Delete)
 
 		api.GET("/matches", matchHandler.List)
 		api.GET("/matches/:id", matchHandler.Get)
 		api.POST("/matches/auto", matchHandler.AutoCreate)
 		api.POST("/matches/:id/confirm", matchHandler.Confirm)
+		api.POST("/matches/:id/human-confirm", messageHandler.HandleHumanConfirm)
 
 		api.GET("/messages", messageHandler.GetMessages)
 		api.GET("/messages/:matchId", messageHandler.GetMessages)
@@ -230,16 +281,25 @@ func main() {
 		api.POST("/interviews", interviewHandler.Create)
 		api.PATCH("/interviews/:id", interviewHandler.Update)
 		api.GET("/interviews/match/:matchId", interviewHandler.GetByMatchID)
+		api.GET("/interviews/:matchId", interviewHandler.GetByMatchID) // also support short form
 		api.POST("/interviews/match/:matchId/confirm", interviewHandler.Confirm)
+		api.POST("/interviews/:matchId/confirm", interviewHandler.Confirm) // short form
 		api.POST("/interviews/match/:matchId/cancel", interviewHandler.Cancel)
+		api.POST("/interviews/:matchId/cancel", interviewHandler.Cancel) // short form
 
 		api.GET("/offers/:matchId", offerHandler.GetByMatchID)
+		api.GET("/offers/item/:id", offerHandler.Get)
 		api.POST("/offers", offerHandler.Create)
 		api.POST("/offers/:matchId/accept", offerHandler.Accept)
 		api.POST("/offers/:matchId/decline", offerHandler.Decline)
+		api.POST("/offers/item/:id/respond", offerHandler.Respond)
 
 		api.POST("/privacy/export", privacyHandler.Export)
 		api.DELETE("/privacy/account", privacyHandler.DeleteAccount)
+
+		// Resume AI generation endpoint
+		api.POST("/resume/generate", resumeHandler.Generate)
+		api.POST("/resume/parse", agentHandler.ParseResume)
 
 		// Admin endpoints (require admin role)
 		admin := api.Group("/admin")
@@ -259,6 +319,13 @@ func main() {
 
 	// A2A Agent WebSocket (HMAC internal auth, no rate limit, XML protocol)
 	r.GET("/api/a2a/:matchId/ws", a2aHandler.HandleA2AWebSocket)
+
+	// A2A SSE endpoint (ADK Runner streaming)
+	if adkRunner != nil {
+		a2aSSEHandler := handler.NewA2ASSEHandler(adkRunner)
+		r.POST("/api/a2a/chat", a2aSSEHandler.Chat)
+		log.Printf("A2A SSE endpoint registered at POST /api/a2a/chat")
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

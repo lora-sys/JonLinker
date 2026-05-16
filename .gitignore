@@ -18,3 +18,11 @@ joblinker/specs
 seeker.json
 recruiter.json
 *.png
+
+# Go build artifacts
+joblinker/backend/joblinker
+joblinker/backend/server
+/tmp/
+
+# TypeScript build info
+*.tsbuildinfo

@@ -211,7 +211,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 cd backend && go test ./... -v
 ```
 
-### 端到端测试 (agent-browser)
+### 端到端测试 (playwright cli)
 
 ```bash
 # 登录 -> 创建 Agent -> 创建 Job -> 创建 Match -> 对话

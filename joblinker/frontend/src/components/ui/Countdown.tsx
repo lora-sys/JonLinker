@@ -1,24 +1,24 @@
-'use client';
+'use client'
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react'
 
 interface CountdownProps extends React.HTMLAttributes<HTMLDivElement> {
-  targetDate: Date | string;
-  onExpire?: () => void;
-  showLabels?: boolean;
+  targetDate: Date | string
+  onExpire?: () => void
+  showLabels?: boolean
 }
 
 function calculateTimeLeft(targetDate: Date): {
-  days: number;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  total: number;
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+  total: number
 } {
-  const total = targetDate.getTime() - Date.now();
+  const total = targetDate.getTime() - Date.now()
 
   if (total <= 0) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 };
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 }
   }
 
   return {
@@ -27,7 +27,7 @@ function calculateTimeLeft(targetDate: Date): {
     minutes: Math.floor((total / 1000 / 60) % 60),
     seconds: Math.floor((total / 1000) % 60),
     total,
-  };
+  }
 }
 
 export default function Countdown({
@@ -37,29 +37,29 @@ export default function Countdown({
   className = '',
   ...props
 }: CountdownProps) {
-  const target = typeof targetDate === 'string' ? new Date(targetDate) : targetDate;
-  const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(target));
+  const target = typeof targetDate === 'string' ? new Date(targetDate) : targetDate
+  const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(target))
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const newTimeLeft = calculateTimeLeft(target);
-      setTimeLeft(newTimeLeft);
+      const newTimeLeft = calculateTimeLeft(target)
+      setTimeLeft(newTimeLeft)
 
       if (newTimeLeft.total <= 0) {
-        clearInterval(timer);
-        onExpire?.();
+        clearInterval(timer)
+        onExpire?.()
       }
-    }, 1000);
+    }, 1000)
 
-    return () => clearInterval(timer);
-  }, [target, onExpire]);
+    return () => clearInterval(timer)
+  }, [target, onExpire])
 
   if (timeLeft.total <= 0) {
     return (
       <span className={`text-sm font-medium text-red-600 ${className}`} {...props}>
         Expired
       </span>
-    );
+    )
   }
 
   const segments = [
@@ -67,7 +67,7 @@ export default function Countdown({
     { value: timeLeft.hours, label: 'h' },
     { value: timeLeft.minutes, label: 'm' },
     { value: timeLeft.seconds, label: 's' },
-  ];
+  ]
 
   return (
     <div className={`flex items-center gap-1 ${className}`} {...props}>
@@ -81,5 +81,5 @@ export default function Countdown({
         </React.Fragment>
       ))}
     </div>
-  );
+  )
 }

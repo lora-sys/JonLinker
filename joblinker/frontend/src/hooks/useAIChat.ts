@@ -1,171 +1,217 @@
-'use client';
+'use client'
 
-import { useEffect, useCallback, useRef, useState } from 'react';
-import { useChat } from '@ai-sdk/react';
-import { useWebSocket } from './useWebSocket';
-import { buildMatchWSUrl, type WSGatewayParams } from '@/lib/websocket';
-import { apiClient } from '@/lib/api_client';
-import type { ChatMessage } from '@/types/ai';
+import type { UIMessage } from 'ai'
+
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+import type { MatchStatus } from '@/types'
+
+import { apiClient } from '@/lib/api_client'
+import { buildMatchWSUrl } from '@/lib/websocket'
+
+import { useWebSocket } from './useWebSocket'
+
+export type FSMStage
+  = | 'INTRODUCTION'
+    | 'JOB_DESCRIPTION'
+    | 'SALARY_NEGOTIATION'
+    | 'INTERVIEWING'
+    | 'OFFER'
+    | 'COMPLETED'
+
+export interface PendingConfirm {
+  match_id: string
+  intent: string
+  message_id: string
+  content_xml?: string
+}
 
 interface UseAIChatOptions {
-  matchId: string;
-  enabled?: boolean;
-  seekerAgentId?: string;
+  matchId: string
+  enabled?: boolean
 }
 
-interface StoredMessage {
-  id: string;
-  sender_agent_id: string;
-  content_xml: string;
-  intent_type: string;
-  created_at: string;
+function matchStatusToStage(status: string): FSMStage {
+  switch (status) {
+    case 'mutual_interest': return 'JOB_DESCRIPTION'
+    case 'negotiating': return 'SALARY_NEGOTIATION'
+    case 'interview_scheduled': return 'INTERVIEWING'
+    case 'offer_sent': case 'offered': return 'OFFER'
+    case 'hired': case 'rejected': case 'completed': return 'COMPLETED'
+    default: return 'INTRODUCTION'
+  }
 }
 
-export function useAIChat({ matchId, enabled = true, seekerAgentId }: UseAIChatOptions) {
-  const [input, setInput] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const loadedIdsRef = useRef<Set<string>>(new Set());
+export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
+  const [input, setInput] = useState('')
 
-  // useChat as UI container only — no HTTP requests
+  // useChat manages messages, sendMessage, status, etc. No input state.
+  const transport = useMemo(
+    () => new DefaultChatTransport({
+      api: '/api/chat-proxy',
+      credentials: 'include',
+    }),
+    [],
+  )
+
   const {
     messages: aiMessages,
-    status: aiStatus,
+    sendMessage,
     stop,
+    error,
     setMessages,
-    error: aiError,
-  } = useChat();
+    regenerate,
+    status,
+  } = useChat({
+    id: matchId,
+    transport,
+  })
 
-  const isLoading = aiStatus === 'streaming' || aiStatus === 'submitted';
+  const isLoading = status === 'submitted' || status === 'streaming'
 
-  // Load initial messages + poll every 3s
+  const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+
   useEffect(() => {
-    let active = true;
-    const poll = async () => {
+    if (!enabled)
+      return
+    apiClient.get<{ status: MatchStatus }>(`/api/matches/${matchId}`)
+      .then(data => setFsmStage(matchStatusToStage(data.status)))
+      .catch(() => {})
+  }, [matchId, enabled])
+
+  useEffect(() => {
+    if (!enabled)
+      return
+    const id = setInterval(async () => {
       try {
-        const data = await apiClient.get<StoredMessage[]>(`/api/conversation/${matchId}`);
-        if (!active || !Array.isArray(data)) return;
-
-        const newMsgs = data
-          .filter(m => !loadedIdsRef.current.has(m.id))
-          .filter(m => m.sender_agent_id !== seekerAgentId) // skip own messages (added locally)
-          .map(m => {
-            loadedIdsRef.current.add(m.id);
-            const content = parseXmlContent(m.content_xml);
-            const role = m.sender_agent_id === 'system' ? 'system' as const : 'assistant' as const;
-            return {
-              id: m.id,
-              role,
-              parts: [{ type: 'text' as const, text: content }],
-            };
-          });
-
-        if (newMsgs.length > 0) {
-          setMessages(prev => [...prev, ...newMsgs]);
-        }
-      } catch {
-        // silent — poll will retry
+        const data = await apiClient.get<{ status: MatchStatus }>(`/api/matches/${matchId}`)
+        setFsmStage(matchStatusToStage(data.status))
       }
-    };
-    poll();
-    const id = setInterval(poll, 3000);
-    return () => { active = false; clearInterval(id); };
-  }, [matchId, setMessages, seekerAgentId]);
+      catch {}
+    }, 10000)
+    return () => clearInterval(id)
+  }, [matchId, enabled])
 
-  // WebSocket for FSM state changes only (optional)
+  const wsToken = useMemo(() => getToken(), [])
+  const wsUrl = useMemo(
+    () => (enabled ? buildMatchWSUrl(matchId, wsToken) : ''),
+    [enabled, matchId, wsToken],
+  )
+
   const { status: wsStatus } = useWebSocket({
-    url: enabled ? buildMatchWSUrl(matchId, getToken(), { tenantId: 'default' }) : '',
-    token: getToken(),
+    url: wsUrl,
+    token: wsToken,
     autoConnect: enabled,
-    maxRetries: 2,
-    onMessage: useCallback(() => {
-      // FSM state notifications handled elsewhere
-    }, []),
-  });
+    maxRetries: 3,
+    onMessage: useCallback(
+      (data: Record<string, unknown>) => {
+        switch (data.type) {
+          case 'fsm_state_change':
+            setFsmStage(matchStatusToStage(String(data.new_state || '')))
+            break
+          case 'confirmation_needed':
+            setPendingConfirm({
+              match_id: String(data.match_id || matchId),
+              intent: String(data.intent || ''),
+              message_id: String(data.message_id || ''),
+              content_xml: String(data.content_xml || ''),
+            })
+            break
+          case 'human_rejected':
+            setMessages(prev => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: 'system',
+                parts: [{ type: 'text', text: `Human rejected ${String(data.confirm_type || 'request')}.` }],
+              } as UIMessage,
+            ])
+            setPendingConfirm(null)
+            break
+        }
+      },
+      [matchId, setMessages],
+    ),
+  })
 
-  useEffect(() => {
-    setIsConnected(wsStatus === 'Connected');
-  }, [wsStatus]);
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault()
+      const text = input.trim()
+      if (!text || isLoading)
+        return
 
-  // Submit: direct REST POST through Gateway, useChat.sendMessage NOT called
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const text = input.trim();
-    if (!text || isLoading) return;
-
-    // Add user message to UI immediately
-    const tempId = crypto.randomUUID();
-    setMessages(prev => [...prev, {
-      id: tempId,
-      role: 'user',
-      parts: [{ type: 'text' as const, text }],
-    }]);
-    setInput('');
-
-    // Build agent XML and POST through Gateway
-    const xml = `<message><payload><intent>INQUIRY</intent><parameters>{"message":"${text.replace(/"/g, '\\"')}"}</parameters></payload></message>`;
-    try {
-      await apiClient.post(`/api/messages/${matchId}`, {
+      const xml = `<message><payload><intent>INQUIRY</intent><parameters>{"message":"${text.replace(/"/g, '\\"')}"}</parameters></payload></message>`
+      apiClient.post(`/api/messages/${matchId}`, {
         content_xml: xml,
         intent_type: 'INQUIRY',
-      });
-    } catch (err) {
-      console.error('Failed to send message:', err);
-    }
-  }, [input, isLoading, matchId, setMessages]);
+      }).catch(console.error)
+
+      sendMessage({ text })
+      setInput('')
+    },
+    [input, isLoading, matchId, sendMessage],
+  )
+
+  const handleHumanConfirm = useCallback(
+    async (approved: boolean) => {
+      if (!pendingConfirm)
+        return
+      try {
+        await apiClient.post(`/api/matches/${matchId}/human-confirm`, {
+          approved,
+          feedback: approved ? '' : 'User rejected',
+        })
+        setMessages(prev => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'system',
+            parts: [{ type: 'text', text: approved
+              ? `You accepted the ${pendingConfirm.intent}.`
+              : `You rejected the ${pendingConfirm.intent}.` }],
+          } as UIMessage,
+        ])
+        setPendingConfirm(null)
+      }
+      catch (err) {
+        console.error('Confirm failed:', err)
+      }
+    },
+    [pendingConfirm, matchId, setMessages],
+  )
 
   return {
-    messages: aiMessages,
+    messages: aiMessages as UIMessage[],
     input,
     setInput,
-    status: aiStatus,
-    isConnected,
-    wsStatus,
-    error: aiError?.message || null,
     handleSubmit,
+    isLoading,
+    status,
+    error: error?.message || null,
     stop,
-    reload: () => { loadedIdsRef.current.clear(); },
-  };
+    reload: () => regenerate({}),
+    wsStatus,
+    fsmStage,
+    pendingConfirm,
+    handleHumanConfirm,
+  }
 }
 
 function getToken(): string {
-  if (typeof window === 'undefined') return '';
+  if (typeof window === 'undefined')
+    return ''
   try {
-    const raw = localStorage.getItem('joblinker-auth');
-    if (!raw) return '';
-    const parsed = JSON.parse(raw);
-    return parsed.state?.token || parsed.token || '';
-  } catch { return ''; }
-}
-
-function parseXmlContent(contentXml: string): string {
-  try {
-    if (contentXml.includes('<message>')) {
-      // <parameters>{"message":"Hello"}</parameters> (AI-generated)
-      const paramsMatch = contentXml.match(/<parameters>([^<]+)<\/parameters>/);
-      if (paramsMatch?.[1]) {
-        try {
-          const params = JSON.parse(paramsMatch[1]);
-          if (params.message) return params.message;
-          if (params.title) {
-            return `${params.title} - ${params.location || ''} $${params.salary_min || 0}-${params.salary_max || 0}`;
-          }
-          return paramsMatch[1];
-        } catch {
-          return paramsMatch[1];
-        }
-      }
-      // <content><text>Hello</text></content> (seed data format)
-      const textMatch = contentXml.match(/<text>([^<]*)<\/text>/);
-      if (textMatch?.[1]) {
-        return textMatch[1];
-      }
-      const intentMatch = contentXml.match(/intent="([^"]+)"/);
-      const intentTagMatch = contentXml.match(/<intent>([^<]+)<\/intent>/);
-      const intent = intentMatch?.[1] || intentTagMatch?.[1] || 'UNKNOWN';
-      return `[${intent}]`;
-    }
-    return contentXml;
-  } catch {
-    return contentXml;
+    const raw = localStorage.getItem('joblinker-auth')
+    if (!raw)
+      return ''
+    const parsed = JSON.parse(raw)
+    return parsed.state?.token || parsed.token || ''
+  }
+  catch {
+    return ''
   }
 }

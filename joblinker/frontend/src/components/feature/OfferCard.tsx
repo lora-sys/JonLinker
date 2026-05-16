@@ -1,10 +1,9 @@
-import type { Offer } from '@/types';
-import { DollarSign } from 'lucide-react';
+import type { Offer } from '@/types'
 
 interface OfferCardProps {
-  offer: Offer;
-  onAccept?: () => void;
-  onDecline?: () => void;
+  offer: Offer
+  onAccept?: () => void
+  onDecline?: () => void
 }
 
 export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
@@ -13,8 +12,8 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
       style: 'currency',
       currency,
       maximumFractionDigits: 0,
-    }).format(value);
-  };
+    }).format(value)
+  }
 
   const statusColors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -22,7 +21,7 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
     accepted: 'bg-green-100 text-green-700 border-green-200',
     declined: 'bg-slate-100 text-slate-600 border-slate-200',
     expired: 'bg-red-100 text-red-700 border-red-200',
-  };
+  }
 
   const statusLabels: Record<string, string> = {
     pending: 'Pending',
@@ -30,7 +29,7 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
     accepted: 'Accepted',
     declined: 'Declined',
     expired: 'Expired',
-  };
+  }
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -47,7 +46,9 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
               {formatCurrency(offer.compensation.base_salary, offer.compensation.currency)}
             </p>
             <p className="text-sm text-slate-500">
-              Base Salary • Start: {offer.start_date || 'TBD'}
+              Base Salary • Start:
+              {' '}
+              {offer.start_date || 'TBD'}
             </p>
           </div>
         </div>
@@ -57,7 +58,8 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
         <div className="mt-3 flex gap-4">
           {offer.compensation.bonus.amount > 0 && (
             <div className="text-sm">
-              <span className="text-slate-500">Bonus:</span>{' '}
+              <span className="text-slate-500">Bonus:</span>
+              {' '}
               <span className="font-medium text-slate-700">
                 {formatCurrency(offer.compensation.bonus.amount, offer.compensation.currency)}
               </span>
@@ -65,9 +67,14 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
           )}
           {offer.compensation.equity && (
             <div className="text-sm">
-              <span className="text-slate-500">Equity:</span>{' '}
+              <span className="text-slate-500">Equity:</span>
+              {' '}
               <span className="font-medium text-slate-700">
-                {offer.compensation.equity.shares} shares ({offer.compensation.equity.vesting_period})
+                {offer.compensation.equity.shares}
+                {' '}
+                shares (
+                {offer.compensation.equity.vesting_period}
+                )
               </span>
             </div>
           )}
@@ -97,7 +104,7 @@ export function OfferCard({ offer, onAccept, onDecline }: OfferCardProps) {
         )}
       </div>
     </div>
-  );
+  )
 }
 
-export default OfferCard;
+export default OfferCard

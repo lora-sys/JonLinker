@@ -1,4 +1,4 @@
-import DashboardClient from '@/components/ui/DashboardClient';
+import DashboardClient from '@/components/ui/DashboardClient'
 
 export default function DashboardPage() {
   return (
@@ -7,5 +7,5 @@ export default function DashboardPage() {
         <DashboardClient />
       </div>
     </div>
-  );
+  )
 }

@@ -1,37 +1,39 @@
-'use client';
+'use client'
 
-import { useState, useMemo, useCallback } from 'react';
-import { Search, Briefcase, SortAsc, Plus } from 'lucide-react';
-import Link from 'next/link';
-import { apiClient } from '@/lib/api_client';
-import { useAuthStore } from '@/stores/auth';
-import { LoadingSkeleton, ErrorState, EmptyState, Card } from '@/components/ui';
-import { JobCard } from '@/components/feature/JobCard';
-import { useRole } from '@/hooks/useRole';
-import type { Job } from '@/types';
+import { Briefcase, Plus, Search, SortAsc } from 'lucide-react'
+import Link from 'next/link'
+import { useCallback, useMemo, useState } from 'react'
+
+import type { Job } from '@/types'
+
+import { JobCard } from '@/components/feature/JobCard'
+import { Card, EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
+import { useRole } from '@/hooks/useRole'
+import { apiClient } from '@/lib/api_client'
+import { useAuthStore } from '@/stores/auth'
 
 interface JobFiltersProps {
-  jobs: Job[];
+  jobs: Job[]
 }
 
 function JobFilters({ jobs }: JobFiltersProps) {
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'title' | 'company'>('title');
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'title' | 'company'>('title')
 
   const filteredJobs = useMemo(() => {
     return jobs
-      .filter(job => {
-        const matchesSearch =
-          job.structured?.title?.toLowerCase().includes(search.toLowerCase()) ||
-          job.structured?.description?.toLowerCase().includes(search.toLowerCase());
-        return matchesSearch;
+      .filter((job) => {
+        const matchesSearch
+          = job.structured?.title?.toLowerCase().includes(search.toLowerCase())
+            || job.structured?.description?.toLowerCase().includes(search.toLowerCase())
+        return matchesSearch
       })
       .sort((a, b) => {
-        const aVal = a.structured?.title || '';
-        const bVal = b.structured?.title || '';
-        return aVal.localeCompare(bVal);
-      });
-  }, [jobs, search]);
+        const aVal = a.structured?.title || ''
+        const bVal = b.structured?.title || ''
+        return aVal.localeCompare(bVal)
+      })
+  }, [jobs, search])
 
   return (
     <>
@@ -44,7 +46,7 @@ function JobFilters({ jobs }: JobFiltersProps) {
               type="text"
               placeholder="Search jobs..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-text transition-all duration-200"
             />
           </div>
@@ -53,7 +55,7 @@ function JobFilters({ jobs }: JobFiltersProps) {
             <SortAsc className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'title' | 'company')}
+              onChange={e => setSortBy(e.target.value as 'title' | 'company')}
               className="w-full md:w-auto pl-10 pr-8 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 appearance-none"
             >
               <option value="title">Sort by Title</option>
@@ -63,64 +65,69 @@ function JobFilters({ jobs }: JobFiltersProps) {
         </div>
       </Card>
 
-      {filteredJobs.length === 0 ? (
-        <EmptyState
-          icon={<Briefcase className="w-10 h-10 text-blue-600" />}
-          title="No jobs found"
-          description={search ? "Try adjusting your search criteria" : "Check back later for new opportunities"}
-        />
-      ) : (
-        <div className="space-y-4">
-          {filteredJobs.map((job) => (
-            <JobCard key={job.id} job={job} />
-          ))}
-        </div>
-      )}
+      {filteredJobs.length === 0
+        ? (
+            <EmptyState
+              icon={<Briefcase className="w-10 h-10 text-blue-600" />}
+              title="No jobs found"
+              description={search ? 'Try adjusting your search criteria' : 'Check back later for new opportunities'}
+            />
+          )
+        : (
+            <div className="space-y-4">
+              {filteredJobs.map(job => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
     </>
-  );
+  )
 }
 
 interface JobsContentProps {
-  initialJobs: Job[];
+  initialJobs: Job[]
 }
 
 export function JobsContent({ initialJobs }: JobsContentProps) {
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { user, isAuthenticated } = useAuthStore();
-  const role = useRole();
+  const [jobs, setJobs] = useState<Job[]>(initialJobs)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { user, isAuthenticated } = useAuthStore()
+  const role = useRole()
 
   const fetchJobs = useCallback(async () => {
     if (!isAuthenticated || !user) {
-      setIsLoading(false);
-      return;
+      setIsLoading(false)
+      return
     }
     try {
-      setIsLoading(true);
-      setError(null);
-      const data = await apiClient.get<Job[]>('/api/jobs');
+      setIsLoading(true)
+      setError(null)
+      const data = await apiClient.get<Job[]>('/api/jobs')
       const parsedJobs = data.map(job => ({
         ...job,
         structured: typeof job.structured === 'string'
           ? JSON.parse(job.structured)
-          : job.structured
-      }));
-      setJobs(parsedJobs);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load jobs';
-      if (errorMessage.includes('Authorization') || errorMessage.includes('401')) {
-        setError(null);
-        setJobs([]);
-      } else {
-        setError(errorMessage);
-      }
-    } finally {
-      setIsLoading(false);
+          : job.structured,
+      }))
+      setJobs(parsedJobs)
     }
-  }, [isAuthenticated, user]);
+    catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load jobs'
+      if (errorMessage.includes('Authorization') || errorMessage.includes('401')) {
+        setError(null)
+        setJobs([])
+      }
+      else {
+        setError(errorMessage)
+      }
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }, [isAuthenticated, user])
 
-  const isRecruiter = role === 'recruiter';
+  const isRecruiter = role === 'recruiter'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -143,14 +150,18 @@ export function JobsContent({ initialJobs }: JobsContentProps) {
           )}
         </div>
 
-        {isLoading ? (
-          <LoadingSkeleton count={3} variant="card" />
-        ) : error ? (
-          <ErrorState message={error} onRetry={fetchJobs} />
-        ) : (
-          <JobFilters jobs={jobs} />
-        )}
+        {isLoading
+          ? (
+              <LoadingSkeleton count={3} variant="card" />
+            )
+          : error
+            ? (
+                <ErrorState message={error} onRetry={fetchJobs} />
+              )
+            : (
+                <JobFilters jobs={jobs} />
+              )}
       </div>
     </div>
-  );
+  )
 }

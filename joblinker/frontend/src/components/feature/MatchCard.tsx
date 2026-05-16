@@ -1,20 +1,23 @@
-import type { Match } from '@/types';
-import { ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { ArrowRight } from 'lucide-react'
+import Link from 'next/link'
+
+import type { Match } from '@/types'
 
 interface MatchCardProps {
-  match: Match;
-  onClick?: () => void;
+  match: Match
+  onClick?: () => void
 }
 
 export function MatchCard({ match, onClick }: MatchCardProps) {
-  const scorePercent = Math.round((match.score || 0) * 100);
+  const scorePercent = Math.round((match.score || 0) * 100)
 
   const getScoreColor = (score: number) => {
-    if (score >= 0.8) return 'bg-emerald-100 text-emerald-700';
-    if (score >= 0.6) return 'bg-yellow-100 text-yellow-700';
-    return 'bg-red-100 text-red-700';
-  };
+    if (score >= 0.8)
+      return 'bg-emerald-100 text-emerald-700'
+    if (score >= 0.6)
+      return 'bg-yellow-100 text-yellow-700'
+    return 'bg-red-100 text-red-700'
+  }
 
   const statusLabels: Record<string, string> = {
     active: 'Active',
@@ -22,7 +25,7 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
     accepted: 'Accepted',
     declined: 'Declined',
     expired: 'Expired',
-  };
+  }
 
   return (
     <div
@@ -33,7 +36,8 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getScoreColor(match.score || 0)}`}>
-              {scorePercent}% Match
+              {scorePercent}
+              % Match
             </span>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
               {statusLabels[match.status] || match.status}
@@ -50,17 +54,21 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
 
       <div className="flex items-center justify-between mt-3">
         <span className="text-xs text-slate-400">
-          Matched {match.created_at ? new Date(match.created_at).toLocaleDateString() : 'recently'}
+          Matched
+          {' '}
+          {match.created_at ? new Date(match.created_at).toLocaleDateString() : 'recently'}
         </span>
         <Link
           href={`/conversation/${match.id}`}
           className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
         >
-          Chat <ArrowRight className="w-3 h-3" />
+          Chat
+          {' '}
+          <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
     </div>
-  );
+  )
 }
 
-export default MatchCard;
+export default MatchCard

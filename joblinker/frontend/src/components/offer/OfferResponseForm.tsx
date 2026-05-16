@@ -1,51 +1,54 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 
 interface OfferResponseFormProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen: boolean
+  onClose: () => void
   onSubmit: (data: {
-    response: 'accept' | 'decline' | 'negotiate';
-    counterSalary?: number;
-    message?: string;
-  }) => Promise<void>;
-  offerId: string;
-  currentSalary: number;
+    response: 'accept' | 'decline' | 'negotiate'
+    counterSalary?: number
+    message?: string
+  }) => Promise<void>
+  offerId: string
+  currentSalary: number
 }
 
 export function OfferResponseForm({
   isOpen,
   onClose,
   onSubmit,
-  offerId,
   currentSalary,
 }: OfferResponseFormProps) {
-  const [response, setResponse] = useState<'accept' | 'decline' | 'negotiate' | null>(null);
-  const [counterSalary, setCounterSalary] = useState(currentSalary);
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState<'accept' | 'decline' | 'negotiate' | null>(null)
+  const [counterSalary, setCounterSalary] = useState(currentSalary)
+  const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!response) return;
+    e.preventDefault()
+    if (!response)
+      return
 
-    setLoading(true);
+    setLoading(true)
     try {
       await onSubmit({
         response,
         counterSalary: response === 'negotiate' ? counterSalary : undefined,
         message: response === 'negotiate' ? message : undefined,
-      });
-      onClose();
-    } catch (err) {
-      console.error('Failed to submit response:', err);
-    } finally {
-      setLoading(false);
+      })
+      onClose()
     }
-  };
+    catch (err) {
+      console.error('Failed to submit response:', err)
+    }
+    finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <Modal
@@ -72,7 +75,8 @@ export function OfferResponseForm({
               <div className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                   response === 'accept' ? 'border-green-500 bg-green-500' : 'border-gray-300'
-                }`}>
+                }`}
+                >
                   {response === 'accept' && (
                     <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -98,7 +102,8 @@ export function OfferResponseForm({
               <div className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                   response === 'negotiate' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                }`}>
+                }`}
+                >
                   {response === 'negotiate' && (
                     <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -124,7 +129,8 @@ export function OfferResponseForm({
               <div className="flex items-center gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                   response === 'decline' ? 'border-red-500 bg-red-500' : 'border-gray-300'
-                }`}>
+                }`}
+                >
                   {response === 'decline' && (
                     <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -151,14 +157,15 @@ export function OfferResponseForm({
                 <input
                   type="number"
                   value={counterSalary}
-                  onChange={(e) => setCounterSalary(Number(e.target.value))}
+                  onChange={e => setCounterSalary(Number(e.target.value))}
                   className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   min={0}
                   step={1000}
                 />
               </div>
               <p className="mt-1 text-sm text-gray-500">
-                Current offer: ${currentSalary.toLocaleString()}
+                Current offer: $
+                {currentSalary.toLocaleString()}
               </p>
             </div>
 
@@ -168,7 +175,7 @@ export function OfferResponseForm({
               </label>
               <textarea
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={e => setMessage(e.target.value)}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Explain your reasoning for the counter offer..."
@@ -187,5 +194,5 @@ export function OfferResponseForm({
         </div>
       </form>
     </Modal>
-  );
+  )
 }

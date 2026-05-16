@@ -1,59 +1,63 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Sparkles, FileText, Plus, X } from 'lucide-react';
-import { apiClient } from '@/lib/api_client';
+import { FileText, Plus, Sparkles, X } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+import { apiClient } from '@/lib/api_client'
 
 export default function AgentCreatePage() {
-  const router = useRouter();
-  const [agentType, setAgentType] = useState<'seeker' | 'recruiter'>('seeker');
-  const [name, setName] = useState('');
-  const [skills, setSkills] = useState<string[]>([]);
-  const [skillInput, setSkillInput] = useState('');
-  const [preferences, setPreferences] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter()
+  const [agentType, setAgentType] = useState<'seeker' | 'recruiter'>('seeker')
+  const [name, setName] = useState('')
+  const [skills, setSkills] = useState<string[]>([])
+  const [skillInput, setSkillInput] = useState('')
+  const [preferences, setPreferences] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleAddSkill = () => {
     if (skillInput.trim() && !skills.includes(skillInput.trim())) {
-      setSkills([...skills, skillInput.trim()]);
-      setSkillInput('');
+      setSkills([...skills, skillInput.trim()])
+      setSkillInput('')
     }
-  };
+  }
 
   const handleRemoveSkill = (skillToRemove: string) => {
-    setSkills(skills.filter(s => s !== skillToRemove));
-  };
+    setSkills(skills.filter(s => s !== skillToRemove))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+    e.preventDefault()
+    setError(null)
+    setIsLoading(true)
 
     try {
       const config = {
         name: name || undefined,
         skills: skills.length > 0 ? skills : undefined,
         preferences: preferences || undefined,
-      };
+      }
 
       const data = await apiClient.post<{ id: string }>('/api/agents', {
         type: agentType,
         config: JSON.stringify(config),
-      });
+      })
       if (data?.id) {
-        router.push('/agents');
-      } else {
-        throw new Error('Failed to create agent');
+        router.push('/agents')
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create agent');
-    } finally {
-      setIsLoading(false);
+      else {
+        throw new Error('Failed to create agent')
+      }
     }
-  };
+    catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create agent')
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -106,7 +110,7 @@ export default function AgentCreatePage() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               placeholder="My Agent"
               className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
             />
@@ -120,11 +124,11 @@ export default function AgentCreatePage() {
               <input
                 type="text"
                 value={skillInput}
-                onChange={(e) => setSkillInput(e.target.value)}
+                onChange={e => setSkillInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddSkill();
+                    e.preventDefault()
+                    handleAddSkill()
                   }
                 }}
                 placeholder="Add a skill and press Enter"
@@ -140,7 +144,7 @@ export default function AgentCreatePage() {
             </div>
             {skills.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {skills.map((skill) => (
+                {skills.map(skill => (
                   <span key={skill} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                     {skill}
                     <button type="button" onClick={() => handleRemoveSkill(skill)} className="hover:text-blue-900">
@@ -158,7 +162,7 @@ export default function AgentCreatePage() {
             </label>
             <textarea
               value={preferences}
-              onChange={(e) => setPreferences(e.target.value)}
+              onChange={e => setPreferences(e.target.value)}
               placeholder="Any preferences for job searching..."
               rows={3}
               className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 resize-none"
@@ -199,5 +203,5 @@ export default function AgentCreatePage() {
         )}
       </div>
     </div>
-  );
+  )
 }

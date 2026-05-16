@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"joblinker/internal/model"
@@ -45,7 +46,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 	}
 	job := &model.Job{
 		AgentID:        agentID,
-		StructuredJSON: req.StructuredJSON,
+		StructuredJSON: json.RawMessage(req.StructuredJSON),
 		VectorID:       req.VectorID,
 		Status:         model.JobStatusActive,
 	}

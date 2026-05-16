@@ -1,9 +1,9 @@
-'use client';
+'use client'
 
 interface CalendarPreviewProps {
-  scheduledAt: string;
-  format: string;
-  location: string;
+  scheduledAt: string
+  format: string
+  location: string
 }
 
 export function CalendarPreview({
@@ -12,15 +12,15 @@ export function CalendarPreview({
   location,
 }: CalendarPreviewProps) {
   const generateICS = () => {
-    const date = new Date(scheduledAt);
-    const endDate = new Date(date.getTime() + 60 * 60 * 1000);
+    const date = new Date(scheduledAt)
+    const endDate = new Date(date.getTime() + 60 * 60 * 1000)
 
     const formatICSDate = (d: Date) => {
-      return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
+      return `${d.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`
+    }
 
-    const uid = `${Date.now()}-joblinker@scheduler`;
-    const now = formatICSDate(new Date());
+    const uid = `${Date.now()}-joblinker@scheduler`
+    const now = formatICSDate(new Date())
 
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -35,44 +35,46 @@ DESCRIPTION:Interview scheduled via JobLinker
 LOCATION:${location || 'TBD'}
 STATUS:CONFIRMED
 END:VEVENT
-END:VCALENDAR`;
+END:VCALENDAR`
 
-    const blob = new Blob([icsContent], { type: 'text/calendar' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'interview.ics';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+    const blob = new Blob([icsContent], { type: 'text/calendar' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'interview.ics'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   const formatDate = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
+      const date = new Date(dateStr)
       return date.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      });
-    } catch {
-      return dateStr;
+      })
     }
-  };
+    catch {
+      return dateStr
+    }
+  }
 
   const formatTime = (dateStr: string) => {
     try {
-      const date = new Date(dateStr);
+      const date = new Date(dateStr)
       return date.toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
-      });
-    } catch {
-      return '';
+      })
     }
-  };
+    catch {
+      return ''
+    }
+  }
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
@@ -131,5 +133,5 @@ END:VCALENDAR`;
         Download .ics
       </button>
     </div>
-  );
+  )
 }

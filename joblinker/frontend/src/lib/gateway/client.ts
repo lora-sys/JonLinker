@@ -1,70 +1,69 @@
 // Unified Gateway Client - sole entry point for all API calls
 // Used by: Frontend, AI Agents, MCP tools, Function Calling
 
-import type { GatewayConfig, ApiResponse, RequestConfig } from './types';
-import { ServiceRoutes, type HttpMethod } from './routes';
-import { RateLimiter, CircuitBreaker, getTenantContext } from './middleware';
-import { protobufPackage, MessageType } from '../proto/agent';
+import type { HttpMethod } from './routes'
+import type { ApiResponse, GatewayConfig, RequestConfig } from './types'
 
-export { ServiceRoutes } from './routes';
-export type { GatewayConfig, ApiResponse } from './types';
-export type { HttpMethod } from './routes';
+import { CircuitBreaker, getTenantContext, RateLimiter } from './middleware'
+
+export { ServiceRoutes } from './routes'
+export type { HttpMethod } from './routes'
+export type { ApiResponse, GatewayConfig } from './types'
 
 // Protobuf content type constants
-const CONTENT_TYPE_JSON = 'application/json';
-const CONTENT_TYPE_PROTOBUF = 'application/x-protobuf';
+const CONTENT_TYPE_PROTOBUF = 'application/x-protobuf'
 
 // Environment variable for Protobuf mode (matches backend)
-const getProtobufMode = (): string => {
+function getProtobufMode(): string {
   if (typeof process !== 'undefined' && process.env) {
-    return process.env.PROTOBUF_ENABLED || 'none';
+    return process.env.PROTOBUF_ENABLED || 'none'
   }
-  return 'none';
-};
+  return 'none'
+}
 
-const isInternalProtobufEnabled = (): boolean => {
-  const mode = getProtobufMode();
-  return mode === 'internal' || mode === 'all';
-};
+function isInternalProtobufEnabled(): boolean {
+  const mode = getProtobufMode()
+  return mode === 'internal' || mode === 'all'
+}
 
 export interface GatewayClientOptions {
-  config: GatewayConfig;
-  rateLimit?: { maxRequests: number; windowMs: number };
-  circuitBreaker?: { failureThreshold: number; resetTimeoutMs: number };
+  config: GatewayConfig
+  rateLimit?: { maxRequests: number, windowMs: number }
+  circuitBreaker?: { failureThreshold: number, resetTimeoutMs: number }
 }
 
 export class GatewayClient {
-  private baseURL: string;
-  private _headers: Record<string, string>;
-  private rateLimiter?: RateLimiter;
-  private circuitBreaker?: CircuitBreaker;
-  private token: string | null = null;
+  private baseURL: string
+  private _headers: Record<string, string>
+  private rateLimiter?: RateLimiter
+  private circuitBreaker?: CircuitBreaker
+  private token: string | null = null
 
   constructor(options: GatewayClientOptions) {
-    this.baseURL = options.config.baseURL;
-    this._headers = this.buildHeaders(options.config);
+    this.baseURL = options.config.baseURL
+    this._headers = this.buildHeaders(options.config)
 
     if (options.rateLimit) {
-      this.rateLimiter = new RateLimiter(options.rateLimit);
+      this.rateLimiter = new RateLimiter(options.rateLimit)
     }
 
     if (options.circuitBreaker) {
-      this.circuitBreaker = new CircuitBreaker(options.circuitBreaker);
+      this.circuitBreaker = new CircuitBreaker(options.circuitBreaker)
     }
   }
 
   private buildHeaders(config: GatewayConfig): Record<string, string> {
-    const tenantCtx = getTenantContext(config);
+    const tenantCtx = getTenantContext(config)
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-User-ID': tenantCtx.userId,
       'X-Agent-ID': tenantCtx.agentId || '',
       'X-Request-ID': crypto.randomUUID(),
-    };
-    if (tenantCtx.tenantId && tenantCtx.tenantId !== 'default') {
-      headers['X-Tenant-ID'] = tenantCtx.tenantId;
     }
-    return headers;
+    if (tenantCtx.tenantId && tenantCtx.tenantId !== 'default') {
+      headers['X-Tenant-ID'] = tenantCtx.tenantId
+    }
+    return headers
   }
 
   // Get headers with fresh X-Request-ID for each request
@@ -72,43 +71,44 @@ export class GatewayClient {
     return {
       ...this._headers,
       'X-Request-ID': crypto.randomUUID(),
-    };
+    }
   }
 
   setToken(token: string | null) {
-    this.token = token;
+    this.token = token
   }
 
   setUserContext(userId: string, agentId?: string, tenantId?: string) {
-    this._headers['X-User-ID'] = userId;
+    this._headers['X-User-ID'] = userId
     if (agentId) {
-      this._headers['X-Agent-ID'] = agentId;
+      this._headers['X-Agent-ID'] = agentId
     }
     if (tenantId && tenantId !== 'default') {
-      this._headers['X-Tenant-ID'] = tenantId;
-    } else {
-      delete this._headers['X-Tenant-ID'];
+      this._headers['X-Tenant-ID'] = tenantId
+    }
+    else {
+      delete this._headers['X-Tenant-ID']
     }
   }
 
   setAgentId(agentId: string) {
-    this._headers['X-Agent-ID'] = agentId;
+    this._headers['X-Agent-ID'] = agentId
   }
 
   // Direct header access for ApiClient wrapper
   get headers(): Record<string, string> {
-    return this._headers;
+    return this._headers
   }
 
   // Low-level HTTP request
   private async doRequest<R = unknown>(
     method: string,
     path: string,
-    data?: unknown
+    data?: unknown,
   ): Promise<ApiResponse<R>> {
     // Rate limiting check
     if (this.rateLimiter) {
-      const rateCheck = await this.rateLimiter.check();
+      const rateCheck = await this.rateLimiter.check()
       if (!rateCheck.allowed) {
         return {
           success: false,
@@ -116,17 +116,17 @@ export class GatewayClient {
             code: 'RATE_LIMITED',
             message: `Rate limit exceeded. Retry after ${rateCheck.resetAt.toISOString()}`,
           },
-        };
+        }
       }
     }
 
     // Build request config
-    const url = `${this.baseURL}${path}`;
-    const headers = this.getRequestHeaders();
+    const url = `${this.baseURL}${path}`
+    const headers = this.getRequestHeaders()
 
     // Add Protobuf Accept header if enabled for internal communication
     if (isInternalProtobufEnabled()) {
-      headers['Accept'] = CONTENT_TYPE_PROTOBUF;
+      headers.Accept = CONTENT_TYPE_PROTOBUF
     }
 
     const config: RequestConfig = {
@@ -134,11 +134,11 @@ export class GatewayClient {
       url,
       headers,
       body: data ? JSON.stringify(data) : undefined,
-    };
+    }
 
     // Add auth header if token exists
     if (this.token) {
-      config.headers['Authorization'] = `Bearer ${this.token}`;
+      config.headers.Authorization = `Bearer ${this.token}`
     }
 
     // Execute request (with circuit breaker if enabled)
@@ -148,12 +148,12 @@ export class GatewayClient {
           method: config.method,
           headers: config.headers,
           body: config.body,
-        });
+        })
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({
             error: `HTTP ${response.status}`,
-          }));
+          }))
 
           return {
             success: false,
@@ -161,123 +161,124 @@ export class GatewayClient {
               code: `HTTP_${response.status}`,
               message: errorData.error || `Request failed with status ${response.status}`,
             },
-          };
+          }
         }
 
         // Handle Protobuf response if Accept header was set
-        const contentType = response.headers.get('Content-Type') || '';
+        const contentType = response.headers.get('Content-Type') || ''
         if (contentType.includes('x-protobuf') || contentType.includes('protobuf')) {
           // Response is Protobuf binary - for now, return raw array buffer
           // Actual deserialization would use protobufjs or @bufbuild/protobuf
-          const arrayBuffer = await response.arrayBuffer();
-          const binaryData = new Uint8Array(arrayBuffer);
-          return { success: true, data: binaryData as unknown as R };
+          const arrayBuffer = await response.arrayBuffer()
+          const binaryData = new Uint8Array(arrayBuffer)
+          return { success: true, data: binaryData as unknown as R }
         }
 
         // Default: JSON response
-        const responseData = await response.json();
-        return { success: true, data: responseData };
-      } catch (error) {
+        const responseData = await response.json()
+        return { success: true, data: responseData }
+      }
+      catch (error) {
         return {
           success: false,
           error: {
             code: 'NETWORK_ERROR',
             message: error instanceof Error ? error.message : 'Network request failed',
           },
-        };
+        }
       }
-    };
-
-    if (this.circuitBreaker) {
-      return this.circuitBreaker.execute(executeRequest);
     }
 
-    return executeRequest();
+    if (this.circuitBreaker) {
+      return this.circuitBreaker.execute(executeRequest)
+    }
+
+    return executeRequest()
   }
 
   // Main request method - used for all HTTP methods
   async request<R = unknown>(
-    routeDef: { method: HttpMethod; path: string },
+    routeDef: { method: HttpMethod, path: string },
     params?: Record<string, string | number | boolean | undefined>,
-    data?: unknown
+    data?: unknown,
   ): Promise<ApiResponse<R>> {
     // Substitute path parameters
-    let path = routeDef.path;
+    let path = routeDef.path
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) {
-          path = path.replace(`:${key}`, String(value));
+          path = path.replace(`:${key}`, String(value))
         }
-      });
+      })
     }
 
-    return this.doRequest<R>(routeDef.method, path, data);
+    return this.doRequest<R>(routeDef.method, path, data)
   }
 
   // Convenience methods for each HTTP verb
   async get<R = unknown>(
-    routeDef: { method: HttpMethod; path: string },
-    params?: Record<string, string | number | boolean | undefined>
+    routeDef: { method: HttpMethod, path: string },
+    params?: Record<string, string | number | boolean | undefined>,
   ): Promise<ApiResponse<R>> {
-    return this.request<R>(routeDef, params);
+    return this.request<R>(routeDef, params)
   }
 
   async post<R = unknown>(
-    routeDef: { method: HttpMethod; path: string },
+    routeDef: { method: HttpMethod, path: string },
     params?: Record<string, string | number | boolean | undefined>,
-    data?: unknown
+    data?: unknown,
   ): Promise<ApiResponse<R>> {
-    return this.request<R>(routeDef, params, data);
+    return this.request<R>(routeDef, params, data)
   }
 
   async patch<R = unknown>(
-    routeDef: { method: HttpMethod; path: string },
+    routeDef: { method: HttpMethod, path: string },
     params?: Record<string, string | number | boolean | undefined>,
-    data?: unknown
+    data?: unknown,
   ): Promise<ApiResponse<R>> {
-    return this.request<R>(routeDef, params, data);
+    return this.request<R>(routeDef, params, data)
   }
 
   async delete<R = unknown>(
-    routeDef: { method: HttpMethod; path: string },
-    params?: Record<string, string | number | boolean | undefined>
+    routeDef: { method: HttpMethod, path: string },
+    params?: Record<string, string | number | boolean | undefined>,
   ): Promise<ApiResponse<R>> {
-    return this.request<R>(routeDef, params);
+    return this.request<R>(routeDef, params)
   }
 
   // WebSocket connection - token passed via Sec-WebSocket-Protocol header
   connectWebSocket(
-    routeDef: { method: HttpMethod; path: string },
-    params?: Record<string, string>
+    routeDef: { method: HttpMethod, path: string },
+    params?: Record<string, string>,
   ): WebSocket {
-    let path = routeDef.path;
+    let path = routeDef.path
 
     // Substitute path params
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        path = path.replace(`:${key}`, String(value));
-      });
+        path = path.replace(`:${key}`, String(value))
+      })
     }
 
-    const wsUrl = `${this.baseURL.replace(/^http/, 'ws')}${path}`;
-    const protocols = this.token ? [this.token] : [];
-    return new WebSocket(wsUrl, protocols);
+    const wsUrl = `${this.baseURL.replace(/^http/, 'ws')}${path}`
+    const protocols = this.token ? [this.token] : []
+    return new WebSocket(wsUrl, protocols)
   }
 }
 
 // Singleton instance for frontend use
-let gatewayInstance: GatewayClient | null = null;
+let gatewayInstance: GatewayClient | null = null
 
 export function initGateway(config: GatewayConfig): GatewayClient {
-  gatewayInstance = new GatewayClient({ config });
-  return gatewayInstance;
+  gatewayInstance = new GatewayClient({ config })
+  return gatewayInstance
 }
 
 export function getGateway(): GatewayClient {
   if (!gatewayInstance) {
-    throw new Error('Gateway not initialized. Call initGateway() first.');
+    throw new Error('Gateway not initialized. Call initGateway() first.')
   }
-  return gatewayInstance;
+  return gatewayInstance
 }
 
 // Backwards compatibility - export a default client that can be configured
@@ -285,32 +286,32 @@ export const gatewayClient = {
   request: async <R = unknown>(
     method: HttpMethod,
     path: string,
-    data?: unknown
+    data?: unknown,
   ): Promise<ApiResponse<R>> => {
     if (!gatewayInstance) {
       return {
         success: false,
         error: { code: 'NOT_INITIALIZED', message: 'Gateway not initialized' },
-      };
+      }
     }
-    return gatewayInstance.request<R>({ method, path }, {}, data);
+    return gatewayInstance.request<R>({ method, path }, {}, data)
   },
   get: async <R = unknown>(path: string, _params?: Record<string, any>): Promise<ApiResponse<R>> => {
     if (!gatewayInstance) {
-      return { success: false, error: { code: 'NOT_INITIALIZED', message: 'Gateway not initialized' } };
+      return { success: false, error: { code: 'NOT_INITIALIZED', message: 'Gateway not initialized' } }
     }
-    return gatewayInstance.request<R>({ method: 'GET', path }, {}, undefined);
+    return gatewayInstance.request<R>({ method: 'GET', path }, {}, undefined)
   },
   post: async <R = unknown>(path: string, data?: unknown): Promise<ApiResponse<R>> => {
     if (!gatewayInstance) {
-      return { success: false, error: { code: 'NOT_INITIALIZED', message: 'Gateway not initialized' } };
+      return { success: false, error: { code: 'NOT_INITIALIZED', message: 'Gateway not initialized' } }
     }
-    return gatewayInstance.request<R>({ method: 'POST', path }, {}, data);
+    return gatewayInstance.request<R>({ method: 'POST', path }, {}, data)
   },
   connectWebSocket(path: string, params?: Record<string, string>): WebSocket {
     if (!gatewayInstance) {
-      throw new Error('Gateway not initialized');
+      throw new Error('Gateway not initialized')
     }
-    return gatewayInstance.connectWebSocket({ method: 'WS', path }, params);
+    return gatewayInstance.connectWebSocket({ method: 'WS', path }, params)
   },
-};
+}

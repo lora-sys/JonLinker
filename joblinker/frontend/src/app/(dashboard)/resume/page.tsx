@@ -1,110 +1,116 @@
-'use client';
+'use client'
 
-import { useState, useCallback } from 'react';
-import { Upload, FileText, Lock, Sparkles, X } from 'lucide-react';
-import { privacyStorage, initPrivacyStore } from '@/lib/privacy';
+import { FileText, Lock, Sparkles, Upload, X } from 'lucide-react'
+import { useCallback, useState } from 'react'
+
+import { initPrivacyStore, privacyStorage } from '@/lib/privacy'
 
 export default function ResumePage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [storedResumes, setStoredResumes] = useState<{ id: string; createdAt: string }[]>([]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && (droppedFile.type === 'text/plain' || droppedFile.type === 'application/pdf' || droppedFile.name.endsWith('.md'))) {
-      processFile(droppedFile);
-    } else {
-      setError('Please upload a text file (.txt, .md) or PDF');
-    }
-  }, []);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      processFile(selectedFile);
-    }
-  }, []);
+  const [isLoading, setIsLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [fileContent, setFileContent] = useState<string | null>(null)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [storedResumes, setStoredResumes] = useState<{ id: string, createdAt: string }[]>([])
 
   const processFile = async (f: File) => {
-    setFile(f);
-    setError(null);
-    const content = await f.text();
-    setFileContent(content);
-  };
+    setFile(f)
+    setError(null)
+    const content = await f.text()
+    setFileContent(content)
+  }
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const droppedFile = e.dataTransfer.files[0]
+    if (droppedFile && (droppedFile.type === 'text/plain' || droppedFile.type === 'application/pdf' || droppedFile.name.endsWith('.md'))) {
+      processFile(droppedFile)
+    }
+    else {
+      setError('Please upload a text file (.txt, .md) or PDF')
+    }
+  }, [])
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (selectedFile) {
+      processFile(selectedFile)
+    }
+  }, [])
 
   const handleUpload = async () => {
     if (!fileContent) {
-      setError('Please select a file first');
-      return;
+      setError('Please select a file first')
+      return
     }
     if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
+      setError('Password must be at least 8 characters')
+      return
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
+      setError('Passwords do not match')
+      return
     }
 
-    setIsLoading(true);
-    setError(null);
+    setIsLoading(true)
+    setError(null)
 
     try {
-      await initPrivacyStore();
-      const id = `resume-${Date.now()}`;
-      await privacyStorage.storeResume(id, fileContent, password);
-      setSuccess(true);
-      setFile(null);
-      setFileContent(null);
-      setPassword('');
-      setConfirmPassword('');
+      await initPrivacyStore()
+      const id = `resume-${Date.now()}`
+      await privacyStorage.storeResume(id, fileContent, password)
+      setSuccess(true)
+      setFile(null)
+      setFileContent(null)
+      setPassword('')
+      setConfirmPassword('')
       // Refresh stored resumes
-      const resumes = await privacyStorage.listResumes();
-      setStoredResumes(resumes);
-    } catch (err) {
-      setError('Failed to encrypt and store resume');
-    } finally {
-      setIsLoading(false);
+      const resumes = await privacyStorage.listResumes()
+      setStoredResumes(resumes)
     }
-  };
+    catch {
+      setError('Failed to encrypt and store resume')
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleDelete = async (id: string) => {
     try {
-      await privacyStorage.deleteResume(id);
-      const resumes = await privacyStorage.listResumes();
-      setStoredResumes(resumes);
-    } catch {
-      setError('Failed to delete resume');
+      await privacyStorage.deleteResume(id)
+      const resumes = await privacyStorage.listResumes()
+      setStoredResumes(resumes)
     }
-  };
+    catch {
+      setError('Failed to delete resume')
+    }
+  }
 
   const loadStoredResumes = async () => {
     try {
-      await initPrivacyStore();
-      const resumes = await privacyStorage.listResumes();
-      setStoredResumes(resumes);
-    } catch {
+      await initPrivacyStore()
+      const resumes = await privacyStorage.listResumes()
+      setStoredResumes(resumes)
+    }
+    catch {
       // Ignore
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -179,7 +185,12 @@ export default function ResumePage() {
                     <FileText className="w-4 h-4 text-slate-600" />
                     <span className="text-sm font-medium text-slate-700">{file.name}</span>
                   </div>
-                  <button onClick={() => { setFile(null); setFileContent(null); }}>
+                  <button
+                    onClick={() => {
+                      setFile(null)
+                      setFileContent(null)
+                    }}
+                  >
                     <X className="w-4 h-4 text-slate-400 hover:text-red-500" />
                   </button>
                 </div>
@@ -196,7 +207,7 @@ export default function ResumePage() {
                   <input
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={e => setPassword(e.target.value)}
                     placeholder="Min 8 characters"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -208,7 +219,7 @@ export default function ResumePage() {
                   <input
                     type="password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="Confirm your password"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -219,17 +230,19 @@ export default function ResumePage() {
                   disabled={isLoading}
                   className="w-full py-3 bg-gradient-to-r from-blue-600 to-sky-500 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-sky-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-600/25"
                 >
-                  {isLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Sparkles className="w-4 h-4 animate-spin" />
-                      Encrypting...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      <Lock className="w-4 h-4" />
-                      Encrypt & Store
-                    </span>
-                  )}
+                  {isLoading
+                    ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <Sparkles className="w-4 h-4 animate-spin" />
+                          Encrypting...
+                        </span>
+                      )
+                    : (
+                        <span className="flex items-center justify-center gap-2">
+                          <Lock className="w-4 h-4" />
+                          Encrypt & Store
+                        </span>
+                      )}
                 </button>
               </div>
             )}
@@ -242,40 +255,44 @@ export default function ResumePage() {
               Your Encrypted Resumes
             </h2>
 
-            {storedResumes.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p>No resumes stored yet</p>
-                <p className="text-sm">Upload a resume to see it here</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {storedResumes.map((resume) => (
-                  <div
-                    key={resume.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-slate-600" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">
-                          {resume.id}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Stored: {new Date(resume.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDelete(resume.id)}
-                      className="p-2 text-slate-400 hover:text-red-500"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+            {storedResumes.length === 0
+              ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>No resumes stored yet</p>
+                    <p className="text-sm">Upload a resume to see it here</p>
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              : (
+                  <div className="space-y-3">
+                    {storedResumes.map(resume => (
+                      <div
+                        key={resume.id}
+                        className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-slate-600" />
+                          <div>
+                            <p className="text-sm font-medium text-slate-700">
+                              {resume.id}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Stored:
+                              {' '}
+                              {new Date(resume.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDelete(resume.id)}
+                          className="p-2 text-slate-400 hover:text-red-500"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
           </div>
         </div>
 
@@ -294,5 +311,5 @@ export default function ResumePage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

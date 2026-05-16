@@ -1,5 +1,5 @@
-import { SettingsContent } from './SettingsContent';
+import { SettingsContent } from './SettingsContent'
 
 export default async function SettingsPage() {
-  return <SettingsContent initialUser={null} />;
+  return <SettingsContent initialUser={null} />
 }

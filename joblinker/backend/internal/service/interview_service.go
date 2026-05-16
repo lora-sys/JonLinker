@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"time"
@@ -36,7 +37,7 @@ func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt stri
 		Format:      format,
 		Location:    location,
 		Status:      model.InterviewStatusScheduled,
-		Feedback:    "null",
+		Feedback:    json.RawMessage("null"),
 	}
 	if err := s.interviewRepo.Create(interview); err != nil {
 		return nil, err

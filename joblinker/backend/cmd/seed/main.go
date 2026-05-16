@@ -207,7 +207,7 @@ func createAgents(db *gorm.DB, users []model.User) map[string]model.Agent {
 			UserID:     userID,
 			Type:       config.agentType,
 			Status:     model.AgentStatusActive,
-			ConfigJSON: string(configJSON),
+			ConfigJSON: json.RawMessage(configJSON),
 			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
 		}
@@ -232,6 +232,8 @@ func createJobs(db *gorm.DB, agents map[string]model.Agent) []model.Job {
 		{"hr.bob@techcorp.com", "Senior Software Engineer", "Build next-generation distributed systems for our cloud platform. Work with Go, Python, Kubernetes, and AWS to scale services to millions of users.", []string{"Go", "Python", "Kubernetes", "AWS", "Microservices"}, "San Francisco, CA", 180000, 250000, "hybrid"},
 		{"hr.bob@techcorp.com", "DevOps Engineer", "Scale our cloud infrastructure and improve CI/CD pipelines. Lead infrastructure automation using Terraform and Docker.", []string{"Terraform", "Docker", "CI/CD", "Linux", "AWS"}, "Remote", 150000, 200000, "remote"},
 		{"hr.bob@techcorp.com", "Frontend Engineer", "Build beautiful user experiences with React and TypeScript. Collaborate with designers to create stunning interfaces.", []string{"React", "TypeScript", "CSS", "Figma"}, "New York, NY", 140000, 190000, "onsite"},
+		{"hr.alice@techcorp.com", "Senior Backend Engineer", "Build scalable microservices architecture using Go and Rust. Design and implement high-performance APIs handling millions of requests per day.", []string{"Go", "Rust", "PostgreSQL", "gRPC", "Kubernetes"}, "San Francisco, CA", 200000, 280000, "hybrid"},
+		{"hr.alice@techcorp.com", "Site Reliability Engineer", "Design and implement monitoring, alerting, and chaos engineering practices. Build resilient infrastructure that scales globally.", []string{"Terraform", "Prometheus", "Grafana", "Kubernetes", "Linux"}, "Remote", 170000, 230000, "remote"},
 		{"hr.carol@startuphub.com", "Full Stack Developer", "Join our engineering team to build the future of work. Work across the entire stack with React, Node.js, and PostgreSQL.", []string{"React", "Node.js", "PostgreSQL", "GraphQL"}, "Austin, TX", 130000, 170000, "hybrid"},
 		{"hr.carol@startuphub.com", "Backend Engineer", "Scale backend systems to handle rapid growth. Experience with Java, Spring Boot, and event-driven architecture preferred.", []string{"Java", "Spring Boot", "Kafka", "Redis"}, "Austin, TX", 140000, 180000, "hybrid"},
 		{"hr.david@enterprise.com", "Data Scientist", "Drive data-informed decisions using machine learning and statistical analysis. Build predictive models at enterprise scale.", []string{"Python", "TensorFlow", "SQL", "Statistics"}, "Chicago, IL", 160000, 220000, "hybrid"},
@@ -264,7 +266,7 @@ func createJobs(db *gorm.DB, agents map[string]model.Agent) []model.Job {
 		job := model.Job{
 			ID:              uuid.New(),
 			AgentID:         agent.ID,
-			StructuredJSON:  string(structuredJSON),
+			StructuredJSON:  json.RawMessage(structuredJSON),
 			Status:          model.JobStatusActive,
 			CreatedAt:       time.Now(),
 			UpdatedAt:       time.Now(),
@@ -288,15 +290,20 @@ func createMatches(db *gorm.DB, agents map[string]model.Agent, jobs []model.Job)
 	matchSpecs := []matchSpec{
 		{"seeker.frank@email.com", 0, 0.92, model.MatchStatusPending, "Strong alignment: 8 years Go/Python/Kubernetes, extensive AWS experience matches requirements for Senior SWE role"},
 		{"seeker.frank@email.com", 1, 0.75, model.MatchStatusPending, "Partial DevOps alignment: Go experience relevant, but seeking more infrastructure-focused role"},
+		{"seeker.frank@email.com", 3, 0.88, model.MatchStatusPending, "Excellent Go/Rust backend match: 8 years microservices experience directly aligns with Senior Backend Engineer requirements"},
+		{"seeker.frank@email.com", 4, 0.82, model.MatchStatusMutualInterest, "Strong SRE alignment: 8 years Go experience + DevOps skills match well with SRE role"},
 		{"seeker.grace@email.com", 2, 0.88, model.MatchStatusPending, "Excellent frontend skills: React + TypeScript experience directly aligns with job needs"},
-		{"seeker.grace@email.com", 3, 0.82, model.MatchStatusMutualInterest, "Solid full-stack match: React/Node.js/PostgreSQL combination well-suited for StartupHub role"},
+		{"seeker.grace@email.com", 3, 0.78, model.MatchStatusPending, "Partial match: React experience relevant but role focuses on backend microservices"},
 		{"seeker.henry@email.com", 1, 0.95, model.MatchStatusPending, "Perfect DevOps match: 6 years Terraform/Docker/CI/CD experience exceeds requirements"},
+		{"seeker.henry@email.com", 4, 0.90, model.MatchStatusNegotiating, "Excellent SRE fit: strong infrastructure background + Kubernetes + monitoring experience"},
 		{"seeker.henry@email.com", 6, 0.65, model.MatchStatusPending, "Limited ML alignment: background more DevOps-focused than ML-focused"},
 		{"seeker.ivy@email.com", 2, 0.91, model.MatchStatusPending, "Great fit: 4 years React/Vue/Figma experience, strong design background matches Frontend Engineer role"},
-		{"seeker.ivy@email.com", 3, 0.78, model.MatchStatusMutualInterest, "Reasonable full-stack overlap: frontend skills transfer, learning Node.js is feasible"},
+		{"seeker.ivy@email.com", 3, 0.72, model.MatchStatusPending, "Frontend skills less relevant for backend microservices role"},
 		{"seeker.jack@email.com", 4, 0.94, model.MatchStatusNegotiating, "Excellent backend match: 7 years Java/Spring Boot/Kafka experience highly relevant for Backend Engineer role"},
+		{"seeker.jack@email.com", 5, 0.85, model.MatchStatusOffered, "Good backend match with Java/Kafka background"},
 		{"seeker.kate@email.com", 5, 0.89, model.MatchStatusOffered, "Strong data science background: Python/TensorFlow/SQL expertise directly matches Data Scientist requirements"},
 		{"seeker.kate@email.com", 6, 0.85, model.MatchStatusMutualInterest, "Good ML potential: Python/PyTorch background relevant for ML Engineer role"},
+		{"seeker.liam@email.com", 3, 0.80, model.MatchStatusPending, "PM background plus SQL skills could work for tech lead role"},
 		{"seeker.liam@email.com", 8, 0.87, model.MatchStatusPending, "Good PM fit: Product strategy experience + SQL skills align with Product Manager requirements"},
 	}
 
@@ -313,13 +320,14 @@ func createMatches(db *gorm.DB, agents map[string]model.Agent, jobs []model.Job)
 		job := jobs[spec.jobIndex]
 
 		match := model.Match{
-			ID:            uuid.New(),
-			SeekerAgentID: seekerAgent.ID,
-			JobID:         job.ID,
-			Score:         spec.score,
-			Status:        spec.status,
-			CreatedAt:     time.Now(),
-			UpdatedAt:     time.Now(),
+			ID:              uuid.New(),
+			SeekerAgentID:   seekerAgent.ID,
+			RecruiterAgentID: &job.AgentID,
+			JobID:           job.ID,
+			Score:           spec.score,
+			Status:          spec.status,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
 		}
 		db.Create(&match)
 		matches = append(matches, match)
@@ -374,7 +382,7 @@ func createInterviews(db *gorm.DB, matches []model.Match) {
 				"concerns":  []string{},
 			}
 			feedbackJSON, _ := json.Marshal(feedback)
-			interview.Feedback = string(feedbackJSON)
+			interview.Feedback = json.RawMessage(feedbackJSON)
 		}
 
 		db.Create(&interview)
@@ -422,7 +430,7 @@ func createOffers(db *gorm.DB, matches []model.Match) {
 		offer := model.Offer{
 			ID:               uuid.New(),
 			MatchID:          matches[o.matchIndex].ID,
-			CompensationJSON: string(compensationJSON),
+			CompensationJSON: json.RawMessage(compensationJSON),
 			StartDate:        startDate,
 			Status:           o.status,
 			CreatedAt:        time.Now(),

@@ -1,47 +1,49 @@
-'use client';
+'use client'
 
-import { useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title?: string;
-  children: React.ReactNode;
-  className?: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  isOpen: boolean
+  onClose: () => void
+  title?: string
+  children: React.ReactNode
+  className?: string
+  size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
 export function Modal({ isOpen, onClose, title, children, className = '', size = 'md' }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null)
   const sizeClass = {
     sm: 'max-w-sm',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
-  }[size];
+  }[size]
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+      if (e.key === 'Escape')
+        onClose()
+    }
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleEscape)
+      document.body.style.overflow = 'hidden'
     }
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [isOpen, onClose])
 
-  if (!isOpen) return null;
+  if (!isOpen)
+    return null
 
   return (
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={(e) => e.target === overlayRef.current && onClose()}
+      onClick={e => e.target === overlayRef.current && onClose()}
     >
       <div className={`bg-white rounded-xl shadow-2xl ${sizeClass} w-full mx-4 max-h-[90vh] overflow-auto ${className}`}>
         {title && (
@@ -60,5 +62,5 @@ export function Modal({ isOpen, onClose, title, children, className = '', size =
         </div>
       </div>
     </div>
-  );
+  )
 }

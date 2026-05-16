@@ -302,7 +302,7 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 		for _, j := range jobs {
 			var info JobInfo
 			info.ID = j.ID.String()
-			json.Unmarshal([]byte(j.StructuredJSON), &info)
+			json.Unmarshal(j.StructuredJSON, &info)
 			results = append(results, info)
 		}
 		return QueryJobsOutput{Jobs: results}, nil
@@ -317,7 +317,7 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 		var results []CandidateInfo
 		for _, a := range agents {
 			results = append(results, CandidateInfo{
-				ID: a.ID.String(), Name: a.ConfigJSON,
+				ID: a.ID.String(), Name: a.ID.String(),
 				Experience: 0, Location: "",
 			})
 		}
@@ -336,7 +336,7 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 		}
 		return GetCandidateOutput{
 			Candidate: CandidateDetail{
-				ID: agent.ID.String(), Name: agent.ConfigJSON,
+				ID: agent.ID.String(), Name: agent.ID.String(),
 			},
 		}, nil
 	})

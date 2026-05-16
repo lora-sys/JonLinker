@@ -1,27 +1,29 @@
-import type { Job } from '@/types';
-import { MapPin, DollarSign } from 'lucide-react';
+import { DollarSign, MapPin } from 'lucide-react'
+
+import type { Job } from '@/types'
 
 interface JobCardProps {
-  job: Job;
-  onClick?: () => void;
+  job: Job
+  onClick?: () => void
 }
 
 export function JobCard({ job, onClick }: JobCardProps) {
-  const { structured } = job;
-  const salaryRange = structured?.salary_range;
+  const { structured } = job
+  const salaryRange = structured?.salary_range
 
-  const formatSalary = (range: { min: number; max: number; currency: string } | undefined) => {
-    if (!range) return null;
-    const min = range.min / 1000;
-    const max = range.max / 1000;
-    return `$${min}k - $${max}k`;
-  };
+  const formatSalary = (range: { min: number, max: number, currency: string } | undefined) => {
+    if (!range)
+      return null
+    const min = range.min / 1000
+    const max = range.max / 1000
+    return `$${min}k - $${max}k`
+  }
 
   const workTypeLabels: Record<string, string> = {
     remote: 'Remote',
     hybrid: 'Hybrid',
     onsite: 'On-site',
-  };
+  }
 
   return (
     <div
@@ -71,13 +73,14 @@ export function JobCard({ job, onClick }: JobCardProps) {
           ))}
           {structured.requirements.length > 4 && (
             <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">
-              +{structured.requirements.length - 4}
+              +
+              {structured.requirements.length - 4}
             </span>
           )}
         </div>
       )}
     </div>
-  );
+  )
 }
 
-export default JobCard;
+export default JobCard

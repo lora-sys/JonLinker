@@ -1,68 +1,73 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Sparkles, ArrowLeft, Loader2, FileText, Check, X } from 'lucide-react';
-import { apiClient } from '@/lib/api_client';
+import { ArrowLeft, Check, FileText, Loader2, Sparkles, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+import { apiClient } from '@/lib/api_client'
 
 export default function ResumeGeneratePage() {
-  const router = useRouter();
-  const [step, setStep] = useState<'input' | 'generating' | 'result'>('input');
-  const [userInfo, setUserInfo] = useState('');
-  const [resume, setResume] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
+  const router = useRouter()
+  const [step, setStep] = useState<'input' | 'generating' | 'result'>('input')
+  const [userInfo, setUserInfo] = useState('')
+  const [resume, setResume] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notification, setNotification] = useState<string | null>(null)
 
   const handleGenerate = async () => {
     if (!userInfo.trim()) {
-      setError('Please provide some information about yourself');
-      return;
+      setError('Please provide some information about yourself')
+      return
     }
 
-    setStep('generating');
-    setError(null);
+    setStep('generating')
+    setError(null)
 
     try {
-      const data = await apiClient.post<{ resume: any; raw: string }>('/api/resumes/generate', {
+      const data = await apiClient.post<{ resume: any, raw: string }>('/api/resumes/generate', {
         user_info: userInfo,
-      });
-      setResume(data.resume || JSON.parse(data.raw || '{}'));
-      setStep('result');
-    } catch (err) {
-      setError('Failed to generate resume. Please try again.');
-      setStep('input');
+      })
+      setResume(data.resume || JSON.parse(data.raw || '{}'))
+      setStep('result')
     }
-  };
+    catch {
+      setError('Failed to generate resume. Please try again.')
+      setStep('input')
+    }
+  }
 
   const handleSaveToStorage = async () => {
-    if (!resume) return;
+    if (!resume)
+      return
 
     try {
       // Import privacy storage
-      const { privacyStorage, initPrivacyStore } = await import('@/lib/privacy');
-      await initPrivacyStore();
+      const { privacyStorage, initPrivacyStore } = await import('@/lib/privacy')
+      await initPrivacyStore()
 
-      const password = prompt('Enter a password to encrypt your resume (min 8 characters):');
+      // eslint-disable-next-line no-alert
+      const password = prompt('Enter a password to encrypt your resume (min 8 characters):')
       if (!password || password.length < 8) {
-        setNotification('Password must be at least 8 characters');
-        setTimeout(() => setNotification(null), 3000);
-        return;
+        setNotification('Password must be at least 8 characters')
+        setTimeout(setNotification, 3000, null)
+        return
       }
 
-      const id = `ai-resume-${Date.now()}`;
-      const resumeText = JSON.stringify(resume, null, 2);
-      await privacyStorage.storeResume(id, resumeText, password);
+      const id = `ai-resume-${Date.now()}`
+      const resumeText = JSON.stringify(resume, null, 2)
+      await privacyStorage.storeResume(id, resumeText, password)
 
-      setNotification('Resume saved to your encrypted local storage!');
+      setNotification('Resume saved to your encrypted local storage!')
       setTimeout(() => {
-        setNotification(null);
-        router.push('/resume');
-      }, 1500);
-    } catch (err) {
-      setNotification('Failed to save resume');
-      setTimeout(() => setNotification(null), 3000);
+        setNotification(null)
+        router.push('/resume')
+      }, 1500)
     }
-  };
+    catch {
+      setNotification('Failed to save resume')
+      setTimeout(setNotification, 3000, null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -104,7 +109,7 @@ export default function ResumeGeneratePage() {
 
             <textarea
               value={userInfo}
-              onChange={(e) => setUserInfo(e.target.value)}
+              onChange={e => setUserInfo(e.target.value)}
               placeholder="Example:
 Name: John Doe
 Email: john@example.com
@@ -182,7 +187,13 @@ Skills: Go, Python, JavaScript, PostgreSQL, Docker"
                       {resume.experience.map((exp: any, i: number) => (
                         <div key={i} className="border-l-2 border-blue-200 pl-4">
                           <p className="font-medium text-slate-900">{exp.title}</p>
-                          <p className="text-slate-600">{exp.company} • {exp.duration}</p>
+                          <p className="text-slate-600">
+                            {exp.company}
+                            {' '}
+                            •
+                            {' '}
+                            {exp.duration}
+                          </p>
                           {exp.bullets && (
                             <ul className="mt-2 space-y-1">
                               {exp.bullets.map((bullet: string, j: number) => (
@@ -206,7 +217,13 @@ Skills: Go, Python, JavaScript, PostgreSQL, Docker"
                       {resume.education.map((edu: any, i: number) => (
                         <div key={i}>
                           <p className="font-medium text-slate-900">{edu.degree}</p>
-                          <p className="text-slate-600">{edu.institution} • {edu.year}</p>
+                          <p className="text-slate-600">
+                            {edu.institution}
+                            {' '}
+                            •
+                            {' '}
+                            {edu.year}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -248,5 +265,5 @@ Skills: Go, Python, JavaScript, PostgreSQL, Docker"
         )}
       </div>
     </div>
-  );
+  )
 }

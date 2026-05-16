@@ -1,67 +1,77 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
+import { useState } from 'react'
+
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 
 interface ScheduleModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen: boolean
+  onClose: () => void
   onSchedule: (data: {
-    scheduledAt: string;
-    format: string;
-    location: string;
-  }) => Promise<void>;
-  matchId: string;
+    scheduledAt: string
+    format: string
+    location: string
+  }) => Promise<void>
+  matchId: string
   defaultValues?: {
-    scheduledAt?: string;
-    format?: string;
-    location?: string;
-  };
-  mode?: 'schedule' | 'reschedule';
+    scheduledAt?: string
+    format?: string
+    location?: string
+  }
+  mode?: 'schedule' | 'reschedule'
 }
 
 export function ScheduleModal({
   isOpen,
   onClose,
   onSchedule,
-  matchId,
   defaultValues,
   mode = 'schedule',
 }: ScheduleModalProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     scheduledAt: defaultValues?.scheduledAt || '',
     format: defaultValues?.format || 'video',
     location: defaultValues?.location || '',
-  });
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+    e.preventDefault()
+    setLoading(true)
     try {
-      await onSchedule(formData);
-      onClose();
-    } catch (err) {
-      console.error('Failed to schedule interview:', err);
-    } finally {
-      setLoading(false);
+      await onSchedule(formData)
+      onClose()
     }
-  };
+    catch (err) {
+      console.error('Failed to schedule interview:', err)
+    }
+    finally {
+      setLoading(false)
+    }
+  }
 
   const timeSlots = [
-    '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00',
-  ];
+    '09:00',
+    '10:00',
+    '11:00',
+    '12:00',
+    '13:00',
+    '14:00',
+    '15:00',
+    '16:00',
+    '17:00',
+  ]
 
   const formats = [
     { value: 'video', label: 'Video Call', icon: '📹' },
     { value: 'phone', label: 'Phone Call', icon: '📞' },
     { value: 'onsite', label: 'On-site', icon: '🏢' },
-  ];
+  ]
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split('T')[0];
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const minDate = tomorrow.toISOString().split('T')[0]
 
   return (
     <Modal
@@ -80,12 +90,11 @@ export function ScheduleModal({
             required
             min={minDate}
             value={formData.scheduledAt.split('T')[0]}
-            onChange={(e) =>
-              setFormData((prev) => ({
+            onChange={e =>
+              setFormData(prev => ({
                 ...prev,
                 scheduledAt: e.target.value ? `${e.target.value}T${prev.scheduledAt.split('T')[1] || '10:00'}` : '',
-              }))
-            }
+              }))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
@@ -95,18 +104,17 @@ export function ScheduleModal({
             Time
           </label>
           <div className="grid grid-cols-3 gap-2">
-            {timeSlots.map((slot) => (
+            {timeSlots.map(slot => (
               <button
                 key={slot}
                 type="button"
                 onClick={() =>
-                  setFormData((prev) => ({
+                  setFormData(prev => ({
                     ...prev,
                     scheduledAt: prev.scheduledAt
                       ? `${prev.scheduledAt.split('T')[0]}T${slot}:00`
                       : `${new Date().toISOString().split('T')[0]}T${slot}:00`,
-                  }))
-                }
+                  }))}
                 className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
                   formData.scheduledAt.includes(slot)
                     ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -124,11 +132,11 @@ export function ScheduleModal({
             Format
           </label>
           <div className="grid grid-cols-3 gap-3">
-            {formats.map((fmt) => (
+            {formats.map(fmt => (
               <button
                 key={fmt.value}
                 type="button"
-                onClick={() => setFormData((prev) => ({ ...prev, format: fmt.value }))}
+                onClick={() => setFormData(prev => ({ ...prev, format: fmt.value }))}
                 className={`p-3 rounded-lg border-2 text-center transition-colors ${
                   formData.format === fmt.value
                     ? 'border-blue-500 bg-blue-50'
@@ -151,9 +159,8 @@ export function ScheduleModal({
               type="text"
               required
               value={formData.location}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, location: e.target.value }))
-              }
+              onChange={e =>
+                setFormData(prev => ({ ...prev, location: e.target.value }))}
               placeholder="Enter office address"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -168,9 +175,8 @@ export function ScheduleModal({
             <input
               type="url"
               value={formData.location}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, location: e.target.value }))
-              }
+              onChange={e =>
+                setFormData(prev => ({ ...prev, location: e.target.value }))}
               placeholder="https://meet.example.com/..."
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -187,5 +193,5 @@ export function ScheduleModal({
         </div>
       </form>
     </Modal>
-  );
+  )
 }

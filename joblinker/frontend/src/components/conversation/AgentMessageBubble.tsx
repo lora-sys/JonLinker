@@ -1,18 +1,18 @@
-'use client';
+'use client'
 
-import { User, Bot } from 'lucide-react';
+import { Bot, User } from 'lucide-react'
 
-export type AgentRole = 'recruiter' | 'seeker' | 'system';
+export type AgentRole = 'recruiter' | 'seeker' | 'system'
 
 interface AgentMessageBubbleProps {
-  content: string;
-  agentRole: AgentRole;
-  agentName?: string;
-  timestamp?: Date | string;
-  intent?: string;
+  content: string
+  agentRole: AgentRole
+  agentName?: string
+  timestamp?: Date | string
+  intent?: string
 }
 
-const roleStyles: Record<AgentRole, { bg: string; border: string; align: string; accent: string }> = {
+const roleStyles: Record<AgentRole, { bg: string, border: string, align: string, accent: string }> = {
   recruiter: {
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
@@ -31,7 +31,7 @@ const roleStyles: Record<AgentRole, { bg: string; border: string; align: string;
     align: 'self-center',
     accent: 'text-gray-600',
   },
-};
+}
 
 const intentColors: Record<string, string> = {
   INTRODUCTION: 'bg-blue-100 text-blue-700',
@@ -42,7 +42,7 @@ const intentColors: Record<string, string> = {
   DECLINE: 'bg-red-100 text-red-700',
   SCHEDULE: 'bg-blue-100 text-blue-700',
   INQUIRY: 'bg-gray-100 text-gray-600',
-};
+}
 
 export function AgentMessageBubble({
   content,
@@ -51,17 +51,18 @@ export function AgentMessageBubble({
   timestamp,
   intent,
 }: AgentMessageBubbleProps) {
-  const style = roleStyles[agentRole];
-  const isSystem = agentRole === 'system';
+  const style = roleStyles[agentRole]
+  const isSystem = agentRole === 'system'
 
   const formatTime = (ts: Date | string) => {
     try {
-      const d = typeof ts === 'string' ? new Date(ts) : ts;
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
+      const d = typeof ts === 'string' ? new Date(ts) : ts
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
-  };
+    catch {
+      return ''
+    }
+  }
 
   if (isSystem) {
     return (
@@ -70,7 +71,7 @@ export function AgentMessageBubble({
           {content}
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -79,12 +80,15 @@ export function AgentMessageBubble({
         {/* Avatar */}
         <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
           agentRole === 'recruiter' ? 'bg-emerald-200' : 'bg-blue-200'
-        }`}>
-          {agentRole === 'recruiter' ? (
-            <User className={`w-4 h-4 ${style.accent}`} />
-          ) : (
-            <Bot className={`w-4 h-4 ${style.accent}`} />
-          )}
+        }`}
+        >
+          {agentRole === 'recruiter'
+            ? (
+                <User className={`w-4 h-4 ${style.accent}`} />
+              )
+            : (
+                <Bot className={`w-4 h-4 ${style.accent}`} />
+              )}
         </div>
 
         {/* Bubble */}
@@ -107,7 +111,8 @@ export function AgentMessageBubble({
             <div className="mt-1.5">
               <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${
                 intentColors[intent] || 'bg-gray-100 text-gray-600'
-              }`}>
+              }`}
+              >
                 {intent}
               </span>
             </div>
@@ -115,5 +120,5 @@ export function AgentMessageBubble({
         </div>
       </div>
     </div>
-  );
+  )
 }

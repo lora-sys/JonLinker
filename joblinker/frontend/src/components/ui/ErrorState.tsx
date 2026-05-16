@@ -1,14 +1,15 @@
-'use client';
+'use client'
 
-import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
-import Button from './Button';
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import React from 'react'
+
+import Button from './Button'
 
 interface ErrorStateProps {
-  title?: string;
-  message?: string;
-  onRetry?: () => void;
-  className?: string;
+  title?: string
+  message?: string
+  onRetry?: () => void
+  className?: string
 }
 
 export default function ErrorState({
@@ -31,5 +32,5 @@ export default function ErrorState({
         </Button>
       )}
     </div>
-  );
+  )
 }

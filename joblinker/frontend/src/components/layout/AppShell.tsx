@@ -1,16 +1,18 @@
-'use client';
+'use client'
 
-import { ReactNode } from 'react';
-import { Header } from './Header';
-import { Sidebar } from './Sidebar';
-import { useUIStore } from '@/stores/ui';
+import type { ReactNode } from 'react'
+
+import { useUIStore } from '@/stores/ui'
+
+import { Header } from './Header'
+import { Sidebar } from './Sidebar'
 
 interface AppShellProps {
-  children: ReactNode;
+  children: ReactNode
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const { sidebarOpen } = useUIStore();
+  const { sidebarOpen } = useUIStore()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -26,5 +28,5 @@ export function AppShell({ children }: AppShellProps) {
         </main>
       </div>
     </div>
-  );
+  )
 }

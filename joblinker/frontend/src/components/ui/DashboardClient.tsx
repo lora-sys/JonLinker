@@ -1,43 +1,48 @@
-'use client';
+'use client'
 
-import { useEffect, useRef, useState } from 'react';
-import { useAuthStore } from '@/stores/auth';
-import { useAgentStore } from '@/stores/agent';
-import { useMatchStore } from '@/stores/match';
-import { apiClient } from '@/lib/api_client';
-import Link from 'next/link';
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Users,
   ArrowLeftRight,
-  CheckCircle2,
-  UserPlus,
-  Sparkles,
-  Plus,
-  LayoutGrid,
   Briefcase,
-  FileText,
-  Calendar,
-  MessageSquare,
   Building2,
-} from 'lucide-react';
-import { BentoGrid, BentoCard } from '@/components/ui/BentoGrid';
-import { AnimatedTabs } from '@/components/ui/AnimatedTabs';
-import FAB from '@/components/ui/FAB';
-import StatusDot from '@/components/ui/StatusDot';
-import { motion, AnimatePresence } from 'framer-motion';
+  Calendar,
+  CheckCircle2,
+  FileText,
+  LayoutGrid,
+  MessageSquare,
+  Plus,
+  Sparkles,
+  UserPlus,
+  Users,
+} from 'lucide-react'
+import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
 
-function RevealCard({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
-  const [visible, setVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+import { AnimatedTabs } from '@/components/ui/AnimatedTabs'
+import { BentoCard, BentoGrid } from '@/components/ui/BentoGrid'
+import FAB from '@/components/ui/FAB'
+import StatusDot from '@/components/ui/StatusDot'
+import { apiClient } from '@/lib/api_client'
+import { useAgentStore } from '@/stores/agent'
+import { useAuthStore } from '@/stores/auth'
+import { useMatchStore } from '@/stores/match'
+
+function RevealCard({ children, delay = 0, className = '' }: { children: React.ReactNode, delay?: number, className?: string }) {
+  const [visible, setVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => { if (entries[0]?.isIntersecting) setVisible(true); },
-      { threshold: 0.1 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
+      (entries) => {
+        if (entries[0]?.isIntersecting)
+          setVisible(true)
+      },
+      { threshold: 0.1 },
+    )
+    if (ref.current)
+      observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <motion.div
@@ -49,34 +54,39 @@ function RevealCard({ children, delay = 0, className = '' }: { children: React.R
     >
       {children}
     </motion.div>
-  );
+  )
 }
 
-function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
-  const [display, setDisplay] = useState(0);
+function AnimatedNumber({ value, suffix = '' }: { value: number, suffix?: string }) {
+  const [display, setDisplay] = useState(0)
 
   useEffect(() => {
-    let start = 0;
-    const end = value;
-    const duration = 1000;
-    const startTime = Date.now();
+    const end = value
+    const duration = 1000
+    const startTime = Date.now()
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.floor(eased * end));
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - (1 - progress) ** 3
+      setDisplay(Math.floor(eased * end))
 
-      if (progress < 1) requestAnimationFrame(animate);
-    };
+      if (progress < 1)
+        requestAnimationFrame(animate)
+    }
 
-    requestAnimationFrame(animate);
-  }, [value]);
+    requestAnimationFrame(animate)
+  }, [value])
 
-  return <span>{display}{suffix}</span>;
+  return (
+    <span>
+      {display}
+      {suffix}
+    </span>
+  )
 }
 
-function StatCard({ delay, icon, label, value, suffix = '', color }: { delay: number; icon: React.ReactNode; label: string; value: number; suffix?: string; color: string }) {
+function StatCard({ delay, icon, label, value, suffix = '', color }: { delay: number, icon: React.ReactNode, label: string, value: number, suffix?: string, color: string }) {
   return (
     <RevealCard delay={delay}>
       <BentoCard className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
@@ -93,10 +103,10 @@ function StatCard({ delay, icon, label, value, suffix = '', color }: { delay: nu
         </div>
       </BentoCard>
     </RevealCard>
-  );
+  )
 }
 
-function NavCard({ delay, icon, label, href, description, color }: { delay: number; icon: React.ReactNode; label: string; href: string; description: string; color: string }) {
+function NavCard({ delay, icon, label, href, description, color }: { delay: number, icon: React.ReactNode, label: string, href: string, description: string, color: string }) {
   return (
     <RevealCard delay={delay}>
       <Link href={href}>
@@ -113,10 +123,10 @@ function NavCard({ delay, icon, label, href, description, color }: { delay: numb
         </BentoCard>
       </Link>
     </RevealCard>
-  );
+  )
 }
 
-function AgentCard({ agent, index }: { agent: any; index: number }) {
+function AgentCard({ agent, index }: { agent: any, index: number }) {
   return (
     <RevealCard delay={index}>
       <motion.div
@@ -132,15 +142,15 @@ function AgentCard({ agent, index }: { agent: any; index: number }) {
         </div>
       </motion.div>
     </RevealCard>
-  );
+  )
 }
 
-function MatchCard({ match, index }: { match: any; index: number }) {
+function MatchCard({ match, index }: { match: any, index: number }) {
   const statusColors = {
     mutual_interest: 'bg-green-100 text-green-700',
     pending: 'bg-yellow-100 text-yellow-700',
     declined: 'bg-slate-200 text-slate-600',
-  };
+  }
 
   return (
     <RevealCard delay={index}>
@@ -150,8 +160,15 @@ function MatchCard({ match, index }: { match: any; index: number }) {
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium text-slate-900">Match #{match.id.slice(0, 8)}</p>
-            <p className="text-sm text-slate-500">Score: {(match.score * 100).toFixed(1)}%</p>
+            <p className="font-medium text-slate-900">
+              Match #
+              {match.id.slice(0, 8)}
+            </p>
+            <p className="text-sm text-slate-500">
+              Score:
+              {(match.score * 100).toFixed(1)}
+              %
+            </p>
           </div>
           <span className={`px-3 py-1 text-xs font-medium rounded-full ${statusColors[match.status as keyof typeof statusColors] || 'bg-slate-200 text-slate-600'}`}>
             {match.status.replace('_', ' ')}
@@ -159,10 +176,10 @@ function MatchCard({ match, index }: { match: any; index: number }) {
         </div>
       </motion.div>
     </RevealCard>
-  );
+  )
 }
 
-function EmptyState({ icon, title, description, actionLabel, href }: { icon: React.ReactNode; title: string; description: string; actionLabel: string; href: string }) {
+function EmptyState({ icon, title, actionLabel, href }: { icon: React.ReactNode, title: string, description: string, actionLabel: string, href: string }) {
   return (
     <div className="text-center py-12">
       <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-sky-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -177,14 +194,14 @@ function EmptyState({ icon, title, description, actionLabel, href }: { icon: Rea
         {actionLabel}
       </Link>
     </div>
-  );
+  )
 }
 
 function DashboardContent() {
-  const { user } = useAuthStore();
-  const { agents, setAgents } = useAgentStore();
-  const { matches, setMatches } = useMatchStore();
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuthStore()
+  const { agents, setAgents } = useAgentStore()
+  const { matches, setMatches } = useMatchStore()
+  const [, setLoading] = useState(true)
 
   // Fetch agents and matches on mount
   useEffect(() => {
@@ -193,20 +210,22 @@ function DashboardContent() {
         const [agentsData, matchesData] = await Promise.all([
           apiClient.get<any[]>('/api/agents'),
           apiClient.get<any[]>('/api/matches'),
-        ]);
-        setAgents(agentsData || []);
-        setMatches(matchesData || []);
-      } catch (err) {
-        console.error('Failed to load dashboard data:', err);
-      } finally {
-        setLoading(false);
+        ])
+        setAgents(agentsData || [])
+        setMatches(matchesData || [])
+      }
+      catch (err) {
+        console.error('Failed to load dashboard data:', err)
+      }
+      finally {
+        setLoading(false)
       }
     }
-    loadData();
-  }, [setAgents, setMatches]);
+    loadData()
+  }, [setAgents, setMatches])
 
-  const activeAgents = agents.filter((a) => a.status === 'active').length;
-  const pendingMatches = matches.filter((m) => m.status === 'pending').length;
+  const activeAgents = agents.filter(a => a.status === 'active').length
+  const pendingMatches = matches.filter(m => m.status === 'pending').length
 
   const statsTabs = [
     {
@@ -298,21 +317,23 @@ function DashboardContent() {
                     Create Agent
                   </Link>
                 </div>
-                {agents.length === 0 ? (
-                  <EmptyState
-                    icon={<Users className="w-8 h-8 text-blue-600" />}
-                    title="No agents created yet"
-                    description="Create your first agent to start matching"
-                    actionLabel="Create Your First Agent"
-                    href="/agents/create"
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {agents.slice(0, 3).map((agent, i) => (
-                      <AgentCard key={agent.id} agent={agent} index={i} />
-                    ))}
-                  </div>
-                )}
+                {agents.length === 0
+                  ? (
+                      <EmptyState
+                        icon={<Users className="w-8 h-8 text-blue-600" />}
+                        title="No agents created yet"
+                        description="Create your first agent to start matching"
+                        actionLabel="Create Your First Agent"
+                        href="/agents/create"
+                      />
+                    )
+                  : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {agents.slice(0, 3).map((agent, i) => (
+                          <AgentCard key={agent.id} agent={agent} index={i} />
+                        ))}
+                      </div>
+                    )}
               </BentoCard>
 
               <BentoCard span="wide" className="p-6">
@@ -325,21 +346,23 @@ function DashboardContent() {
                     View All
                   </Link>
                 </div>
-                {matches.length === 0 ? (
-                  <EmptyState
-                    icon={<ArrowLeftRight className="w-8 h-8 text-sky-600" />}
-                    title="No matches yet"
-                    description="Matches will appear when agents find opportunities"
-                    actionLabel="View Matches"
-                    href="/matches"
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {matches.slice(0, 4).map((match, i) => (
-                      <MatchCard key={match.id} match={match} index={i} />
-                    ))}
-                  </div>
-                )}
+                {matches.length === 0
+                  ? (
+                      <EmptyState
+                        icon={<ArrowLeftRight className="w-8 h-8 text-sky-600" />}
+                        title="No matches yet"
+                        description="Matches will appear when agents find opportunities"
+                        actionLabel="View Matches"
+                        href="/matches"
+                      />
+                    )
+                  : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {matches.slice(0, 4).map((match, i) => (
+                          <MatchCard key={match.id} match={match} index={i} />
+                        ))}
+                      </div>
+                    )}
               </BentoCard>
             </BentoGrid>
           </motion.div>
@@ -392,7 +415,7 @@ function DashboardContent() {
         </AnimatePresence>
       ),
     },
-  ];
+  ]
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
@@ -411,7 +434,7 @@ function DashboardContent() {
       <AnimatedTabs tabs={statsTabs} defaultTab="overview" />
       <FAB label="Quick Actions" />
     </div>
-  );
+  )
 }
 
-export default DashboardContent;
+export default DashboardContent

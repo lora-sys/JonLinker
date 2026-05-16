@@ -1,66 +1,69 @@
-'use client';
+'use client'
 
-import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
-import { Mail, Lock, Eye, EyeOff, UserPlus, User, Briefcase } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
-import { BackgroundBeams } from '@/components/ui/BackgroundBeams';
+import { Briefcase, Eye, EyeOff, Lock, Mail, User, UserPlus } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
+
+import { BackgroundBeams } from '@/components/ui/BackgroundBeams'
+import { useAuthStore } from '@/stores/auth'
 
 function RegisterForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const setAuth = useAuthStore(state => state.setAuth)
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState<'seeker' | 'recruiter'>(
-    (searchParams.get('role') as 'seeker' | 'recruiter') || 'seeker'
-  );
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+    (searchParams.get('role') as 'seeker' | 'recruiter') || 'seeker',
+  )
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault()
+    setError('')
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
+      setError('Passwords do not match')
+      return
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
+      setError('Password must be at least 8 characters')
+      return
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
 
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, role }),
-      });
+      })
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Registration failed');
+        const data = await response.json()
+        throw new Error(data.error || 'Registration failed')
       }
 
-      const data = await response.json();
+      const data = await response.json()
       // API route sets cookie server-side - just redirect
-      setAuth(data.user, data.token);
-      router.push('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
-    } finally {
-      setIsLoading(false);
+      setAuth(data.user, data.token)
+      router.push('/dashboard')
     }
-  };
+    catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="bg-white/80 backdrop-blur-xl border border-white/20 rounded-2xl shadow-xl p-8">
@@ -82,7 +85,7 @@ function RegisterForm() {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={e => setEmail(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-text"
               placeholder="you@example.com"
               required
@@ -100,7 +103,7 @@ function RegisterForm() {
               id="password"
               type={showPassword ? 'text' : 'password'}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               className="w-full pl-12 pr-12 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-text"
               placeholder="••••••••"
               required
@@ -125,7 +128,7 @@ function RegisterForm() {
               id="confirmPassword"
               type={showPassword ? 'text' : 'password'}
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={e => setConfirmPassword(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-text"
               placeholder="••••••••"
               required
@@ -178,13 +181,14 @@ function RegisterForm() {
       </form>
 
       <p className="mt-6 text-center text-sm text-slate-600">
-        Already have an account?{' '}
+        Already have an account?
+        {' '}
         <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium transition-colors cursor-pointer">
           Sign in
         </Link>
       </p>
     </div>
-  );
+  )
 }
 
 function RegisterFallback() {
@@ -198,7 +202,7 @@ function RegisterFallback() {
         <div className="h-12 bg-slate-100 rounded-xl"></div>
       </div>
     </div>
-  );
+  )
 }
 
 export default function RegisterPage() {
@@ -236,5 +240,5 @@ export default function RegisterPage() {
         </div>
       </main>
     </div>
-  );
+  )
 }

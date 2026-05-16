@@ -1,9 +1,9 @@
-import React from 'react';
+import React from 'react'
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
-  width?: string | number;
-  height?: string | number;
-  variant?: 'text' | 'circular' | 'rectangular';
+  width?: string | number
+  height?: string | number
+  variant?: 'text' | 'circular' | 'rectangular'
 }
 
 export default function Skeleton({
@@ -18,7 +18,7 @@ export default function Skeleton({
     text: 'rounded',
     circular: 'rounded-full',
     rectangular: 'rounded-lg',
-  };
+  }
 
   return (
     <div
@@ -34,7 +34,7 @@ export default function Skeleton({
       }}
       {...props}
     />
-  );
+  )
 }
 
 // Preset skeleton patterns
@@ -48,7 +48,7 @@ export function SkeletonCard() {
         <Skeleton width={80} height={24} variant="text" />
       </div>
     </div>
-  );
+  )
 }
 
 export function SkeletonTableRow() {
@@ -61,5 +61,5 @@ export function SkeletonTableRow() {
       </div>
       <Skeleton width={80} height={24} />
     </div>
-  );
+  )
 }

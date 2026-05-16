@@ -240,8 +240,8 @@ func (e *ToolExecutor) executeQueryJobs(ctx context.Context, args map[string]int
 	for i, job := range jobList {
 		// Parse StructuredJSON to extract job details
 		var structuredData map[string]interface{}
-		if job.StructuredJSON != "" {
-			json.Unmarshal([]byte(job.StructuredJSON), &structuredData)
+		if len(job.StructuredJSON) > 0 {
+			json.Unmarshal(job.StructuredJSON, &structuredData)
 		}
 		title := ""
 		jobLocation := ""
@@ -303,8 +303,8 @@ func (e *ToolExecutor) executeGetCandidate(ctx context.Context, args map[string]
 		}
 		// Parse ConfigJSON to extract candidate details
 		var configData map[string]interface{}
-		if agent.ConfigJSON != "" {
-			json.Unmarshal([]byte(agent.ConfigJSON), &configData)
+		if len(agent.ConfigJSON) > 0 {
+			json.Unmarshal(agent.ConfigJSON, &configData)
 		}
 		name := ""
 		if agent.User != nil {
@@ -383,7 +383,7 @@ func (e *ToolExecutor) executeCreateOffer(ctx context.Context, args map[string]i
 	offer := &model.Offer{
 		ID:               uuid.New(),
 		MatchID:          matchID,
-		CompensationJSON: string(compensationJSON),
+		CompensationJSON: json.RawMessage(compensationJSON),
 		StartDate:        startDate,
 		Status:           model.OfferStatusPending,
 	}
@@ -507,8 +507,8 @@ func (e *ToolExecutor) executeSearchCandidates(ctx context.Context, args map[str
 	for i, agent := range candidateList {
 		// Parse ConfigJSON to extract candidate details
 		var configData map[string]interface{}
-		if agent.ConfigJSON != "" {
-			json.Unmarshal([]byte(agent.ConfigJSON), &configData)
+		if len(agent.ConfigJSON) > 0 {
+			json.Unmarshal(agent.ConfigJSON, &configData)
 		}
 		name := ""
 		if agent.User != nil {

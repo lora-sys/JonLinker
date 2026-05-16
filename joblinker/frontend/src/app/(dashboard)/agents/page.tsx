@@ -1,9 +1,11 @@
-import { AgentsContent } from './AgentsContent';
-import { fetchServerWithResult } from '@/lib/api-server';
-import type { Agent } from '@/types';
+import type { Agent } from '@/types'
+
+import { fetchServerWithResult } from '@/lib/api-server'
+
+import { AgentsContent } from './AgentsContent'
 
 export default async function AgentsPage() {
-  const { data: agents, error } = await fetchServerWithResult<Agent[]>('/api/agents');
+  const { data: agents, error } = await fetchServerWithResult<Agent[]>('/api/agents')
 
   return (
     <AgentsContent
@@ -11,5 +13,5 @@ export default async function AgentsPage() {
       isLoading={false}
       initialError={error}
     />
-  );
+  )
 }

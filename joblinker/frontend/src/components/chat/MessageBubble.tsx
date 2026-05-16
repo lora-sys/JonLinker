@@ -1,20 +1,21 @@
-'use client';
+'use client'
 
 interface MessageBubbleProps {
-  content: string;
-  intent: string;
-  timestamp: string;
-  sender?: 'self' | 'remote';
+  content: string
+  intent: string
+  timestamp: string
+  sender?: 'self' | 'remote'
 }
 
 export function MessageBubble({ content, intent, timestamp, sender = 'remote' }: MessageBubbleProps) {
   const formatTime = (ts: string) => {
     try {
-      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
-  };
+    catch {
+      return ''
+    }
+  }
 
   const intentGradients: Record<string, string> = {
     INTRODUCTION: 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200',
@@ -26,16 +27,17 @@ export function MessageBubble({ content, intent, timestamp, sender = 'remote' }:
     SCHEDULE: 'bg-gradient-to-br from-blue-50 to-cyan-100 border-blue-200',
     CONFIRM: 'bg-gradient-to-br from-green-100 to-emerald-100 border-green-300',
     INQUIRY: 'bg-gradient-to-br from-gray-50 to-slate-100 border-gray-200',
-  };
+  }
 
-  const alignment = sender === 'self' ? 'justify-end' : 'justify-start';
-  const senderGradient = sender === 'self' ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-400' : '';
+  const alignment = sender === 'self' ? 'justify-end' : 'justify-start'
+  const senderGradient = sender === 'self' ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-400' : ''
 
   return (
     <div className={`flex ${alignment} animate-fadeIn`}>
       <div className={`max-w-[80%] p-3 rounded-xl border shadow-sm transition-all duration-200 hover:shadow-md ${
         senderGradient || intentGradients[intent] || 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200'
-      }`}>
+      }`}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1">
             <p className="text-gray-900">{content}</p>
@@ -49,5 +51,5 @@ export function MessageBubble({ content, intent, timestamp, sender = 'remote' }:
         </div>
       </div>
     </div>
-  );
+  )
 }

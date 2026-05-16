@@ -1,47 +1,47 @@
-'use client';
+'use client'
 
-import { CheckCircle, Circle, Loader2, Wrench } from 'lucide-react';
+import { CheckCircle, Circle, Loader2, Wrench } from 'lucide-react'
 
-export type FSMStage =
-  | 'INTRODUCTION'
-  | 'JOB_DESCRIPTION'
-  | 'SALARY_NEGOTIATION'
-  | 'INTERVIEWING'
-  | 'OFFER'
-  | 'COMPLETED';
+export type FSMStage
+  = | 'INTRODUCTION'
+    | 'JOB_DESCRIPTION'
+    | 'SALARY_NEGOTIATION'
+    | 'INTERVIEWING'
+    | 'OFFER'
+    | 'COMPLETED'
 
 interface ToolCall {
-  name: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  cached?: boolean;
+  name: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  cached?: boolean
 }
 
 interface FlowPanelProps {
-  currentStage: FSMStage;
-  toolCalls?: ToolCall[];
-  className?: string;
+  currentStage: FSMStage
+  toolCalls?: ToolCall[]
+  className?: string
 }
 
-const STAGES: { key: FSMStage; label: string }[] = [
+const STAGES: { key: FSMStage, label: string }[] = [
   { key: 'INTRODUCTION', label: 'Introduction' },
   { key: 'JOB_DESCRIPTION', label: 'Job Description' },
   { key: 'SALARY_NEGOTIATION', label: 'Salary Negotiation' },
   { key: 'INTERVIEWING', label: 'Interview' },
   { key: 'OFFER', label: 'Offer' },
   { key: 'COMPLETED', label: 'Completed' },
-];
+]
 
-const STAGE_ORDER: FSMStage[] = STAGES.map(s => s.key);
+const STAGE_ORDER: FSMStage[] = STAGES.map(s => s.key)
 
 function StageProgress({ currentStage }: { currentStage: FSMStage }) {
-  const currentIdx = STAGE_ORDER.indexOf(currentStage);
+  const currentIdx = STAGE_ORDER.indexOf(currentStage)
 
   return (
     <div className="space-y-2">
       {STAGES.map((stage, idx) => {
-        const isCompleted = idx < currentIdx;
-        const isCurrent = idx === currentIdx;
-        const isFuture = idx > currentIdx;
+        const isCompleted = idx < currentIdx
+        const isCurrent = idx === currentIdx
+        const isFuture = idx > currentIdx
 
         return (
           <div key={stage.key} className="relative flex items-center gap-3">
@@ -50,7 +50,8 @@ function StageProgress({ currentStage }: { currentStage: FSMStage }) {
               <div className="absolute left-[10px] top-6 w-0.5 h-6 -mb-6">
                 <div className={`w-full h-full transition-all duration-500 ${
                   isCompleted ? 'bg-green-400' : isCurrent ? 'bg-blue-200' : 'bg-gray-200'
-                }`} />
+                }`}
+                />
               </div>
             )}
             <div className="relative z-10">
@@ -63,21 +64,25 @@ function StageProgress({ currentStage }: { currentStage: FSMStage }) {
               {isFuture && <Circle className="w-5 h-5 text-gray-300 shrink-0" />}
             </div>
             <span className={`text-sm transition-all duration-300 ${
-              isCompleted ? 'text-green-700 line-through' :
-              isCurrent ? 'text-blue-700 font-medium animate-pulse' :
-              'text-gray-400'
-            }`}>
+              isCompleted
+                ? 'text-green-700 line-through'
+                : isCurrent
+                  ? 'text-blue-700 font-medium animate-pulse'
+                  : 'text-gray-400'
+            }`}
+            >
               {stage.label}
             </span>
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
-  if (toolCalls.length === 0) return null;
+  if (toolCalls.length === 0)
+    return null
 
   return (
     <div className="space-y-2">
@@ -94,7 +99,7 @@ function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
         </div>
       ))}
     </div>
-  );
+  )
 }
 
 export function FlowPanel({ currentStage, toolCalls = [], className = '' }: FlowPanelProps) {
@@ -122,5 +127,5 @@ export function FlowPanel({ currentStage, toolCalls = [], className = '' }: Flow
         </div>
       )}
     </div>
-  );
+  )
 }

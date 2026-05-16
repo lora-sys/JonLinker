@@ -33,7 +33,7 @@ func (s *AgentService) CreateAgent(userID uuid.UUID, agentType model.AgentType, 
 		Type:       agentType,
 		Status:     model.AgentStatusActive,
 		FSMState:   model.AgentFSMIdle,
-		ConfigJSON: configJSON,
+		ConfigJSON: json.RawMessage(configJSON),
 	}
 	if err := s.agentRepo.Create(agent); err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (s *AgentService) UpdateAgent(id uuid.UUID, updates map[string]interface{})
 		agent.Status = model.AgentStatus(status)
 	}
 	if config, ok := updates["config"].(string); ok {
-		agent.ConfigJSON = config
+		agent.ConfigJSON = json.RawMessage(config)
 	}
 	if err := s.agentRepo.Update(agent); err != nil {
 		return nil, err

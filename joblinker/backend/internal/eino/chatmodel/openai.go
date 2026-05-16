@@ -19,6 +19,7 @@ type EinoChatModel struct {
 	modelName  string
 	maxTokens  int
 	temperature float64
+	tools      []*schema.ToolInfo
 }
 
 // NewEinoChatModel creates a new Eino-compatible chat model wrapper
@@ -49,12 +50,15 @@ func (m *EinoChatModel) Generate(ctx context.Context, messages []*schema.Message
 	// Convert Eino messages to AI client messages
 	aiMessages := convertToAIMessages(messages)
 
-	// Build request
+	// Build request with tools if configured
 	reqBody := ai.ChatRequest{
 		Model:       m.modelName,
 		Messages:    aiMessages,
 		MaxTokens:   m.maxTokens,
 		Temperature: m.temperature,
+	}
+	if len(m.tools) > 0 {
+		reqBody.Tools = convertToolInfos(m.tools)
 	}
 
 	// First call
@@ -102,8 +106,13 @@ func (m *EinoChatModel) Stream(ctx context.Context, messages []*schema.Message, 
 
 // WithTools returns a new model instance with tools bound
 func (m *EinoChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
-	// For MVP, just return self - tools are handled at a higher level
-	return m, nil
+	return &EinoChatModel{
+		client:      m.client,
+		modelName:   m.modelName,
+		maxTokens:   m.maxTokens,
+		temperature: m.temperature,
+		tools:       tools,
+	}, nil
 }
 
 // convertToAIMessages converts Eino schema messages to AI client messages
@@ -154,6 +163,56 @@ func convertToolCalls(toolCalls []ai.ToolCall) []schema.ToolCall {
 		}
 	}
 	return result
+}
+
+// convertToolInfos converts Eino schema.ToolInfo to ai.Tool
+func convertToolInfos(tools []*schema.ToolInfo) []ai.Tool {
+	result := make([]ai.Tool, 0, len(tools))
+	for _, t := range tools {
+		if t == nil {
+			continue
+		}
+		result = append(result, ai.Tool{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        t.Name,
+				Description: t.Desc,
+				Parameters:  toolParamsToMap(t),
+			},
+		})
+	}
+	return result
+}
+
+func toolParamsToMap(t *schema.ToolInfo) map[string]interface{} {
+	if t.ParamsOneOf == nil {
+		return map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{},
+		}
+	}
+	js, err := t.ToJSONSchema()
+	if err != nil {
+		return map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{},
+		}
+	}
+	data, err := json.Marshal(js)
+	if err != nil {
+		return map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{},
+		}
+	}
+	var params map[string]interface{}
+	if err := json.Unmarshal(data, &params); err != nil {
+		return map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{},
+		}
+	}
+	return params
 }
 
 // Helper to convert role strings

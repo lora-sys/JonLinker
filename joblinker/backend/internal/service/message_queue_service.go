@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	einoagent "joblinker/internal/eino/agent"
 	"joblinker/internal/eino/chatmodel"
 	"joblinker/internal/eino/runner"
 	"joblinker/internal/eino/prompt"
@@ -21,6 +20,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+type BroadcastFunc func(matchID string, eventType string, payload interface{})
 
 type MessageQueueService struct {
 	rmq                *rabbitmq.RabbitMQ
@@ -38,6 +39,8 @@ type MessageQueueService struct {
 	fsmIntegration     *FSMIntegration
 	// Eino Agent Runner (optional, for new Eino-based processing)
 	einoRunner         *runner.AgentRunner
+	// ADK Runner (optional, for ADK-based processing)
+	adkRunner          *runner.ADKRunner
 	// Context optimization for AI prompts
 	contextOptimizer   *ContextOptimizerService
 	// Observability
@@ -47,6 +50,8 @@ type MessageQueueService struct {
 	// Bidirectional A2A tracking
 	conversationRounds map[string]int
 	conversationMu     sync.RWMutex
+	// WebSocket broadcast callback
+	broadcastFn        BroadcastFunc
 }
 
 // SetEinoRunner sets the Eino AgentRunner for Eino-based processing
@@ -55,10 +60,22 @@ func (s *MessageQueueService) SetEinoRunner(einoRunner *runner.AgentRunner) {
 	log.Printf("MessageQueueService: Eino Runner configured")
 }
 
+// SetADKRunner sets the ADK Runner for ADK-based agent processing
+func (s *MessageQueueService) SetADKRunner(adkRunner *runner.ADKRunner) {
+	s.adkRunner = adkRunner
+	log.Printf("MessageQueueService: ADK Runner configured")
+}
+
 // SetContextOptimizer sets the context optimizer for AI prompts
 func (s *MessageQueueService) SetContextOptimizer(ctxOptimizer *ContextOptimizerService) {
 	s.contextOptimizer = ctxOptimizer
 	log.Printf("MessageQueueService: Context Optimizer configured")
+}
+
+// SetBroadcastCallback sets the WebSocket broadcast callback
+func (s *MessageQueueService) SetBroadcastCallback(fn BroadcastFunc) {
+	s.broadcastFn = fn
+	log.Printf("MessageQueueService: Broadcast callback configured")
 }
 
 func NewMessageQueueService(
@@ -123,38 +140,35 @@ func (s *MessageQueueService) StartConsuming(ctx context.Context) error {
 func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) error {
 	log.Printf("Received agent message: %s -> %s (intent: %s)", msg.SenderID, msg.ReceiverID, msg.Intent)
 
-	// Parse match ID
 	matchID, err := uuid.Parse(msg.MatchID)
 	if err != nil {
 		log.Printf("Invalid match ID %s: %v", msg.MatchID, err)
-		return nil // Don't requeue - invalid match ID is permanent error
+		return nil
 	}
 
-	// Get match to verify access
 	match, err := s.matchRepo.GetByID(matchID)
 	if err != nil {
 		log.Printf("Match %s not found: %v", matchID, err)
-		return nil // Don't requeue - match not found is permanent
+		return nil
 	}
 
-	// Get sender agent
 	senderAgent, err := s.agentRepo.GetByID(uuid.MustParse(msg.SenderID))
 	if err != nil {
 		log.Printf("Sender agent %s not found: %v", msg.SenderID, err)
-		return nil // Don't requeue - agent not found is permanent
+		return nil
 	}
 
-	// FSM Integration: Trigger state transition based on intent
+	var fsmState interface{}
 	if s.fsmIntegration != nil {
-		newState, transitioned, err := s.fsmIntegration.TransitionFSM(matchID, msg.Intent)
-		if err != nil {
-			log.Printf("FSM transition error: %v", err)
+		newState, transitioned, fsmErr := s.fsmIntegration.TransitionFSM(matchID, msg.Intent)
+		if fsmErr != nil {
+			log.Printf("FSM transition error: %v", fsmErr)
 		} else if transitioned {
 			log.Printf("FSM state changed: match=%s intent=%s -> state=%s", matchID, msg.Intent, newState)
+			fsmState = newState
 		}
 	}
 
-	// Increment conversation round counter
 	roundKey := matchID.String()
 	s.conversationMu.Lock()
 	s.conversationRounds[roundKey]++
@@ -162,66 +176,92 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	s.conversationMu.Unlock()
 	log.Printf("Conversation round: match=%s round=%d", matchID, currentRound)
 
-	// Guard: Max 10 rounds to prevent infinite loops
 	if currentRound > 10 {
 		log.Printf("Conversation max rounds reached for match %s, pausing", matchID)
-		// Would notify human in production
 		return nil
 	}
 
-	// Check for duplicate message (idempotency)
-	// In production, check message ID against processed set
-
-	// Observability: Update metrics heartbeat
 	if s.metricsSvc != nil {
 		s.metricsSvc.UpdateHeartbeat(senderAgent.ID)
 		s.metricsSvc.RecordMessage(senderAgent.ID)
 	}
-
-	// Observability: Audit log incoming message
-	// Note: Using context.Background() as the RabbitMQ callback doesn't pass ctx
-	// For production, consider modifying Consume signature to propagate context
 	if s.auditSvc != nil {
 		s.auditSvc.LogEvent(context.Background(), senderAgent.ID, matchID, "message_sent", map[string]interface{}{
-			"intent": msg.Intent,
+			"intent":         msg.Intent,
 			"content_length": len(msg.MessageID),
 		})
 	}
 
-	// Note: We don't store the incoming message again here.
-	// The REST API handler already stored it when the user sent it.
-	// We only need to generate and store the auto-response.
+	response := s.generateEinoResponse(msg, match, senderAgent)
+	if response == nil {
+		log.Printf("DeepRecruiter returned nil, falling back to legacy AI")
+		response = s.generateAutoResponse(msg, match, senderAgent)
+	}
 
-	// Generate auto-response based on intent
-	response := s.generateAutoResponse(msg, match, senderAgent)
-
-	// Determine who responds - always the OTHER agent (A2A alternation)
 	responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
+
+	// FSM transition for the response intent (drives progression)
+	if s.fsmIntegration != nil && response.Intent != msg.Intent {
+		newState, transitioned, fsmErr := s.fsmIntegration.TransitionFSM(matchID, response.Intent)
+		if fsmErr != nil {
+			log.Printf("FSM transition error (response): %v", fsmErr)
+		} else if transitioned {
+			log.Printf("FSM state changed (response): match=%s intent=%s -> state=%s", matchID, response.Intent, newState)
+			fsmState = newState
+		}
+	}
 
 	responseMsg := &model.Message{
 		ID:            uuid.New(),
 		MatchID:       matchID,
 		SenderAgentID: responseAgentID,
-		ContentXML:     s.responseToXML(response),
+		ContentXML:    s.responseToXML(response),
 		IntentType:    response.Intent,
 	}
 	if err := s.messageRepo.Create(responseMsg); err != nil {
 		log.Printf("Failed to store response message: %v", err)
 	}
 
-	// AUTONOMOUS A2A: If inside conversation rounds limit, re-publish to queue
-	// so the other agent responds, continuing the dialogue autonomously
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID.String(), "agent_response", map[string]interface{}{
+			"message_id":     responseMsg.ID.String(),
+			"match_id":       matchID.String(),
+			"sender_agent_id": responseAgentID.String(),
+			"content_xml":    responseMsg.ContentXML,
+			"intent_type":    response.Intent,
+			"created_at":     responseMsg.CreatedAt,
+		})
+		if fsmState != nil {
+			s.broadcastFn(matchID.String(), "fsm_state_change", map[string]interface{}{
+				"match_id":  matchID.String(),
+				"new_state": fsmState,
+			})
+		}
+	}
+
+	// Check if human confirmation is required (Offer / Schedule)
+	if response.Intent == "OFFER" || response.Intent == "SCHEDULE" {
+		s.createConfirmationRequest(matchID, response.Intent, response.Payload, responseAgentID)
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "confirmation_needed", map[string]interface{}{
+				"match_id": matchID.String(),
+				"intent":   response.Intent,
+			})
+		}
+		log.Printf("Human confirmation required for match %s (intent: %s), pausing", matchID, response.Intent)
+		return nil
+	}
+
 	if currentRound < 10 {
 		nextMsg := &rabbitmq.AgentMessage{
 			MessageID:  responseMsg.ID.String(),
 			SenderID:   responseAgentID.String(),
-			ReceiverID: senderAgent.ID.String(), // send back to original sender
+			ReceiverID: senderAgent.ID.String(),
 			Intent:     response.Intent,
 			MatchID:    msg.MatchID,
 			Payload:    response.Payload,
 			Timestamp:  time.Now(),
 		}
-
 		if s.rmq != nil {
 			ctxPub, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -266,7 +306,7 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 
 	// Try Eino-based agent processing first if runner is configured
 	if s.einoRunner != nil {
-		einoResponse := s.generateEinoResponse(msg, match, senderAgent, scenario)
+		einoResponse := s.generateEinoResponse(msg, match, senderAgent)
 		if einoResponse != nil {
 			log.Printf("Eino agent generated response: intent=%s, response_len=%d", einoResponse.Intent, len(fmt.Sprint(einoResponse.Payload)))
 			return einoResponse
@@ -288,7 +328,7 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 	if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
 		// Parse structured job data
 		var jobData map[string]interface{}
-		if json.Unmarshal([]byte(job.StructuredJSON), &jobData) == nil {
+		if json.Unmarshal(job.StructuredJSON, &jobData) == nil {
 			if title, ok := jobData["title"].(string); ok {
 				jobTitle = title
 			}
@@ -314,7 +354,7 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 	var seekerSkills []string
 	if seeker, err := s.agentRepo.GetByID(match.SeekerAgentID); err == nil {
 		var config map[string]interface{}
-		if json.Unmarshal([]byte(seeker.ConfigJSON), &config) == nil {
+		if json.Unmarshal(seeker.ConfigJSON, &config) == nil {
 			if skills, ok := config["skills"].([]interface{}); ok {
 				for _, skill := range skills {
 					if sk, ok := skill.(string); ok {
@@ -460,7 +500,7 @@ When NOT using tools, respond with ONLY a valid JSON object:
 			if salary == 0 {
 				if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
 					var jobData map[string]interface{}
-					json.Unmarshal([]byte(job.StructuredJSON), &jobData)
+					json.Unmarshal(job.StructuredJSON, &jobData)
 					if min, ok := jobData["salary_min"].(float64); ok {
 						if max, ok := jobData["salary_max"].(float64); ok && max > min {
 							salary = int((min + max) / 2)
@@ -532,9 +572,9 @@ func (s *MessageQueueService) buildAgentContext(msg *rabbitmq.AgentMessage, matc
 	return context
 }
 
-// generateEinoResponse uses Eino agent to generate response
+// generateEinoResponse uses DeepRecruiter to generate response
 // Returns nil if Eino is not configured or fails, triggering fallback
-func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, scenario model.PromptScenarioType) *AutoResponse {
+func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
 	if s.einoRunner == nil {
 		return nil
 	}
@@ -542,7 +582,6 @@ func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, m
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	// Extract message content from XML
 	var msgContent string
 	if msg.Payload != nil {
 		if content, ok := msg.Payload["content"].(string); ok {
@@ -550,36 +589,181 @@ func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, m
 		}
 	}
 	if msgContent == "" {
-		msgContent = msg.Intent // Fallback to intent as message
+		msgContent = msg.Intent
 	}
 
-	// Choose agent based on sender type
+	deepRecruiter := s.einoRunner.GetDeepRecruiter(match.ID)
+
 	var response string
 	var err error
 
 	if senderAgent.Type == "seeker" {
-		// Use Eino seeker agent
-		seekerAgent := einoagent.NewSeekerAgent(s.aiClient)
-		seekerAgent.SetScenario(scenarioFromPromptType(scenario))
-		response, err = seekerAgent.Chat(ctx, msgContent)
+		response, err = deepRecruiter.ProcessRecruiterMessage(ctx, msgContent)
 	} else {
-		// Use Eino recruiter agent
-		recruiterAgent := einoagent.NewRecruiterAgent(s.aiClient)
-		recruiterAgent.SetScenario(scenarioFromPromptType(scenario))
-		response, err = recruiterAgent.Chat(ctx, msgContent)
+		response, err = deepRecruiter.ProcessSeekerMessage(ctx, msgContent)
 	}
 
 	if err != nil {
-		log.Printf("Eino agent error: %v", err)
-		return nil // Fallback to legacy AI
+		log.Printf("DeepRecruiter error: %v", err)
+		return nil
 	}
 
-	// Advance intent based on conversation context
-	nextIntent := s.advanceIntent(msg.Intent)
+	intent := s.parseIntent(response, msg.Intent)
+
 	return &AutoResponse{
-		Intent:  nextIntent,
+		Intent:  intent,
 		Payload: map[string]interface{}{"message": response},
 	}
+}
+
+// parseIntent tries to extract intent from AI response JSON, falls back to advancing
+func (s *MessageQueueService) parseIntent(response string, currentIntent string) string {
+	var parsed struct {
+		Intent string `json:"intent"`
+	}
+	if json.Unmarshal([]byte(response), &parsed) == nil && parsed.Intent != "" {
+		return parsed.Intent
+	}
+	return s.advanceIntent(currentIntent)
+}
+
+// createConfirmationRequest persists a human confirmation request
+func (s *MessageQueueService) createConfirmationRequest(matchID uuid.UUID, intent string, payload map[string]interface{}, agentID uuid.UUID) {
+	var cType model.ConfirmationRequestType
+	switch intent {
+	case "OFFER":
+		cType = model.ConfirmationTypeOffer
+	case "SCHEDULE":
+		cType = model.ConfirmationTypeInterview
+	default:
+		cType = model.ConfirmationTypeOffer
+	}
+
+	payloadStr := "{}"
+	if payload != nil {
+		if b, err := json.Marshal(payload); err == nil {
+			payloadStr = string(b)
+		}
+	}
+
+	cr := &model.ConfirmationRequest{
+		ID:        uuid.New(),
+		MatchID:   matchID,
+		Type:      cType,
+		Payload:   payloadStr,
+		Status:    model.ConfirmationStatusPending,
+		UserID:    agentID,
+		CreatedAt: time.Now(),
+	}
+	if err := s.matchRepo.CreateConfirmationRequest(cr); err != nil {
+		log.Printf("Failed to create confirmation request: %v", err)
+	}
+}
+
+// HandleHumanConfirm processes a human confirmation response
+func (s *MessageQueueService) HandleHumanConfirm(matchID uuid.UUID, approved bool, feedback string) error {
+	match, err := s.matchRepo.GetByID(matchID)
+	if err != nil {
+		return fmt.Errorf("match not found: %w", err)
+	}
+
+	// Find pending confirmation request
+	cr, err := s.matchRepo.GetPendingConfirmation(matchID)
+	if err != nil {
+		return fmt.Errorf("no pending confirmation: %w", err)
+	}
+
+	now := time.Now()
+	if approved {
+		cr.Status = model.ConfirmationStatusApproved
+		log.Printf("Human APPROVED confirmation for match %s (type: %s)", matchID, cr.Type)
+	} else {
+		cr.Status = model.ConfirmationStatusRejected
+		cr.Feedback = feedback
+		match.Status = model.MatchStatusRejected
+		if err := s.matchRepo.UpdateStatus(matchID, match.Status); err != nil {
+			log.Printf("Failed to update match status: %v", err)
+		}
+		log.Printf("Human REJECTED confirmation for match %s (type: %s): %s", matchID, cr.Type, feedback)
+		return nil
+	}
+	cr.RespondedAt = &now
+	if err := s.matchRepo.UpdateConfirmationRequest(cr); err != nil {
+		log.Printf("Failed to update confirmation request: %v", err)
+	}
+
+	// Reset conversation round counter so autonomous dialogue can resume
+	s.conversationMu.Lock()
+	s.conversationRounds[matchID.String()] = 0
+	s.conversationMu.Unlock()
+	log.Printf("Conversation rounds reset for match %s after human approval", matchID)
+
+	// Update match status: approved offer -> hired
+	_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired)
+
+	// Continue the conversation loop
+	s.continueAgentConversation(matchID, cr)
+	return nil
+}
+
+// continueAgentConversation re-publishes to RabbitMQ after human approval
+func (s *MessageQueueService) continueAgentConversation(matchID uuid.UUID, cr *model.ConfirmationRequest) {
+	if s.rmq == nil {
+		log.Printf("RabbitMQ not available, cannot continue conversation")
+		return
+	}
+
+	nextMsg := &rabbitmq.AgentMessage{
+		MessageID:  uuid.New().String(),
+		SenderID:   cr.UserID.String(),
+		Intent:     "CONFIRM",
+		MatchID:    matchID.String(),
+		Payload:    map[string]interface{}{"approved": true, "confirmation_type": string(cr.Type)},
+		Timestamp:  time.Now(),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.rmq.PublishAgentMessage(ctx, nextMsg); err != nil {
+		log.Printf("Failed to continue conversation: %v", err)
+	} else {
+		log.Printf("Conversation continued after human approval for match %s", matchID)
+	}
+}
+
+// generateWithADK uses the ADK Runner to generate a response
+func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent string, senderAgent *model.Agent) (string, error) {
+	if s.adkRunner == nil {
+		return "", fmt.Errorf("adk runner not configured")
+	}
+
+	// Build query context — include agent identity
+	query := msgContent
+
+	events := s.adkRunner.Query(ctx, query)
+
+	// Collect the final response from the event stream
+	var response string
+	for {
+		event, ok := events.Next()
+		if !ok {
+			break
+		}
+		if event.Err != nil {
+			return "", event.Err
+		}
+		if event.Output != nil && event.Output.MessageOutput != nil {
+			mo := event.Output.MessageOutput
+			if !mo.IsStreaming && mo.Message != nil {
+				response = mo.Message.Content
+			}
+		}
+	}
+
+	if response == "" {
+		return "", fmt.Errorf("adk runner: empty response")
+	}
+	return response, nil
 }
 
 // scenarioFromPromptType converts model.PromptScenarioType to prompt.Scenario

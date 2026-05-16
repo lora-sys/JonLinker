@@ -1,10 +1,10 @@
-'use client';
+'use client'
 
-import React from 'react';
+import React from 'react'
 
 interface SkillTagProps extends React.HTMLAttributes<HTMLSpanElement> {
-  color?: 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'slate';
-  size?: 'sm' | 'md';
+  color?: 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'slate'
+  size?: 'sm' | 'md'
 }
 
 const colorClasses = {
@@ -14,12 +14,12 @@ const colorClasses = {
   orange: 'bg-orange-100 text-orange-700 border-orange-200',
   pink: 'bg-pink-100 text-pink-700 border-pink-200',
   slate: 'bg-slate-100 text-slate-700 border-slate-200',
-};
+}
 
 const sizeClasses = {
   sm: 'px-2 py-0.5 text-xs',
   md: 'px-2.5 py-1 text-xs',
-};
+}
 
 // Predefined skill color mappings for common skills
 const skillColorMap: Record<string, SkillTagProps['color']> = {
@@ -43,12 +43,12 @@ const skillColorMap: Record<string, SkillTagProps['color']> = {
   php: 'purple',
   swift: 'orange',
   kotlin: 'purple',
-};
+}
 
 export default function SkillTag({ color, size = 'sm', children, className = '', ...props }: SkillTagProps) {
   // Auto-assign color based on skill name if not specified
-  const skillName = typeof children === 'string' ? children.toLowerCase() : '';
-  const resolvedColor = color || skillColorMap[skillName] || 'slate';
+  const skillName = typeof children === 'string' ? children.toLowerCase() : ''
+  const resolvedColor = color || skillColorMap[skillName] || 'slate'
 
   return (
     <span
@@ -62,5 +62,5 @@ export default function SkillTag({ color, size = 'sm', children, className = '',
     >
       {children}
     </span>
-  );
+  )
 }

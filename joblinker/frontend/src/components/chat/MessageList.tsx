@@ -1,36 +1,38 @@
-'use client';
+'use client'
 
-import { useRef, useEffect } from 'react';
-import type { ChatMessage, MessageStatus } from '@/types/ai';
-import { StreamingText } from './StreamingText';
-import { ToolCallIndicator } from './ToolCallIndicator';
+import { useEffect, useRef } from 'react'
+
+import type { ChatMessage, MessageStatus } from '@/types/ai'
+
+import { StreamingText } from './StreamingText'
+import { ToolCallIndicator } from './ToolCallIndicator'
 
 interface MessageListProps {
-  messages: ChatMessage[];
-  status: MessageStatus;
-  isLoading?: boolean;
-  emptyMessage?: string;
-  onLoadMore?: () => void;
-  hasMore?: boolean;
+  messages: ChatMessage[]
+  status: MessageStatus
+  isLoading?: boolean
+  emptyMessage?: string
+  onLoadMore?: () => void
+  hasMore?: boolean
 }
 
 export function MessageList({ messages, status, isLoading, emptyMessage = 'No messages yet', onLoadMore, hasMore }: MessageListProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const lastMsgCount = useRef(messages.length);
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const lastMsgCount = useRef(messages.length)
 
   useEffect(() => {
     if (messages.length !== lastMsgCount.current || status === 'streaming') {
-      scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      lastMsgCount.current = messages.length;
+      scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      lastMsgCount.current = messages.length
     }
-  }, [messages, status]);
+  }, [messages, status])
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-gray-500">Loading messages...</div>
       </div>
-    );
+    )
   }
 
   if (messages.length === 0) {
@@ -42,7 +44,7 @@ export function MessageList({ messages, status, isLoading, emptyMessage = 'No me
         <p>{emptyMessage}</p>
         <p className="text-sm">Start the conversation below</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -57,18 +59,18 @@ export function MessageList({ messages, status, isLoading, emptyMessage = 'No me
           </button>
         </div>
       )}
-      {messages.map((msg) => (
+      {messages.map(msg => (
         <MessageItem key={msg.id} message={msg} isStreaming={status === 'streaming' && msg.role === 'assistant'} />
       ))}
       {status === 'pending' && <PendingIndicator />}
       <div ref={scrollRef} />
     </div>
-  );
+  )
 }
 
-function MessageItem({ message, isStreaming }: { message: ChatMessage; isStreaming: boolean }) {
-  const isUser = message.role === 'user';
-  const isSystem = message.role === 'system';
+function MessageItem({ message, isStreaming }: { message: ChatMessage, isStreaming: boolean }) {
+  const isUser = message.role === 'user'
+  const isSystem = message.role === 'system'
 
   return (
     <div
@@ -82,19 +84,21 @@ function MessageItem({ message, isStreaming }: { message: ChatMessage; isStreami
           isUser
             ? 'bg-blue-600 text-white rounded-br-md'
             : isSystem
-            ? 'bg-gray-100 text-gray-600 text-sm rounded-full'
-            : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md shadow-sm'
+              ? 'bg-gray-100 text-gray-600 text-sm rounded-full'
+              : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md shadow-sm'
         }`}
       >
-        {isStreaming && message.status !== 'done' ? (
-          <StreamingText content={message.content} speed={30} />
-        ) : (
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        )}
+        {isStreaming && message.status !== 'done'
+          ? (
+              <StreamingText content={message.content} speed={30} />
+            )
+          : (
+              <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            )}
 
         {message.toolInvocations && message.toolInvocations.length > 0 && (
           <div className="mt-2 space-y-1">
-            {message.toolInvocations.map((tool) => (
+            {message.toolInvocations.map(tool => (
               <ToolCallIndicator key={tool.id} tool={tool} />
             ))}
           </div>
@@ -105,7 +109,7 @@ function MessageItem({ message, isStreaming }: { message: ChatMessage; isStreami
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 function PendingIndicator() {
@@ -120,5 +124,5 @@ function PendingIndicator() {
         </div>
       </div>
     </div>
-  );
+  )
 }

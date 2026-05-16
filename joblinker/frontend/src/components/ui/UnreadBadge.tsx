@@ -1,16 +1,17 @@
-'use client';
+'use client'
 
-import React from 'react';
+import React from 'react'
 
 interface UnreadBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  count?: number;
-  max?: number;
+  count?: number
+  max?: number
 }
 
 export default function UnreadBadge({ count = 0, max = 99, className = '', ...props }: UnreadBadgeProps) {
-  if (count === 0) return null;
+  if (count === 0)
+    return null
 
-  const displayCount = count > max ? `${max}+` : count;
+  const displayCount = count > max ? `${max}+` : count
 
   return (
     <span
@@ -25,5 +26,5 @@ export default function UnreadBadge({ count = 0, max = 99, className = '', ...pr
     >
       {displayCount}
     </span>
-  );
+  )
 }

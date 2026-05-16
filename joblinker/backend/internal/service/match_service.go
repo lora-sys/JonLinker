@@ -80,17 +80,41 @@ func (s *MatchService) ListUserMatches(userID uuid.UUID) ([]*model.Match, error)
 	if err != nil {
 		return nil, err
 	}
-	var allMatches []*model.Match
+
+	// Collect all agent IDs for this user
+	var agentIDs []uuid.UUID
 	for _, agent := range agents {
-		if agent.Type == model.AgentTypeSeeker {
-			matches, err := s.matchRepo.ListBySeekerAgentID(agent.ID)
-			if err != nil {
-				continue
-			}
-			allMatches = append(allMatches, matches...)
+		agentIDs = append(agentIDs, agent.ID)
+	}
+
+	if len(agentIDs) == 0 {
+		return []*model.Match{}, nil
+	}
+
+	// Get all matches where user owns the seeker agent OR owns the job's recruiter agent
+	allMatches, err := s.matchRepo.ListByAgentIDs(agentIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter matches: keep if seeker_agent_id belongs to user OR job's agent_id belongs to user
+	var filtered []*model.Match
+	agentMap := make(map[uuid.UUID]bool)
+	for _, a := range agents {
+		agentMap[a.ID] = true
+	}
+
+	for _, match := range allMatches {
+		if agentMap[match.SeekerAgentID] {
+			filtered = append(filtered, match)
+			continue
+		}
+		if match.Job != nil && agentMap[match.Job.AgentID] {
+			filtered = append(filtered, match)
 		}
 	}
-	return allMatches, nil
+
+	return filtered, nil
 }
 
 func (s *MatchService) FindMatches(agentID uuid.UUID, limit int) ([]*model.Match, error) {
@@ -112,7 +136,7 @@ func (s *MatchService) CalculateScore(seekerAgentID, jobID uuid.UUID) (float64, 
 	var seekerExpYears int
 	var seekerLocation string
 	var config map[string]interface{}
-	if json.Unmarshal([]byte(seeker.ConfigJSON), &config) == nil {
+	if json.Unmarshal(seeker.ConfigJSON, &config) == nil {
 		if skills, ok := config["skills"].([]interface{}); ok {
 			for _, skill := range skills {
 				if s, ok := skill.(string); ok {
@@ -133,7 +157,7 @@ func (s *MatchService) CalculateScore(seekerAgentID, jobID uuid.UUID) (float64, 
 	var jobExpYears int
 	var jobLocation string
 	var jobData map[string]interface{}
-	if json.Unmarshal([]byte(job.StructuredJSON), &jobData) == nil {
+	if json.Unmarshal(job.StructuredJSON, &jobData) == nil {
 		if skills, ok := jobData["skills"].([]interface{}); ok {
 			for _, skill := range skills {
 				if s, ok := skill.(string); ok {
@@ -264,7 +288,7 @@ func (s *MatchService) AutoCreateMatches(userID uuid.UUID, jobIDs []uuid.UUID) (
 			continue
 		}
 
-		_, err := s.jobRepo.GetByID(jobID)
+		job, err := s.jobRepo.GetByID(jobID)
 		if err != nil {
 			result.SkippedCount++
 			continue
@@ -279,10 +303,11 @@ func (s *MatchService) AutoCreateMatches(userID uuid.UUID, jobIDs []uuid.UUID) (
 
 		if score > 0.5 {
 			match := &model.Match{
-				SeekerAgentID: seekerAgent.ID,
-				JobID:         jobID,
-				Score:         score,
-				Status:        model.MatchStatusPending,
+				SeekerAgentID:   seekerAgent.ID,
+				RecruiterAgentID: &job.AgentID,
+				JobID:           jobID,
+				Score:           score,
+				Status:          model.MatchStatusPending,
 			}
 			if err := s.matchRepo.Create(match); err != nil {
 				continue

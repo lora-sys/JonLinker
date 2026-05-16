@@ -1,14 +1,17 @@
-'use client';
+'use client'
 
-import { useCallback } from 'react';
-import { Send, Square, RotateCcw } from 'lucide-react';
-import { useAIChat } from '@/hooks/useAIChat';
-import { MessageList } from './MessageList';
-import type { MessageStatus } from '@/types/ai';
+import { RotateCcw, Send, Square } from 'lucide-react'
+import { useCallback } from 'react'
+
+import type { MessageStatus } from '@/types/ai'
+
+import { useAIChat } from '@/hooks/useAIChat'
+
+import { MessageList } from './MessageList'
 
 interface ChatWindowProps {
-  matchId: string;
-  onConfirmMilestone?: () => void;
+  matchId: string
+  onConfirmMilestone?: () => void
 }
 
 export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
@@ -17,17 +20,16 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
     input,
     setInput,
     status,
-    isConnected,
+    wsStatus,
     error,
     handleSubmit,
     stop,
     reload,
-  } = useAIChat({ matchId });
+  } = useAIChat({ matchId })
 
   // Convert AI SDK messages to ChatMessage format for MessageList
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const messages = rawMessages.map((m: any) => {
-    const text = m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join('') || '';
+    const text = m.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text || '').join('') || ''
     return {
       id: m.id,
       matchId,
@@ -35,30 +37,30 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
       content: text,
       createdAt: new Date(),
       status: 'done' as MessageStatus,
-    };
-  });
+    }
+  })
 
-  const isStreaming = status === 'streaming' || status === 'submitted';
-  const isDisabled = isStreaming;
-  const mappedStatus: MessageStatus = isStreaming ? 'streaming' : 'done';
+  const isStreaming = status === 'streaming' || status === 'submitted'
+  const isDisabled = isStreaming
+  const mappedStatus: MessageStatus = isStreaming ? 'streaming' : 'done'
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
+        e.preventDefault()
+        handleSubmit()
       }
       if (e.key === 'Escape' && isStreaming) {
-        e.preventDefault();
-        stop();
+        e.preventDefault()
+        stop()
       }
     },
-    [handleSubmit, isStreaming, stop]
-  );
+    [handleSubmit, isStreaming, stop],
+  )
 
   const showMilestone = onConfirmMilestone && messages.some(
-    (m) => m.content.toLowerCase().includes('negotiation') || m.content.toLowerCase().includes('offer')
-  );
+    m => m.content.toLowerCase().includes('negotiation') || m.content.toLowerCase().includes('offer'),
+  )
 
   return (
     <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200">
@@ -78,16 +80,11 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
           )}
           <span
             className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${
-              isConnected
-                ? 'bg-green-100 text-green-700'
-                : 'bg-gray-100 text-gray-500'
+              wsStatus === 'Connected' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
             }`}
           >
-            <span
-              className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}
-              aria-hidden="true"
-            />
-            {isConnected ? 'Connected' : 'Disconnected'}
+            <span className={`w-2 h-2 rounded-full ${wsStatus === 'Connected' ? 'bg-green-500' : 'bg-gray-400'}`} />
+            {wsStatus === 'Connected' ? 'Connected' : 'Disconnected'}
           </span>
         </div>
       </div>
@@ -120,7 +117,7 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
@@ -149,5 +146,5 @@ export function ChatWindow({ matchId, onConfirmMilestone }: ChatWindowProps) {
         )}
       </div>
     </div>
-  );
+  )
 }

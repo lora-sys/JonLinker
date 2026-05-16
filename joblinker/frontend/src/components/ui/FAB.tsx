@@ -1,19 +1,19 @@
-'use client';
+'use client'
 
-import React from 'react';
-import { Plus } from 'lucide-react';
+import { Plus } from 'lucide-react'
+import React from 'react'
 
 interface FABProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  icon?: React.ReactNode;
-  label?: string;
-  position?: 'bottom-right' | 'bottom-left' | 'bottom-center';
+  icon?: React.ReactNode
+  label?: string
+  position?: 'bottom-right' | 'bottom-left' | 'bottom-center'
 }
 
 const positionClasses = {
   'bottom-right': 'bottom-6 right-6 md:bottom-8 md:right-8',
   'bottom-left': 'bottom-6 left-6 md:bottom-8 md:left-8',
   'bottom-center': 'bottom-6 left-1/2 -translate-x-1/2',
-};
+}
 
 export default function FAB({
   icon,
@@ -41,5 +41,5 @@ export default function FAB({
     >
       {icon || <Plus className="w-6 h-6" />}
     </button>
-  );
+  )
 }

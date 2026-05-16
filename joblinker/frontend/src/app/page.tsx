@@ -1,13 +1,14 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import Image from 'next/image';
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useIntersectionReveal } from '@/hooks/useIntersectionReveal';
+import { motion } from 'framer-motion'
+import Image from 'next/image'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
-function AgentNode({ type, label, position, delay = 0 }: { type: 'seeker' | 'recruiter'; label: string; position: string; delay?: number }) {
-  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.1 });
+import { useIntersectionReveal } from '@/hooks/useIntersectionReveal'
+
+function AgentNode({ type, label, position, delay = 0 }: { type: 'seeker' | 'recruiter', label: string, position: string, delay?: number }) {
+  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.1 })
 
   return (
     <div
@@ -19,21 +20,23 @@ function AgentNode({ type, label, position, delay = 0 }: { type: 'seeker' | 'rec
         type === 'seeker'
           ? 'bg-blue-500/20 border-blue-400/50'
           : 'bg-emerald-500/20 border-emerald-400/50'
-      }`}>
+      }`}
+      >
         <div className={`w-8 h-8 rounded-lg ${type === 'seeker' ? 'bg-blue-500' : 'bg-emerald-500'} flex items-center justify-center`}>
           <span className="text-white text-xs font-bold">{type === 'seeker' ? 'S' : 'R'}</span>
         </div>
         <span className="text-[10px] font-medium text-slate-300">{label}</span>
       </div>
     </div>
-  );
+  )
 }
 
 function MatchingPulse({ active }: { active: boolean }) {
-  if (!active) return null;
+  if (!active)
+    return null
   return (
     <div className="absolute inset-0 flex items-center justify-center">
-      {[0, 200, 400].map((delay) => (
+      {[0, 200, 400].map(delay => (
         <div
           key={delay}
           className="absolute w-4 h-4 rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 animate-ping opacity-60"
@@ -41,15 +44,15 @@ function MatchingPulse({ active }: { active: boolean }) {
         />
       ))}
     </div>
-  );
+  )
 }
 
 function A2AMatchVisualizer() {
-  const [active, setActive] = useState(false);
-  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.3 });
+  const [active, setActive] = useState(false)
+  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.3 })
 
   if (isVisible && !active) {
-    setActive(true);
+    setActive(true)
   }
 
   return (
@@ -97,20 +100,20 @@ function A2AMatchVisualizer() {
         </svg>
       )}
     </div>
-  );
+  )
 }
 
-function RevealSection({ children, className = '', delay = 0, immediate = false }: { children: React.ReactNode; className?: string; delay?: number; immediate?: boolean }) {
-  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.1 });
-  const [hasAnimated, setHasAnimated] = useState(false);
+function RevealSection({ children, className = '', delay = 0, immediate = false }: { children: React.ReactNode, className?: string, delay?: number, immediate?: boolean }) {
+  const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.1 })
+  const [hasAnimated, setHasAnimated] = useState(false)
 
   useEffect(() => {
     if (immediate && !hasAnimated) {
-      setHasAnimated(true);
+      setHasAnimated(true)
     }
-  }, [immediate, hasAnimated]);
+  }, [immediate, hasAnimated])
 
-  const shouldAnimate = immediate || isVisible;
+  const shouldAnimate = immediate || isVisible
 
   return (
     <motion.div
@@ -122,17 +125,20 @@ function RevealSection({ children, className = '', delay = 0, immediate = false 
     >
       {children}
     </motion.div>
-  );
+  )
 }
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50/50 to-white relative overflow-hidden">
       {/* Subtle grid pattern */}
-      <div className="absolute inset-0 opacity-[0.02]" style={{
-        backgroundImage: 'linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)',
-        backgroundSize: '64px 64px'
-      }} />
+      <div
+        className="absolute inset-0 opacity-[0.02]"
+        style={{
+          backgroundImage: 'linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+        }}
+      />
 
       {/* Header */}
       <header className="relative z-10 w-full max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -399,5 +405,5 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
-  );
+  )
 }

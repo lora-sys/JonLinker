@@ -1,11 +1,11 @@
-'use client';
+'use client'
 
-import React from 'react';
+import React from 'react'
 
-type BadgeStatus = 'active' | 'paused' | 'pending' | 'negotiating' | 'hired';
+type BadgeStatus = 'active' | 'paused' | 'pending' | 'negotiating' | 'hired'
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  status?: BadgeStatus;
+  status?: BadgeStatus
 }
 
 const statusClasses: Record<BadgeStatus, string> = {
@@ -14,7 +14,7 @@ const statusClasses: Record<BadgeStatus, string> = {
   pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   negotiating: 'bg-blue-100 text-blue-800 border-blue-200',
   hired: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-};
+}
 
 const statusDots: Record<BadgeStatus, string> = {
   active: 'bg-green-500',
@@ -22,7 +22,7 @@ const statusDots: Record<BadgeStatus, string> = {
   pending: 'bg-yellow-500',
   negotiating: 'bg-blue-500',
   hired: 'bg-emerald-500',
-};
+}
 
 export default function Badge({ className = '', status = 'pending', children, ...props }: BadgeProps) {
   return (
@@ -37,5 +37,5 @@ export default function Badge({ className = '', status = 'pending', children, ..
       <span className={`w-1.5 h-1.5 rounded-full ${statusDots[status]}`} />
       {children}
     </span>
-  );
+  )
 }

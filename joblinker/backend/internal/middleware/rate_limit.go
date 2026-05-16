@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	MaxRequestsPerMinute = 60
+	MaxRequestsPerMinute = 300
 	WindowDuration       = time.Minute
 )
 

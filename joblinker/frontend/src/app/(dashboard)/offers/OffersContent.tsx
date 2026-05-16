@@ -1,27 +1,28 @@
-'use client';
+'use client'
 
-import { useEffect, useState, useCallback } from 'react';
-import { FileText, AlertTriangle, DollarSign, TrendingUp, Scale, Building2, ChevronDown, Check } from 'lucide-react';
-import { apiClient } from '@/lib/api_client';
-import { motion, AnimatePresence } from 'framer-motion';
-import Card from '@/components/ui/Card';
-import Badge from '@/components/ui/Badge';
-import Button from '@/components/ui/Button';
-import CompensationCard from '@/components/ui/CompensationCard';
-import NegotiateSlider from '@/components/ui/NegotiateSlider';
-import CountdownDisplay from '@/components/ui/Countdown';
-import { LoadingSkeleton, ErrorState, EmptyState, RevealSection } from '@/components/ui';
-import type { Offer, Compensation } from '@/types';
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, Building2, Check, ChevronDown, DollarSign, FileText, Scale, TrendingUp } from 'lucide-react'
+import { useCallback, useState } from 'react'
+
+import type { Compensation, Offer } from '@/types'
+
+import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/components/ui'
+import Button from '@/components/ui/Button'
+import Card from '@/components/ui/Card'
+import CompensationCard from '@/components/ui/CompensationCard'
+import CountdownDisplay from '@/components/ui/Countdown'
+import NegotiateSlider from '@/components/ui/NegotiateSlider'
+import { apiClient } from '@/lib/api_client'
 
 type OfferWithParsed = Omit<Offer, 'compensation'> & {
-  compensation: Compensation;
-};
+  compensation: Compensation
+}
 
-function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed; index: number; onUpdate: () => void }) {
-  const [negotiateValue, setNegotiateValue] = useState(offer.compensation.base_salary);
-  const [showNegotiate, setShowNegotiate] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
+function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, index: number, onUpdate: () => void }) {
+  const [negotiateValue, setNegotiateValue] = useState(offer.compensation.base_salary)
+  const [showNegotiate, setShowNegotiate] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const statusColors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -29,43 +30,47 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed; in
     accepted: 'bg-green-100 text-green-700 border-green-200',
     declined: 'bg-slate-100 text-slate-600 border-slate-200',
     expired: 'bg-red-100 text-red-700 border-red-200',
-  };
+  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: offer.compensation.currency || 'USD',
       maximumFractionDigits: 0,
-    }).format(value);
-  };
+    }).format(value)
+  }
 
   const handleAccept = async () => {
     try {
-      setIsUpdating(true);
-      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'accepted' });
-      onUpdate();
-    } catch (err) {
-      console.error('Failed to accept offer:', err);
-    } finally {
-      setIsUpdating(false);
+      setIsUpdating(true)
+      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'accepted' })
+      onUpdate()
     }
-  };
+    catch (err) {
+      console.error('Failed to accept offer:', err)
+    }
+    finally {
+      setIsUpdating(false)
+    }
+  }
 
   const handleDecline = async () => {
     try {
-      setIsUpdating(true);
-      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'declined' });
-      onUpdate();
-    } catch (err) {
-      console.error('Failed to decline offer:', err);
-    } finally {
-      setIsUpdating(false);
+      setIsUpdating(true)
+      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'declined' })
+      onUpdate()
     }
-  };
+    catch (err) {
+      console.error('Failed to decline offer:', err)
+    }
+    finally {
+      setIsUpdating(false)
+    }
+  }
 
-  const totalComp = offer.compensation.base_salary +
-    (offer.compensation.bonus?.amount || 0) +
-    ((offer.compensation.equity?.shares || 0) * 100);
+  const totalComp = offer.compensation.base_salary
+    + (offer.compensation.bonus?.amount || 0)
+    + ((offer.compensation.equity?.shares || 0) * 100)
 
   return (
     <motion.div
@@ -129,7 +134,9 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed; in
                     <div className="flex-1">
                       <p className="text-sm font-medium text-amber-800">Offer expires soon</p>
                       <div className="text-sm text-amber-600 flex items-center gap-1">
-                        Expires in <CountdownDisplay targetDate={new Date(offer.expires_at)} showLabels />
+                        Expires in
+                        {' '}
+                        <CountdownDisplay targetDate={new Date(offer.expires_at)} showLabels />
                       </div>
                     </div>
                   </div>
@@ -170,8 +177,14 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed; in
                         onChange={setNegotiateValue}
                       />
                       <div className="flex justify-between text-xs text-slate-500 mt-2">
-                        <span>{(offer.compensation.base_salary * 0.8 / 1000).toFixed(0)}k</span>
-                        <span>{(offer.compensation.base_salary * 1.3 / 1000).toFixed(0)}k</span>
+                        <span>
+                          {(offer.compensation.base_salary * 0.8 / 1000).toFixed(0)}
+                          k
+                        </span>
+                        <span>
+                          {(offer.compensation.base_salary * 1.3 / 1000).toFixed(0)}
+                          k
+                        </span>
                       </div>
                     </motion.div>
                   )}
@@ -216,35 +229,37 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed; in
         </AnimatePresence>
       </Card>
     </motion.div>
-  );
+  )
 }
 
 export function OffersContent({ initialOffers }: { initialOffers: OfferWithParsed[] }) {
-  const [offers, setOffers] = useState<OfferWithParsed[]>(initialOffers);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [offers, setOffers] = useState<OfferWithParsed[]>(initialOffers)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchOffers = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const data = await apiClient.get<{offers: OfferWithParsed[]}>('/api/offers');
+      setIsLoading(true)
+      setError(null)
+      const data = await apiClient.get<{ offers: OfferWithParsed[] }>('/api/offers')
       const parsedOffers = (data?.offers || []).map(offer => ({
         ...offer,
         compensation: typeof offer.compensation === 'string'
           ? JSON.parse(offer.compensation)
           : offer.compensation,
-      }));
-      setOffers(parsedOffers);
-    } catch (err) {
-      setError(null);
-      setOffers([]);
-    } finally {
-      setIsLoading(false);
+      }))
+      setOffers(parsedOffers)
     }
-  }, []);
+    catch {
+      setError(null)
+      setOffers([])
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }, [])
 
-  const activeOffers = offers.filter(o => o.status === 'pending' || o.status === 'negotiating').length;
+  const activeOffers = offers.filter(o => o.status === 'pending' || o.status === 'negotiating').length
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-white">
@@ -260,29 +275,39 @@ export function OffersContent({ initialOffers }: { initialOffers: OfferWithParse
             </div>
             <div className="flex items-center gap-3">
               <div className="px-4 py-2 bg-green-50 rounded-xl border border-green-100">
-                <span className="text-sm text-green-600 font-medium">{activeOffers} active</span>
+                <span className="text-sm text-green-600 font-medium">
+                  {activeOffers}
+                  {' '}
+                  active
+                </span>
               </div>
             </div>
           </div>
         </RevealSection>
 
-        {isLoading ? (
-          <LoadingSkeleton count={3} variant="card" />
-        ) : error ? (
-          <ErrorState message={error} onRetry={fetchOffers} />
-        ) : offers.length === 0 ? (
-          <EmptyState
-            icon={<FileText className="w-10 h-10 text-blue-600" />}
-            title="No offers yet"
-            description="Offers from recruiters will appear here when you match with opportunities"
-          />
-        ) : (
-          <div className="space-y-6">
-            {offers.map((offer, index) => (
-              <OfferCardInner key={offer.id} offer={offer} index={index} onUpdate={fetchOffers} />
-            ))}
-          </div>
-        )}
+        {isLoading
+          ? (
+              <LoadingSkeleton count={3} variant="card" />
+            )
+          : error
+            ? (
+                <ErrorState message={error} onRetry={fetchOffers} />
+              )
+            : offers.length === 0
+              ? (
+                  <EmptyState
+                    icon={<FileText className="w-10 h-10 text-blue-600" />}
+                    title="No offers yet"
+                    description="Offers from recruiters will appear here when you match with opportunities"
+                  />
+                )
+              : (
+                  <div className="space-y-6">
+                    {offers.map((offer, index) => (
+                      <OfferCardInner key={offer.id} offer={offer} index={index} onUpdate={fetchOffers} />
+                    ))}
+                  </div>
+                )}
 
         <RevealSection delay={3}>
           <div className="mt-16">
@@ -313,5 +338,5 @@ export function OffersContent({ initialOffers }: { initialOffers: OfferWithParse
         </RevealSection>
       </div>
     </div>
-  );
+  )
 }

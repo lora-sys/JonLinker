@@ -1,9 +1,10 @@
-import React from 'react';
-import Skeleton, { SkeletonCard } from './Skeleton';
+import React from 'react'
+
+import Skeleton, { SkeletonCard } from './Skeleton'
 
 interface LoadingSkeletonProps {
-  count?: number;
-  variant?: 'card' | 'list' | 'detail';
+  count?: number
+  variant?: 'card' | 'list' | 'detail'
 }
 
 export default function LoadingSkeleton({ count = 3, variant = 'card' }: LoadingSkeletonProps) {
@@ -14,7 +15,7 @@ export default function LoadingSkeleton({ count = 3, variant = 'card' }: Loading
           <SkeletonTableRow key={i} />
         ))}
       </div>
-    );
+    )
   }
 
   if (variant === 'detail') {
@@ -30,7 +31,7 @@ export default function LoadingSkeleton({ count = 3, variant = 'card' }: Loading
         <Skeleton height={100} />
         <Skeleton height={60} />
       </div>
-    );
+    )
   }
 
   return (
@@ -39,7 +40,7 @@ export default function LoadingSkeleton({ count = 3, variant = 'card' }: Loading
         <SkeletonCard key={i} />
       ))}
     </div>
-  );
+  )
 }
 
 function SkeletonTableRow() {
@@ -54,5 +55,5 @@ function SkeletonTableRow() {
         <Skeleton width={80} height={32} />
       </div>
     </div>
-  );
+  )
 }

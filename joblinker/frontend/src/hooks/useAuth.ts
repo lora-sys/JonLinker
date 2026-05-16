@@ -1,11 +1,13 @@
-'use client';
+'use client'
 
-import { useCallback } from 'react';
-import { useAuthStore } from '@/stores/auth';
-import type { LoginRequest, RegisterRequest } from '@/types/api';
+import { useCallback } from 'react'
+
+import type { LoginRequest, RegisterRequest } from '@/types/api'
+
+import { useAuthStore } from '@/stores/auth'
 
 export function useAuth() {
-  const { user, token, isAuthenticated, setAuth, clearAuth } = useAuthStore();
+  const { user, token, isAuthenticated, setAuth, clearAuth } = useAuthStore()
 
   const login = useCallback(
     async (credentials: LoginRequest) => {
@@ -13,19 +15,19 @@ export function useAuth() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Login failed');
+        const error = await response.json()
+        throw new Error(error.error || 'Login failed')
       }
 
-      const data = await response.json();
-      setAuth(data.user, data.token);
-      return data;
+      const data = await response.json()
+      setAuth(data.user, data.token)
+      return data
     },
-    [setAuth]
-  );
+    [setAuth],
+  )
 
   const register = useCallback(
     async (userData: RegisterRequest) => {
@@ -33,23 +35,23 @@ export function useAuth() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Registration failed');
+        const error = await response.json()
+        throw new Error(error.error || 'Registration failed')
       }
 
-      const data = await response.json();
-      setAuth(data.user, data.token);
-      return data;
+      const data = await response.json()
+      setAuth(data.user, data.token)
+      return data
     },
-    [setAuth]
-  );
+    [setAuth],
+  )
 
   const logout = useCallback(() => {
-    clearAuth();
-  }, [clearAuth]);
+    clearAuth()
+  }, [clearAuth])
 
   return {
     user,
@@ -58,5 +60,5 @@ export function useAuth() {
     login,
     register,
     logout,
-  };
+  }
 }

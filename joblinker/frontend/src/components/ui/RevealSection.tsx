@@ -1,31 +1,32 @@
-'use client';
+'use client'
 
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
 
 interface RevealSectionProps {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
+  children: React.ReactNode
+  delay?: number
+  className?: string
 }
 
 export function RevealSection({ children, delay = 0, className = '' }: RevealSectionProps) {
-  const [visible, setVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
+          setVisible(true)
+          observer.disconnect()
         }
       },
-      { threshold: 0.1 }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, []);
+      { threshold: 0.1 },
+    )
+    if (ref.current)
+      observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <motion.div
@@ -37,7 +38,7 @@ export function RevealSection({ children, delay = 0, className = '' }: RevealSec
     >
       {children}
     </motion.div>
-  );
+  )
 }
 
-export default RevealSection;
+export default RevealSection

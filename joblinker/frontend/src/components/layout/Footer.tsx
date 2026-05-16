@@ -1,9 +1,9 @@
-'use client';
+'use client'
 
-import Image from 'next/image';
+import Image from 'next/image'
 
 export function Footer() {
-  const currentYear = new Date().getFullYear();
+  const currentYear = new Date().getFullYear()
 
   return (
     <footer className="bg-white border-t border-gray-200 py-6">
@@ -17,7 +17,10 @@ export function Footer() {
               className="object-contain"
             />
           </div>
-          <span>JobLinker {currentYear}</span>
+          <span>
+            JobLinker
+            {currentYear}
+          </span>
         </div>
         <div className="flex items-center gap-6 text-sm text-gray-500">
           <a href="/privacy" className="hover:text-gray-700 transition-colors">
@@ -32,5 +35,5 @@ export function Footer() {
         </div>
       </div>
     </footer>
-  );
+  )
 }

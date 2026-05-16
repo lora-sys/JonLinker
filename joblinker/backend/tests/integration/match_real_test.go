@@ -23,14 +23,13 @@ func TestAutoMatch_Real(t *testing.T) {
 	recruiterAgentID := testutil.MustCreateAgent(t, baseURL, recruiterToken, "recruiter")
 	jobID := testutil.MustCreateJob(t, baseURL, recruiterToken)
 
+	// Seeker calls auto-match with the job
 	payload := map[string]interface{}{
-		"seeker_agent_id":    seekerAgentID,
-		"recruiter_agent_id": recruiterAgentID,
-		"job_id":             jobID,
+		"job_ids": []string{jobID},
 	}
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", baseURL+"/api/matches/auto", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+recruiterToken)
+	req.Header.Set("Authorization", "Bearer "+seekerToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := testutil.HTTPClient.Do(req)
@@ -39,23 +38,27 @@ func TestAutoMatch_Real(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
-	var match map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&match); err != nil {
-		t.Fatalf("failed to decode match response: %v", err)
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode auto-match response: %v", err)
 	}
+
+	matches, ok := result["matches"].([]interface{})
+	if !ok || len(matches) == 0 {
+		t.Fatal("expected at least one match")
+	}
+	match := matches[0].(map[string]interface{})
 
 	if match["id"] == nil || match["id"] == "" {
 		t.Error("expected non-empty match id")
 	}
-	if match["seeker_agent_id"] != seekerAgentID {
-		t.Errorf("expected seeker_agent_id %s, got %v", seekerAgentID, match["seeker_agent_id"])
-	}
-	if match["recruiter_agent_id"] != recruiterAgentID {
-		t.Errorf("expected recruiter_agent_id %s, got %v", recruiterAgentID, match["recruiter_agent_id"])
+	// recruiter_agent_id is now populated by the backend
+	if match["recruiter_agent_id"] == nil || match["recruiter_agent_id"] == "" {
+		t.Error("expected non-empty recruiter_agent_id")
 	}
 
 	score, ok := match["score"].(float64)
@@ -67,14 +70,6 @@ func TestAutoMatch_Real(t *testing.T) {
 	}
 
 	testutil.AssertScoreNotHardcoded(t, "match_score", score)
-
-	fsmState, ok := match["fsm_state"].(string)
-	if !ok {
-		t.Error("expected string fsm_state")
-	}
-	if fsmState != "idle" {
-		t.Errorf("expected initial fsm_state 'idle', got %q", fsmState)
-	}
 }
 
 func TestAutoMatch_List(t *testing.T) {

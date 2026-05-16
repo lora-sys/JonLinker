@@ -1,20 +1,21 @@
-'use client';
+'use client'
 
-import React from 'react';
-import Card from './Card';
+import React from 'react'
+
+import Card from './Card'
 
 interface CompensationBreakdown {
-  base: number;
-  bonus?: number;
-  equity?: number;
-  benefits?: number;
-  other?: number;
+  base: number
+  bonus?: number
+  equity?: number
+  benefits?: number
+  other?: number
 }
 
 interface CompensationCardProps extends React.HTMLAttributes<HTMLDivElement> {
-  breakdown: CompensationBreakdown;
-  currency?: string;
-  period?: 'yearly' | 'monthly';
+  breakdown: CompensationBreakdown
+  currency?: string
+  period?: 'yearly' | 'monthly'
 }
 
 export default function CompensationCard({
@@ -25,15 +26,15 @@ export default function CompensationCard({
   ...props
 }: CompensationCardProps) {
   const formatNumber = (num: number) => {
-    return `${currency}${num.toLocaleString()}`;
-  };
+    return `${currency}${num.toLocaleString()}`
+  }
 
-  const total =
-    breakdown.base +
-    (breakdown.bonus || 0) +
-    (breakdown.equity || 0) +
-    (breakdown.benefits || 0) +
-    (breakdown.other || 0);
+  const total
+    = breakdown.base
+      + (breakdown.bonus || 0)
+      + (breakdown.equity || 0)
+      + (breakdown.benefits || 0)
+      + (breakdown.other || 0)
 
   const items = [
     { label: 'Base Salary', value: breakdown.base, color: 'text-slate-900' },
@@ -41,7 +42,7 @@ export default function CompensationCard({
     breakdown.equity && { label: 'Equity', value: breakdown.equity, color: 'text-blue-600' },
     breakdown.benefits && { label: 'Benefits', value: breakdown.benefits, color: 'text-purple-600' },
     breakdown.other && { label: 'Other', value: breakdown.other, color: 'text-slate-600' },
-  ].filter(Boolean) as { label: string; value: number; color: string }[];
+  ].filter(Boolean) as { label: string, value: number, color: string }[]
 
   return (
     <Card className={`p-4 ${className}`} {...props}>
@@ -49,7 +50,9 @@ export default function CompensationCard({
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-600">Total Compensation</span>
           <span className="text-lg font-bold text-slate-900">
-            {formatNumber(total)}/{period === 'yearly' ? 'yr' : 'mo'}
+            {formatNumber(total)}
+            /
+            {period === 'yearly' ? 'yr' : 'mo'}
           </span>
         </div>
         <div className="h-px bg-slate-200" />
@@ -63,5 +66,5 @@ export default function CompensationCard({
         </div>
       </div>
     </Card>
-  );
+  )
 }

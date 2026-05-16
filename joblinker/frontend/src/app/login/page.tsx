@@ -1,50 +1,53 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
-import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth';
-import { BackgroundBeams } from '@/components/ui/BackgroundBeams';
+import { Eye, EyeOff, Lock, LogIn, Mail } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+
+import { BackgroundBeams } from '@/components/ui/BackgroundBeams'
+import { useAuthStore } from '@/stores/auth'
 
 export default function LoginPage() {
-  const router = useRouter();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const router = useRouter()
+  const setAuth = useAuthStore(state => state.setAuth)
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+    e.preventDefault()
+    setError('')
+    setIsLoading(true)
 
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      });
+      })
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Login failed');
+        const data = await response.json()
+        throw new Error(data.error || 'Login failed')
       }
 
-      const data = await response.json();
+      const data = await response.json()
       // Zustand persist handles localStorage + cookie is set server-side
-      setAuth(data.user, data.token);
-      router.push('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setIsLoading(false);
+      setAuth(data.user, data.token)
+      router.push('/dashboard')
     }
-  };
+    catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
+    }
+    finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-white relative overflow-hidden">
@@ -94,7 +97,7 @@ export default function LoginPage() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={e => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-text"
                     placeholder="you@example.com"
                     required
@@ -112,7 +115,7 @@ export default function LoginPage() {
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={e => setPassword(e.target.value)}
                     className="w-full pl-12 pr-12 py-3 bg-slate-50/50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-text"
                     placeholder="••••••••"
                     required
@@ -148,7 +151,8 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-6 text-center text-sm text-slate-600">
-              Don&apos;t have an account?{' '}
+              Don&apos;t have an account?
+              {' '}
               <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium transition-colors cursor-pointer">
                 Sign up
               </Link>
@@ -157,5 +161,5 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
-  );
+  )
 }

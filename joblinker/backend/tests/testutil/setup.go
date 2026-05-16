@@ -244,16 +244,16 @@ func MustCreateJob(t *testing.T, baseURL, token string) string {
 	return id
 }
 
-// MustCreateMatch creates a match between seeker and recruiter agents.
+// MustCreateMatch creates a match using the current /api/matches/auto API.
+// The seeker token calls the endpoint with job_ids, and the backend finds the seeker agent + job's recruiter agent.
 func MustCreateMatch(t *testing.T, baseURL, seekerToken, recruiterToken, seekerAgentID, recruiterAgentID, jobID string) string {
+	// The seeker calls auto-match with the job ID
 	payload := map[string]interface{}{
-		"seeker_agent_id":    seekerAgentID,
-		"recruiter_agent_id": recruiterAgentID,
-		"job_id":             jobID,
+		"job_ids": []string{jobID},
 	}
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", baseURL+"/api/matches/auto", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+recruiterToken)
+	req.Header.Set("Authorization", "Bearer "+seekerToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := HTTPClient.Do(req)
@@ -262,11 +262,20 @@ func MustCreateMatch(t *testing.T, baseURL, seekerToken, recruiterToken, seekerA
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201 from /api/matches/auto, got %d", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 from /api/matches/auto, got %d", resp.StatusCode)
 	}
 
-	var match map[string]interface{}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode auto-match response: %v", err)
+	}
+
+	matches, ok := result["matches"].([]interface{})
+	if !ok || len(matches) == 0 {
+		t.Fatal("expected at least one match in auto-match result")
+	}
+	match := matches[0].(map[string]interface{})
 	if err := json.NewDecoder(resp.Body).Decode(&match); err != nil {
 		t.Fatalf("failed to decode match response: %v", err)
 	}

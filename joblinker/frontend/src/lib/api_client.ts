@@ -1,136 +1,142 @@
 // API Client - wraps GatewayClient for backwards compatibility
 // All API calls now route through the unified gateway
 
-import type { ApiError } from '@/types';
-import { getAuthToken } from '@/lib/api-utils';
-import { GatewayClient, initGateway, ServiceRoutes, type GatewayConfig } from '@/lib/gateway';
+import type { GatewayConfig } from '@/lib/gateway'
+import type { ApiError } from '@/types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { getAuthToken } from '@/lib/api-utils'
+import { GatewayClient, initGateway, ServiceRoutes } from '@/lib/gateway'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
 interface FetchOptions extends RequestInit {
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: Record<string, string | number | boolean | undefined>
 }
 
 // Internal gateway client instance
-let internalGateway: GatewayClient | null = null;
+let internalGateway: GatewayClient | null = null
 
 function getGateway(): GatewayClient {
   if (!internalGateway) {
-    const token = getAuthToken();
+    const token = getAuthToken()
     const config: GatewayConfig = {
       baseURL: API_BASE,
       userId: '', // Will be set from auth store
       tenantId: 'default',
-    };
-    internalGateway = initGateway(config);
+    }
+    internalGateway = initGateway(config)
     if (token) {
-      internalGateway.setToken(token);
+      internalGateway.setToken(token)
     }
   }
-  return internalGateway;
+  return internalGateway
 }
 
 function setUserContext(userId: string, agentId?: string, tenantId?: string) {
-  const gateway = getGateway();
+  const gateway = getGateway()
   if (userId) {
-    gateway.headers['X-User-ID'] = userId;
+    gateway.headers['X-User-ID'] = userId
   }
   if (agentId) {
-    gateway.headers['X-Agent-ID'] = agentId;
+    gateway.headers['X-Agent-ID'] = agentId
   }
   if (tenantId && tenantId !== 'default') {
-    gateway.headers['X-Tenant-ID'] = tenantId;
-  } else {
-    delete gateway.headers['X-Tenant-ID'];
+    gateway.headers['X-Tenant-ID'] = tenantId
+  }
+  else {
+    delete gateway.headers['X-Tenant-ID']
   }
 }
 
 class ApiClient {
-  private token: string | null = null;
-  private userId: string | null = null;
+  private token: string | null = null
+  private userId: string | null = null
 
   constructor() {
-    this.loadAuth();
+    this.loadAuth()
   }
 
   private loadAuth() {
-    const token = getAuthToken();
+    const token = getAuthToken()
     if (token) {
-      this.token = token;
-      const gateway = getGateway();
-      gateway.setToken(token);
+      this.token = token
+      const gateway = getGateway()
+      gateway.setToken(token)
     }
   }
 
   setToken(token: string | null) {
-    this.token = token;
-    const gateway = getGateway();
-    gateway.setToken(token);
+    this.token = token
+    const gateway = getGateway()
+    gateway.setToken(token)
   }
 
   setUserId(userId: string, agentId?: string, tenantId?: string) {
-    setUserContext(userId, agentId, tenantId);
+    setUserContext(userId, agentId, tenantId)
   }
 
   private getToken(): string | null {
-    return this.token || getAuthToken();
+    return this.token || getAuthToken()
   }
 
   private async request<T>(
     endpoint: string,
-    options: FetchOptions = {}
+    options: FetchOptions = {},
   ): Promise<T> {
-    const { params, ...fetchOptions } = options;
+    const { params, ...fetchOptions } = options
 
     // Build URL with params
-    let url = `${API_BASE}${endpoint}`;
+    let url = `${API_BASE}${endpoint}`
     if (params) {
-      const searchParams = new URLSearchParams();
+      const searchParams = new URLSearchParams()
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) {
-          searchParams.append(key, String(value));
+          searchParams.append(key, String(value))
         }
-      });
-      const query = searchParams.toString();
-      if (query) url += `?${query}`;
+      })
+      const query = searchParams.toString()
+      if (query)
+        url += `?${query}`
     }
 
-    const token = this.getToken();
+    const token = this.getToken()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-    };
+    }
 
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`
     }
 
     // For backwards compatibility, use direct fetch but with gateway headers
-    const gateway = getGateway();
+    const gateway = getGateway()
     const response = await fetch(url, {
       ...fetchOptions,
       headers: { ...gateway.headers, ...headers, ...(fetchOptions.headers as Record<string, string> || {}) },
-    });
+    })
 
     if (!response.ok) {
-      let error: ApiError = { error: 'Unknown error' };
+      let error: ApiError = { error: 'Unknown error' }
       try {
-        error = await response.json();
-      } catch {
-        // Response was not JSON, use status text
-        error = { error: response.statusText || 'Request failed' };
+        error = await response.json()
       }
-      throw error;
+      catch {
+        // Response was not JSON, use status text
+        error = { error: response.statusText || 'Request failed' }
+      }
+      throw error
     }
 
     try {
-      return await response.json();
-    } catch {
-      throw { error: 'Invalid JSON response from server' };
+      return await response.json()
+    }
+    catch {
+      throw new Error('Invalid JSON response from server')
     }
   }
 
   get<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: 'GET' });
+    return this.request<T>(endpoint, { ...options, method: 'GET' })
   }
 
   post<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
@@ -138,7 +144,7 @@ class ApiClient {
       ...options,
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
-    });
+    })
   }
 
   put<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
@@ -146,7 +152,7 @@ class ApiClient {
       ...options,
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
-    });
+    })
   }
 
   patch<T>(endpoint: string, data?: unknown, options?: FetchOptions): Promise<T> {
@@ -154,13 +160,13 @@ class ApiClient {
       ...options,
       method: 'PATCH',
       body: data ? JSON.stringify(data) : undefined,
-    });
+    })
   }
 
   delete<T>(endpoint: string, options?: FetchOptions): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
+    return this.request<T>(endpoint, { ...options, method: 'DELETE' })
   }
 }
 
-export const apiClient = new ApiClient();
-export { ServiceRoutes, GatewayClient, initGateway };
+export const apiClient = new ApiClient()
+export { GatewayClient, initGateway, ServiceRoutes }

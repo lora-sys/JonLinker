@@ -1,44 +1,47 @@
-import { NextResponse } from 'next/server';
-import { getAuthHeaderFromCookie } from '@/lib/api-cookies';
+import { NextResponse } from 'next/server'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { getAuthHeaderFromCookie } from '@/lib/api-cookies'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
 function getAuthHeaderFromRequest(request: Request): Record<string, string> {
-  const authHeader = request.headers.get('Authorization');
+  const authHeader = request.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
-    return { Authorization: authHeader };
+    return { Authorization: authHeader }
   }
-  return {};
+  return {}
 }
 
 export async function GET(request: Request) {
   try {
-    const headerAuth = getAuthHeaderFromRequest(request);
-    const cookieAuth = await getAuthHeaderFromCookie();
-    const authHeader = Object.keys(headerAuth).length > 0 ? headerAuth : cookieAuth;
-    const response = await fetch(`${API_BASE}/api/agents`, { headers: { ...authHeader } });
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
+    const headerAuth = getAuthHeaderFromRequest(request)
+    const cookieAuth = await getAuthHeaderFromCookie()
+    const authHeader = Object.keys(headerAuth).length > 0 ? headerAuth : cookieAuth
+    const response = await fetch(`${API_BASE}/api/agents`, { headers: { ...authHeader } })
+    const data = await response.json()
+    return NextResponse.json(data, { status: response.status })
+  }
+  catch {
+    return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const headerAuth = getAuthHeaderFromRequest(request);
-    const cookieAuth = await getAuthHeaderFromCookie();
-    const authHeader = Object.keys(headerAuth).length > 0 ? headerAuth : cookieAuth;
-    const headers = { 'Content-Type': 'application/json', ...authHeader };
+    const body = await request.json()
+    const headerAuth = getAuthHeaderFromRequest(request)
+    const cookieAuth = await getAuthHeaderFromCookie()
+    const authHeader = Object.keys(headerAuth).length > 0 ? headerAuth : cookieAuth
+    const headers = { 'Content-Type': 'application/json', ...authHeader }
     const response = await fetch(`${API_BASE}/api/agents`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-    });
-    const data = await response.json();
-    return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 });
+    })
+    const data = await response.json()
+    return NextResponse.json(data, { status: response.status })
+  }
+  catch {
+    return NextResponse.json({ error: 'Failed to connect to backend' }, { status: 500 })
   }
 }

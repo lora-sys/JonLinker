@@ -1,6 +1,8 @@
-import { fetchServer } from '@/lib/api-server';
-import { JobsContent } from './JobsContent';
-import type { Job } from '@/types';
+import type { Job } from '@/types'
+
+import { fetchServer } from '@/lib/api-server'
+
+import { JobsContent } from './JobsContent'
 
 function parseJobStructured(job: Job): Job {
   return {
@@ -8,12 +10,12 @@ function parseJobStructured(job: Job): Job {
     structured: typeof job.structured === 'string'
       ? JSON.parse(job.structured)
       : job.structured,
-  };
+  }
 }
 
 export default async function JobsPage() {
-  const jobs = await fetchServer<Job[]>('/api/jobs');
-  const parsedJobs = (jobs || []).map(parseJobStructured);
+  const jobs = await fetchServer<Job[]>('/api/jobs')
+  const parsedJobs = (jobs || []).map(parseJobStructured)
 
-  return <JobsContent initialJobs={parsedJobs} />;
+  return <JobsContent initialJobs={parsedJobs} />
 }

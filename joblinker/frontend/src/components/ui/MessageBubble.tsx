@@ -1,11 +1,11 @@
-import React from 'react';
+import React from 'react'
 
 interface MessageBubbleProps {
-  content: string;
-  sender: 'user' | 'agent' | 'system';
-  timestamp?: Date;
-  senderName?: string;
-  intent?: string;
+  content: string
+  sender: 'user' | 'agent' | 'system'
+  timestamp?: Date
+  senderName?: string
+  intent?: string
 }
 
 export default function MessageBubble({
@@ -16,8 +16,8 @@ export default function MessageBubble({
   intent,
 }: MessageBubbleProps) {
   const formatTime = (ts: Date) => {
-    return ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+    return ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
 
   const intentColors: Record<string, string> = {
     INTRODUCTION: 'bg-blue-50 border-blue-200',
@@ -29,14 +29,14 @@ export default function MessageBubble({
     SCHEDULE: 'bg-blue-50 border-blue-200',
     CONFIRM: 'bg-green-100 border-green-300',
     INQUIRY: 'bg-gray-50 border-gray-200',
-  };
+  }
 
-  const alignment = sender === 'user' ? 'justify-end' : 'justify-start';
+  const alignment = sender === 'user' ? 'justify-end' : 'justify-start'
   const bubbleColor = sender === 'user'
     ? 'bg-blue-100 border-blue-300'
     : intent && intentColors[intent]
       ? intentColors[intent]
-      : 'bg-gray-50 border-gray-200';
+      : 'bg-gray-50 border-gray-200'
 
   return (
     <div className={`flex ${alignment}`}>
@@ -61,5 +61,5 @@ export default function MessageBubble({
         </div>
       </div>
     </div>
-  );
+  )
 }

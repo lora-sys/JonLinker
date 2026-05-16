@@ -92,7 +92,8 @@ func (r *MatchRepository) ListByAgentIDs(agentIDs []uuid.UUID) ([]*model.Match, 
 	if len(agentIDs) == 0 {
 		return matches, nil
 	}
-	if err := r.db.Where("seeker_agent_id IN ?", agentIDs).Preload("SeekerAgent").Preload("Job").Find(&matches).Error; err != nil {
+	// Get matches where user owns the seeker agent OR owns the job's recruiter agent
+	if err := r.db.Where("seeker_agent_id IN ? OR job_id IN (SELECT id FROM jobs WHERE agent_id IN ?)", agentIDs, agentIDs).Preload("SeekerAgent").Preload("Job").Find(&matches).Error; err != nil {
 		return nil, err
 	}
 	return matches, nil
@@ -104,4 +105,20 @@ func (r *MatchRepository) CreateToolCall(ctx context.Context, tc *model.AgentToo
 
 func (r *MatchRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&model.Match{}, "id = ?", id).Error
+}
+
+func (r *MatchRepository) CreateConfirmationRequest(cr *model.ConfirmationRequest) error {
+	return r.db.Create(cr).Error
+}
+
+func (r *MatchRepository) GetPendingConfirmation(matchID uuid.UUID) (*model.ConfirmationRequest, error) {
+	var cr model.ConfirmationRequest
+	if err := r.db.Where("match_id = ? AND status = ?", matchID, model.ConfirmationStatusPending).First(&cr).Error; err != nil {
+		return nil, err
+	}
+	return &cr, nil
+}
+
+func (r *MatchRepository) UpdateConfirmationRequest(cr *model.ConfirmationRequest) error {
+	return r.db.Save(cr).Error
 }

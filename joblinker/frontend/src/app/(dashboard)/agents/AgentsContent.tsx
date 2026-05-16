@@ -1,23 +1,25 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { Users, Plus } from 'lucide-react';
-import Card from '@/components/ui/Card';
-import Avatar from '@/components/ui/Avatar';
-import StatusDot from '@/components/ui/StatusDot';
-import Badge from '@/components/ui/Badge';
-import SkillTag from '@/components/ui/SkillTag';
-import { LoadingSkeleton, ErrorState, EmptyState } from '@/components/ui';
-import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { motion } from 'framer-motion';
-import type { Agent } from '@/types';
+import { motion } from 'framer-motion'
+import { Plus, Users } from 'lucide-react'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+
+import type { Agent } from '@/types'
+
+import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
+import Avatar from '@/components/ui/Avatar'
+import Badge from '@/components/ui/Badge'
+import Card from '@/components/ui/Card'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
+import SkillTag from '@/components/ui/SkillTag'
+import StatusDot from '@/components/ui/StatusDot'
 
 interface AgentWithSkills extends Agent {
   config?: {
-    skills?: string[];
-    [key: string]: unknown;
-  };
+    skills?: string[]
+    [key: string]: unknown
+  }
 }
 
 function AgentsLoadingSkeleton() {
@@ -25,11 +27,11 @@ function AgentsLoadingSkeleton() {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <LoadingSkeleton count={2} variant="card" />
     </div>
-  );
+  )
 }
 
-function AgentCard({ agent, index }: { agent: AgentWithSkills; index: number }) {
-  const skills = agent.config?.skills || [];
+function AgentCard({ agent, index }: { agent: AgentWithSkills, index: number }) {
+  const skills = agent.config?.skills || []
 
   return (
     <motion.div
@@ -55,19 +57,20 @@ function AgentCard({ agent, index }: { agent: AgentWithSkills; index: number }) 
         </div>
         {skills.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {skills.slice(0, 4).map((skill) => (
+            {skills.slice(0, 4).map(skill => (
               <SkillTag key={skill}>{skill}</SkillTag>
             ))}
             {skills.length > 4 && (
               <span className="px-2 py-1 text-xs bg-slate-100 text-slate-500 rounded-full">
-                +{skills.length - 4}
+                +
+                {skills.length - 4}
               </span>
             )}
           </div>
         )}
       </Card>
     </motion.div>
-  );
+  )
 }
 
 function AgentsEmptyState() {
@@ -79,20 +82,20 @@ function AgentsEmptyState() {
       actionLabel="Create Agent"
       href="/agents/create"
     />
-  );
+  )
 }
 
-export function AgentsContent({ initialAgents, isLoading = false, initialError = null }: { initialAgents: AgentWithSkills[]; isLoading?: boolean; initialError?: string | null }) {
-  const [agents, setAgents] = useState<AgentWithSkills[]>(initialAgents);
-  const [error, setError] = useState<string | null>(initialError);
+export function AgentsContent({ initialAgents, isLoading = false, initialError = null }: { initialAgents: AgentWithSkills[], isLoading?: boolean, initialError?: string | null }) {
+  const [agents, setAgents] = useState<AgentWithSkills[]>(initialAgents)
+  const [error, setError] = useState<string | null>(initialError)
 
   // Update when initialAgents changes (after API fetch completes)
   useEffect(() => {
-    setAgents(initialAgents);
+    setAgents(initialAgents)
     if (initialError) {
-      setError(initialError);
+      setError(initialError)
     }
-  }, [initialAgents, initialError]);
+  }, [initialAgents, initialError])
 
   return (
     <ErrorBoundary>
@@ -113,21 +116,27 @@ export function AgentsContent({ initialAgents, isLoading = false, initialError =
             </Link>
           </div>
 
-          {isLoading ? (
-            <AgentsLoadingSkeleton />
-          ) : error ? (
-            <ErrorState message={error} onRetry={() => setError(null)} />
-          ) : agents.length === 0 ? (
-            <AgentsEmptyState />
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {agents.map((agent, index) => (
-                <AgentCard key={agent.id} agent={agent} index={index} />
-              ))}
-            </div>
-          )}
+          {isLoading
+            ? (
+                <AgentsLoadingSkeleton />
+              )
+            : error
+              ? (
+                  <ErrorState message={error} onRetry={() => setError(null)} />
+                )
+              : agents.length === 0
+                ? (
+                    <AgentsEmptyState />
+                  )
+                : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {agents.map((agent, index) => (
+                        <AgentCard key={agent.id} agent={agent} index={index} />
+                      ))}
+                    </div>
+                  )}
         </div>
       </div>
     </ErrorBoundary>
-  );
+  )
 }

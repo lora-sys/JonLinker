@@ -1,13 +1,14 @@
-'use client';
+'use client'
 
-import Image from 'next/image';
-import Link from 'next/link';
-import { useAuthStore } from '@/stores/auth';
-import { useUIStore } from '@/stores/ui';
+import Image from 'next/image'
+import Link from 'next/link'
+
+import { useAuthStore } from '@/stores/auth'
+import { useUIStore } from '@/stores/ui'
 
 export function Header() {
-  const { user } = useAuthStore();
-  const { toggleSidebar } = useUIStore();
+  const { user } = useAuthStore()
+  const { toggleSidebar } = useUIStore()
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-40">
@@ -50,5 +51,5 @@ export function Header() {
         )}
       </div>
     </header>
-  );
+  )
 }

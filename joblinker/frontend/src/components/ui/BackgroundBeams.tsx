@@ -1,18 +1,18 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion'
+import { useEffect, useState } from 'react'
 
 interface Beam {
-  x: number;
-  delay: number;
-  duration: number;
-  height: number;
+  x: number
+  delay: number
+  duration: number
+  height: number
 }
 
 export function BackgroundBeams() {
-  const [beams, setBeams] = useState<Beam[]>([]);
-  const prefersReducedMotion = useReducedMotion();
+  const [beams, setBeams] = useState<Beam[]>([])
+  const prefersReducedMotion = useReducedMotion()
 
   useEffect(() => {
     const newBeams = Array.from({ length: prefersReducedMotion ? 2 : 6 }, () => ({
@@ -20,12 +20,12 @@ export function BackgroundBeams() {
       delay: Math.random() * 5,
       duration: 10 + Math.random() * 10,
       height: 100 + Math.random() * 200,
-    }));
-    setBeams(newBeams);
-  }, [prefersReducedMotion]);
+    }))
+    setBeams(newBeams)
+  }, [prefersReducedMotion])
 
   if (prefersReducedMotion) {
-    return null; // Skip animation entirely
+    return null // Skip animation entirely
   }
 
   return (
@@ -46,5 +46,5 @@ export function BackgroundBeams() {
         />
       ))}
     </div>
-  );
+  )
 }

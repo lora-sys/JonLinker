@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server'
+
+import { NextResponse } from 'next/server'
 
 const PUBLIC_PATHS = [
   '/login',
@@ -9,29 +10,29 @@ const PUBLIC_PATHS = [
   '/api/auth/register',
   '/api/chat',
   '/',
-];
+]
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl
 
   // Allow public paths
   if (PUBLIC_PATHS.some(path => pathname === path || pathname.startsWith('/api/auth'))) {
-    return NextResponse.next();
+    return NextResponse.next()
   }
 
   // Check for auth session cookie OR Authorization header
-  const authCookie = request.cookies.get('joblinker-auth');
-  const authHeader = request.headers.get('Authorization');
-  const hasBearerToken = authHeader?.startsWith('Bearer ');
+  const authCookie = request.cookies.get('joblinker-auth')
+  const authHeader = request.headers.get('Authorization')
+  const hasBearerToken = authHeader?.startsWith('Bearer ')
 
   if (!authCookie?.value && !hasBearerToken) {
     // Redirect to login for protected pages
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.next();
+  return NextResponse.next()
 }
 
 export const config = {
@@ -45,4 +46,4 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-};
+}
