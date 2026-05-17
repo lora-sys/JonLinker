@@ -61,6 +61,10 @@ func (s *OfferService) GenerateOffer(matchID uuid.UUID, compensationJSON string,
 	return offer, nil
 }
 
+func (s *OfferService) ListAll(limit, offset int) ([]*model.Offer, int64, error) {
+	return s.offerRepo.ListAll(limit, offset)
+}
+
 func (s *OfferService) GetOffer(id uuid.UUID) (*model.Offer, error) {
 	return s.offerRepo.GetByID(id)
 }

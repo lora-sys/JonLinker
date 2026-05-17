@@ -3,8 +3,7 @@
 import type { UIMessage } from 'ai'
 
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { MatchStatus } from '@/types'
 
@@ -37,28 +36,23 @@ function matchStatusToStage(status: string): FSMStage {
   switch (status) {
     case 'mutual_interest': return 'JOB_DESCRIPTION'
     case 'negotiating': return 'SALARY_NEGOTIATION'
-    case 'interview_scheduled': return 'INTERVIEWING'
-    case 'offer_sent': case 'offered': return 'OFFER'
+    case 'interviewing': return 'INTERVIEWING'
+    case 'offered': return 'OFFER'
     case 'hired': case 'rejected': case 'completed': return 'COMPLETED'
     default: return 'INTRODUCTION'
   }
 }
 
 export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
+  const [initialLoaded, setInitialLoaded] = useState(false)
   const [input, setInput] = useState('')
+  const checkedConfirmRef = useRef(false)
+  const agentIdsRef = useRef({ seeker: '', recruiter: '', current: '' })
 
-  // useChat manages messages, sendMessage, status, etc. No input state.
-  const transport = useMemo(
-    () => new DefaultChatTransport({
-      api: '/api/chat-proxy',
-      credentials: 'include',
-    }),
-    [],
-  )
-
+  // useChat is a pure UI state container — no transport, no api endpoint.
+  // Messages are populated exclusively via setMessages() from WebSocket onMessage or initial fetch.
   const {
     messages: aiMessages,
-    sendMessage,
     stop,
     error,
     setMessages,
@@ -66,8 +60,37 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     status,
   } = useChat({
     id: matchId,
-    transport,
   })
+
+  useEffect(() => {
+    if (!enabled || initialLoaded)
+      return
+    apiClient.get<MessageItem[]>(`/api/conversation/${matchId}`)
+      .then((data) => {
+        if (!Array.isArray(data) || data.length === 0)
+          return
+        const { seeker, recruiter } = agentIdsRef.current
+        const msgs: UIMessage[] = data
+          .filter(m => extractTextFromXML(m.content_xml || ''))
+          .map((m) => {
+            const text = extractTextFromXML(m.content_xml || '')
+            const isSeeker = m.sender_agent_id && m.sender_agent_id === seeker
+            return {
+              id: m.id || crypto.randomUUID(),
+              role: isSeeker ? 'user' : 'assistant',
+              parts: [{ type: 'text', text }] as UIMessage['parts'],
+              createdAt: m.created_at ? new Date(m.created_at) : new Date(),
+            } as UIMessage
+          })
+        setMessages((prev) => {
+          if (prev.length > 0)
+            return prev
+          return msgs
+        })
+        setInitialLoaded(true)
+      })
+      .catch(() => {})
+  }, [matchId, enabled, initialLoaded, setMessages])
 
   const isLoading = status === 'submitted' || status === 'streaming'
 
@@ -77,8 +100,24 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   useEffect(() => {
     if (!enabled)
       return
-    apiClient.get<{ status: MatchStatus }>(`/api/matches/${matchId}`)
-      .then(data => setFsmStage(matchStatusToStage(data.status)))
+    apiClient.get<Record<string, unknown>>(`/api/matches/${matchId}`)
+      .then((data) => {
+        setFsmStage(matchStatusToStage(String(data.status || '')))
+        if (data.seeker_agent_id || data.recruiter_agent_id) {
+          const seeker = String(data.seeker_agent_id || '')
+          const recruiter = String(data.recruiter_agent_id || '')
+          const current = String(data.seeker_agent_id || '')
+          agentIdsRef.current = { seeker, recruiter, current }
+        }
+        if (data.status === 'offered' && !checkedConfirmRef.current) {
+          checkedConfirmRef.current = true
+          setPendingConfirm({
+            match_id: matchId,
+            intent: 'OFFER',
+            message_id: '',
+          })
+        }
+      })
       .catch(() => {})
   }, [matchId, enabled])
 
@@ -109,6 +148,23 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     onMessage: useCallback(
       (data: Record<string, unknown>) => {
         switch (data.type) {
+          case 'agent_response': {
+            const text = String(data.text || data.content_xml || '')
+            if (!text || text === '{}')
+              break
+            const { seeker } = agentIdsRef.current
+            const isSeeker = data.sender_agent_id && String(data.sender_agent_id) === seeker
+            setMessages(prev => [
+              ...prev,
+              {
+                id: String(data.message_id || crypto.randomUUID()),
+                role: isSeeker ? 'user' : 'assistant',
+                parts: [{ type: 'text', text }] as UIMessage['parts'],
+                createdAt: data.created_at ? new Date(String(data.created_at)) : new Date(),
+              } as UIMessage,
+            ])
+            break
+          }
           case 'fsm_state_change':
             setFsmStage(matchStatusToStage(String(data.new_state || '')))
             break
@@ -144,16 +200,25 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
       if (!text || isLoading)
         return
 
+      setMessages(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'user',
+          parts: [{ type: 'text', text }] as UIMessage['parts'],
+          createdAt: new Date(),
+        } as UIMessage,
+      ])
+
       const xml = `<message><payload><intent>INQUIRY</intent><parameters>{"message":"${text.replace(/"/g, '\\"')}"}</parameters></payload></message>`
       apiClient.post(`/api/messages/${matchId}`, {
         content_xml: xml,
         intent_type: 'INQUIRY',
       }).catch(console.error)
 
-      sendMessage({ text })
       setInput('')
     },
-    [input, isLoading, matchId, sendMessage],
+    [input, isLoading, matchId, setMessages],
   )
 
   const handleHumanConfirm = useCallback(
@@ -198,6 +263,30 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     fsmStage,
     pendingConfirm,
     handleHumanConfirm,
+  }
+}
+
+interface MessageItem {
+  id: string
+  match_id?: string
+  sender_agent_id?: string
+  content_xml?: string
+  intent_type?: string
+  created_at?: string
+}
+
+function extractTextFromXML(xml: string): string {
+  if (!xml || xml.startsWith('{'))
+    return ''
+  const match = xml.match(/<parameters>({.*?})<\/parameters>/)
+  if (!match || !match[1])
+    return xml
+  try {
+    const parsed = JSON.parse(match[1])
+    return parsed.message || parsed.text || ''
+  }
+  catch {
+    return xml
   }
 }
 

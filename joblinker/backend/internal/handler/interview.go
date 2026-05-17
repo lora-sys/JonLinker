@@ -19,7 +19,12 @@ func NewInterviewHandler(svc *service.InterviewService) *InterviewHandler {
 }
 
 func (h *InterviewHandler) List(c *gin.Context) {
-	c.JSON(http.StatusOK, []interface{}{})
+	interviews, total, err := h.svc.ListAll(100, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list interviews"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"interviews": interviews, "total": total})
 }
 
 func (h *InterviewHandler) Create(c *gin.Context) {

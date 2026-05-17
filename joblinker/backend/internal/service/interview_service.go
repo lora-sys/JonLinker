@@ -54,6 +54,10 @@ func (s *InterviewService) ScheduleInterview(matchID uuid.UUID, scheduledAt stri
 	return interview, nil
 }
 
+func (s *InterviewService) ListAll(limit, offset int) ([]*model.Interview, int64, error) {
+	return s.interviewRepo.ListAll(limit, offset)
+}
+
 func (s *InterviewService) GetInterview(id uuid.UUID) (*model.Interview, error) {
 	return s.interviewRepo.GetByID(id)
 }

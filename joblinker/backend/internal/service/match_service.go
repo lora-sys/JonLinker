@@ -1,13 +1,17 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
+	"joblinker/pkg/rabbitmq"
 
 	"github.com/google/uuid"
 )
@@ -18,13 +22,15 @@ type MatchService struct {
 	matchRepo *repository.MatchRepository
 	agentRepo *repository.AgentRepository
 	jobRepo   *repository.JobRepository
+	rmq       *rabbitmq.RabbitMQ
 }
 
-func NewMatchService(matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, jobRepo *repository.JobRepository) *MatchService {
+func NewMatchService(matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, jobRepo *repository.JobRepository, rmq *rabbitmq.RabbitMQ) *MatchService {
 	return &MatchService{
 		matchRepo: matchRepo,
 		agentRepo: agentRepo,
 		jobRepo:   jobRepo,
+		rmq:       rmq,
 	}
 }
 
@@ -38,6 +44,12 @@ func (s *MatchService) CreateMatch(seekerAgentID, jobID uuid.UUID, score float64
 	if err := s.matchRepo.Create(match); err != nil {
 		return nil, err
 	}
+
+	// Auto-start A2A conversation immediately
+	if err := s.autoStartA2A(match); err != nil {
+		log.Printf("[CreateMatch] Failed to auto-start A2A for match %s: %v", match.ID, err)
+	}
+
 	return match, nil
 }
 
@@ -53,11 +65,154 @@ func (s *MatchService) ConfirmMatch(id uuid.UUID) (*model.Match, error) {
 	if match.Status != model.MatchStatusPending {
 		return nil, ErrInvalidMatchState
 	}
-	match.Status = model.MatchStatusMutualInterest
+
+	// Auto-start A2A conversation (handles pending → mutual_interest transition)
+	if err := s.autoStartA2A(match); err != nil {
+		return nil, fmt.Errorf("failed to start A2A: %w", err)
+	}
+
+	return match, nil
+}
+
+func (s *MatchService) DeclineMatch(id uuid.UUID) (*model.Match, error) {
+	match, err := s.matchRepo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if match.Status != model.MatchStatusPending {
+		return nil, ErrInvalidMatchState
+	}
+	match.Status = model.MatchStatusRejected
 	if err := s.matchRepo.Update(match); err != nil {
 		return nil, err
 	}
 	return match, nil
+}
+
+func (s *MatchService) autoStartA2A(match *model.Match) error {
+	if s.rmq == nil {
+		return errors.New("rabbitmq not available")
+	}
+
+	// Transition match from pending → mutual_interest so A2A conversation starts
+	if match.Status == model.MatchStatusPending {
+		match.Status = model.MatchStatusMutualInterest
+		if err := s.matchRepo.Update(match); err != nil {
+			log.Printf("[autoStartA2A] Failed to update match %s status: %v", match.ID, err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	seeker, err := s.agentRepo.GetByID(match.SeekerAgentID)
+	if err != nil {
+		return fmt.Errorf("failed to get seeker agent: %w", err)
+	}
+
+	seekerName := "Candidate"
+	var seekerSkills []string
+	seekerYearsExp := 0
+	seekerLocation := ""
+	seekerTitle := ""
+	var config map[string]interface{}
+	if seeker.ConfigJSON != nil {
+		if json.Unmarshal(seeker.ConfigJSON, &config) == nil {
+			if name, ok := config["name"].(string); ok && name != "" {
+				seekerName = name
+			}
+			if skills, ok := config["skills"].([]interface{}); ok {
+				for _, sk := range skills {
+					if s, ok := sk.(string); ok {
+						seekerSkills = append(seekerSkills, s)
+					}
+				}
+			}
+			if exp, ok := config["experience_years"].(float64); ok {
+				seekerYearsExp = int(exp)
+			}
+			if loc, ok := config["location"].(string); ok {
+				seekerLocation = loc
+			}
+			if title, ok := config["title"].(string); ok {
+				seekerTitle = title
+			}
+		}
+	}
+
+	jobTitle, jobCompany := "", ""
+	salaryMin, salaryMax := 0, 0
+	jobLocation := ""
+	var jobSkills []string
+	job, _ := s.jobRepo.GetByID(match.JobID)
+	if job != nil {
+		var jd map[string]interface{}
+		if json.Unmarshal(job.StructuredJSON, &jd) == nil {
+			if t, ok := jd["title"].(string); ok {
+				jobTitle = t
+			}
+			if c, ok := jd["company"].(string); ok {
+				jobCompany = c
+			}
+			if loc, ok := jd["location"].(string); ok {
+				jobLocation = loc
+			}
+			if min, ok := jd["salary_min"].(float64); ok {
+				salaryMin = int(min)
+			}
+			if max, ok := jd["salary_max"].(float64); ok {
+				salaryMax = int(max)
+			}
+			if skills, ok := jd["skills"].([]interface{}); ok {
+				for _, sk := range skills {
+					if s, ok := sk.(string); ok {
+						jobSkills = append(jobSkills, s)
+					}
+				}
+			}
+			if jobCompany == "" {
+				jobCompany = "TechCorp"
+			}
+		}
+	}
+
+	var intro string
+	if salaryMin > 0 || salaryMax > 0 {
+		intro = fmt.Sprintf(
+			"Hi, I'm %s. I'm very interested in the %s position at %s. "+
+				"I'm a %s based in %s with %d years of experience in %s. "+
+				"I see the role is looking for %s in %s, offering $%d-$%d — this aligns strongly with my background. "+
+				"I'd love to discuss how my experience can contribute to the team.",
+			seekerName, jobTitle, jobCompany,
+			seekerTitle, seekerLocation, seekerYearsExp, strings.Join(seekerSkills, ", "),
+			strings.Join(jobSkills, ", "), jobLocation, salaryMin, salaryMax,
+		)
+	} else {
+		intro = fmt.Sprintf(
+			"Hi, I'm %s. I'm very interested in the %s position at %s. "+
+				"I'm a %s based in %s with %d years of experience in %s. "+
+				"My background in %s seems like a great match for this role, and I'd love to discuss it further.",
+			seekerName, jobTitle, jobCompany,
+			seekerTitle, seekerLocation, seekerYearsExp, strings.Join(seekerSkills, ", "),
+			strings.Join(jobSkills, ", "),
+		)
+	}
+
+	msg := &rabbitmq.AgentMessage{
+		MessageID:  uuid.New().String(),
+		SenderID:   match.SeekerAgentID.String(),
+		ReceiverID: "",
+		Intent:     "INQUIRY",
+		MatchID:    match.ID.String(),
+		Payload: map[string]interface{}{
+			"message": intro,
+			"content": intro,
+		},
+		Timestamp: time.Now(),
+	}
+
+	log.Printf("[autoStartA2A] Publishing initial INQUIRY for match %s from seeker %s", match.ID, seekerName)
+	return s.rmq.PublishAgentMessage(ctx, msg)
 }
 
 func (s *MatchService) TransitionToNegotiating(id uuid.UUID) (*model.Match, error) {
@@ -314,6 +469,11 @@ func (s *MatchService) AutoCreateMatches(userID uuid.UUID, jobIDs []uuid.UUID) (
 			}
 			result.CreatedCount++
 			result.Matches = append(result.Matches, match)
+
+			// Auto-start A2A conversation for this match
+			if err := s.autoStartA2A(match); err != nil {
+				log.Printf("[AutoCreateMatches] Failed to start A2A for match %s: %v", match.ID, err)
+			}
 		} else {
 			result.SkippedCount++
 		}

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -72,6 +74,9 @@ type Usage struct {
 }
 
 func NewClient() *Client {
+	if os.Getenv("AI_MOCK_MODE") == "true" {
+		log.Println("AI client initialized in MOCK MODE")
+	}
 	return &Client{
 		BaseURL:    getEnv("AI_BASE_URL", "https://api.longcat.chat/openai"),
 		APIKey:     getEnv("AI_API_KEY", ""),
@@ -96,7 +101,11 @@ type ToolExecutor func(toolName string, arguments map[string]interface{}) (strin
 
 // ChatWithTools enables function calling with the AI
 // It sends tool definitions to the AI, handles tool calls, executes them, and returns final response
+// In mock mode (AI_MOCK_MODE=true), returns canned FSM-progression responses
 func (c *Client) ChatWithTools(systemPrompt, userPrompt string, tools []Tool, executor ToolExecutor) (string, string, error) {
+	if os.Getenv("AI_MOCK_MODE") == "true" {
+		return c.mockChat(systemPrompt, userPrompt)
+	}
 	messages := []Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
@@ -299,4 +308,75 @@ Generate a professional counter-offer or decision to accept/walk away. Return JS
 	return result.CounterOffer, result.Message, nil
 }
 
+// mockChat returns canned FSM-progression responses in mock mode
+// The response intent progresses through: INQUIRY → INTRODUCTION → INTEREST → NEGOTIATION → OFFER → CONFIRM
+var mockRound int
 
+func (c *Client) mockChat(systemPrompt, userPrompt string) (string, string, error) {
+	mockRound++
+
+	// Parse job/candidate context from userPrompt to inject into responses
+	jobTitle := extractField(userPrompt, "Position:")
+	candidateSkills := extractField(userPrompt, "Skills:")
+	jobLocation := extractField(userPrompt, "Location:")
+
+	cycle := []struct {
+		intent  string
+		message string
+	}{
+		{
+			intent: "INTRODUCTION",
+			message: fmt.Sprintf(`{"intent":"INTRODUCTION","message":"Thank you for your interest in the %s role! We're looking for someone with strong %s background. The position is based in %s with a competitive compensation package. The team is working on exciting challenges in the distributed systems space.","data":{"title":"%s","location":"%s","salary_min":180000,"salary_max":250000,"skills":["Go","Python","Kubernetes","AWS","Microservices"]}}`,
+				jobTitle, jobTitle, jobLocation, jobTitle, jobLocation),
+		},
+		{
+			intent: "INTEREST",
+			message: fmt.Sprintf(`{"intent":"INTEREST","message":"I'm excited about the %s opportunity! My %s directly maps to what you're looking for. Could you share more about the team structure, the tech stack you're using, and the biggest technical challenges the team is tackling right now?","data":{"message":"Interested in team structure and tech stack"}}`,
+				jobTitle, candidateSkills),
+		},
+		{
+			intent: "NEGOTIATION",
+			message: fmt.Sprintf(`{"intent":"NEGOTIATION","message":"Let's discuss the compensation for the %s role. Given my %d years of experience with %s and the market rate for this level, I'd like to talk about the full package — base salary, equity, and benefits. Could you share details on the compensation structure?","data":{"message":"Compensation and benefits discussion"}}`,
+				jobTitle, 8, candidateSkills),
+		},
+		{
+			intent: "OFFER",
+			message: fmt.Sprintf(`{"intent":"OFFER","message":"We'd like to extend a formal offer for the %s position. Based on your experience with %s, we're offering a competitive base salary of $220,000, significant equity package, and comprehensive benefits including health insurance, 401k matching, and unlimited PTO. We believe this reflects the value you'd bring to our engineering team.","data":{"salary":220000,"start_date":"2026-07-01","message":"Formal offer extended for %s role"}}`,
+				jobTitle, candidateSkills, jobTitle),
+		},
+		{
+			intent: "CONFIRM",
+			message: fmt.Sprintf(`{"intent":"CONFIRM","message":"I've reviewed the offer for the %s role and I'm excited to accept. The compensation package is competitive and the opportunity to work on distributed systems with the latest technologies is exactly what I'm looking for. Looking forward to joining the team!","data":{"message":"Offer accepted for %s role"}}`,
+				jobTitle, jobTitle),
+		},
+	}
+
+	idx := (mockRound - 1) % len(cycle)
+	log.Printf("[Mock AI] Round %d, returning intent=%s", mockRound, cycle[idx].intent)
+	return cycle[idx].message, "", nil
+}
+
+// extractField extracts a field value from prompt text after "key: "
+func extractField(prompt, key string) string {
+	idx := strings.Index(prompt, key)
+	if idx < 0 {
+		return key
+	}
+	start := idx + len(key)
+	// Trim leading whitespace
+	for start < len(prompt) && prompt[start] == ' ' {
+		start++
+	}
+	end := strings.Index(prompt[start:], "\n")
+	if end < 0 {
+		return strings.TrimSpace(prompt[start:])
+	}
+	val := strings.TrimSpace(prompt[start : start+end])
+	// Remove trailing commas
+	val = strings.TrimRight(val, ", ")
+	// Bound at 80 chars to avoid overly long strings
+	if len(val) > 80 {
+		val = val[:80]
+	}
+	return val
+}

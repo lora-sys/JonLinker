@@ -18,6 +18,15 @@ func NewOfferHandler(svc *service.OfferService) *OfferHandler {
 	return &OfferHandler{svc: svc}
 }
 
+func (h *OfferHandler) List(c *gin.Context) {
+	offers, total, err := h.svc.ListAll(100, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list offers"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"offers": offers, "total": total})
+}
+
 func (h *OfferHandler) Create(c *gin.Context) {
 	var req struct {
 		MatchID         string `json:"match_id" binding:"required"`

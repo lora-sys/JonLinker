@@ -383,8 +383,9 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 			continue
 		}
 
-		// Store message in database only if we have a valid matchID
-		if matchID != "" && matchID != "ws" {
+		// Store message in database only for valid XML A2A messages
+		// (skip JSON control messages like pings, join_match, etc.)
+		if format == "xml" && matchID != "" && matchID != "ws" {
 			var senderAgentID uuid.UUID
 			if agent != nil {
 				senderAgentID = agent.ID
@@ -397,13 +398,13 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 				IntentType:    xmlMsg.Payload.Intent,
 			}
 			h.messageRepo.Create(message)
+
+			// Process message and generate response (only for A2A XML messages)
+			response := h.processMessage(matchID, userID.String(), &xmlMsg)
+
+			// Broadcast response to both parties (respecting Protobuf mode)
+			h.broadcastToMatchWithFormat(matchID, response, wsSerializer, &sequenceNum)
 		}
-
-		// Process message and generate response
-		response := h.processMessage(matchID, userID.String(), &xmlMsg)
-
-		// Broadcast response to both parties (respecting Protobuf mode)
-		h.broadcastToMatchWithFormat(matchID, response, wsSerializer, &sequenceNum)
 	}
 }
 

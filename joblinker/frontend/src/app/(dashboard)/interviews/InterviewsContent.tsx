@@ -147,8 +147,8 @@ export function InterviewsContent({ initialInterviews }: { initialInterviews: In
     try {
       setIsLoading(true)
       setError(null)
-      const data = await apiClient.get<Interview[]>('/api/interviews')
-      setInterviews(data)
+      const data = await apiClient.get<{ interviews: Interview[] }>('/api/interviews')
+      setInterviews(data?.interviews || [])
     }
     catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load interviews')

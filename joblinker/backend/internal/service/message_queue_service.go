@@ -192,7 +192,8 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		})
 	}
 
-	response := s.generateEinoResponse(msg, match, senderAgent)
+	jobCtx := s.getJobContextString(match)
+	response := s.generateEinoResponse(msg, match, senderAgent, jobCtx)
 	if response == nil {
 		log.Printf("DeepRecruiter returned nil, falling back to legacy AI")
 		response = s.generateAutoResponse(msg, match, senderAgent)
@@ -222,14 +223,22 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		log.Printf("Failed to store response message: %v", err)
 	}
 
+	var responseText string
+	if response.Payload != nil {
+		if text, ok := response.Payload["message"].(string); ok {
+			responseText = text
+		}
+	}
+
 	if s.broadcastFn != nil {
 		s.broadcastFn(matchID.String(), "agent_response", map[string]interface{}{
-			"message_id":     responseMsg.ID.String(),
-			"match_id":       matchID.String(),
+			"message_id":      responseMsg.ID.String(),
+			"match_id":        matchID.String(),
 			"sender_agent_id": responseAgentID.String(),
-			"content_xml":    responseMsg.ContentXML,
-			"intent_type":    response.Intent,
-			"created_at":     responseMsg.CreatedAt,
+			"content_xml":     responseMsg.ContentXML,
+			"text":            responseText,
+			"intent_type":     response.Intent,
+			"created_at":      responseMsg.CreatedAt,
 		})
 		if fsmState != nil {
 			s.broadcastFn(matchID.String(), "fsm_state_change", map[string]interface{}{
@@ -304,29 +313,14 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 		agentType = model.AgentTypeRecruiter
 	}
 
-	// Try Eino-based agent processing first if runner is configured
-	if s.einoRunner != nil {
-		einoResponse := s.generateEinoResponse(msg, match, senderAgent)
-		if einoResponse != nil {
-			log.Printf("Eino agent generated response: intent=%s, response_len=%d", einoResponse.Intent, len(fmt.Sprint(einoResponse.Payload)))
-			return einoResponse
-		}
-		log.Printf("Eino agent returned nil, falling back to legacy AI")
-	}
-
-	// Get conversation context for better responses
-	conversationContext := s.buildAgentContext(msg, match)
-
-	// Build the full three-part prompt
-	fullPrompt := s.promptService.BuildFullPrompt(agentType, scenario, conversationContext)
-
-	// Get job and agent details for context
+	// Get job and candidate details for context (used by both Eino and legacy paths)
+	jobContext := s.getJobContextString(match)
 	var jobTitle, jobLocation string
 	var salaryMin, salaryMax int
 	var jobSkills []string
+	var seekerSkills []string
 
 	if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
-		// Parse structured job data
 		var jobData map[string]interface{}
 		if json.Unmarshal(job.StructuredJSON, &jobData) == nil {
 			if title, ok := jobData["title"].(string); ok {
@@ -351,7 +345,6 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 		}
 	}
 
-	var seekerSkills []string
 	if seeker, err := s.agentRepo.GetByID(match.SeekerAgentID); err == nil {
 		var config map[string]interface{}
 		if json.Unmarshal(seeker.ConfigJSON, &config) == nil {
@@ -364,6 +357,22 @@ func (s *MessageQueueService) generateAutoResponse(msg *rabbitmq.AgentMessage, m
 			}
 		}
 	}
+
+	// Try Eino-based agent processing first if runner is configured
+	if s.einoRunner != nil {
+		einoResponse := s.generateEinoResponse(msg, match, senderAgent, jobContext)
+		if einoResponse != nil {
+			log.Printf("Eino agent generated response: intent=%s, response_len=%d", einoResponse.Intent, len(fmt.Sprint(einoResponse.Payload)))
+			return einoResponse
+		}
+		log.Printf("Eino agent returned nil, falling back to legacy AI")
+	}
+
+	// Get conversation context for better responses
+	conversationContext := s.buildAgentContext(msg, match)
+
+	// Build the full three-part prompt
+	fullPrompt := s.promptService.BuildFullPrompt(agentType, scenario, conversationContext)
 
 	// Enhance prompt with job and candidate details
 	enhancedPrompt := fmt.Sprintf(`%s
@@ -409,9 +418,28 @@ When NOT using tools, respond with ONLY a valid JSON object:
 		match.ID,
 		seekerSkills)
 
+	// Build a role-specific system prompt with job context
+	var agentRole string
+	if agentType == model.AgentTypeSeeker {
+		agentRole = "job seeker"
+	} else {
+		agentRole = "recruiter"
+	}
+	systemPrompt := fmt.Sprintf(
+		"You are a professional %s recruitment agent. Handle the '%s' position. "+
+			"Location: %s | Salary: $%d-$%d | Required skills: %v. "+
+			"Candidate skills: %v. "+
+			"Engage in a realistic, specific conversation — reference actual job requirements and candidate experience. "+
+			"Do NOT generate generic responses. Discuss concrete details about the role, tech stack, team, and qualifications. "+
+			"Use tools (schedule_interview, create_offer, query_jobs) when the conversation calls for concrete actions.",
+		agentRole, jobTitle,
+		jobLocation, salaryMin, salaryMax, jobSkills,
+		seekerSkills,
+	)
+
 	// Call AI for intent recognition and response using ChatWithTools for function calling
 	response, toolCall, err := s.aiClient.ChatWithTools(
-		"You are a professional AI recruitment agent. Use tools when needed to get real data.",
+		systemPrompt,
 		enhancedPrompt,
 		s.toolExecutor.GetTools(),
 		s.toolExecutor.ExecuteToolForAI,
@@ -572,9 +600,65 @@ func (s *MessageQueueService) buildAgentContext(msg *rabbitmq.AgentMessage, matc
 	return context
 }
 
+// getJobContextString builds a job context string for enriching AI prompts
+func (s *MessageQueueService) getJobContextString(match *model.Match) string {
+	var jobTitle, jobLocation string
+	var salaryMin, salaryMax int
+	var jobSkills []string
+
+	if job, err := s.jobRepo.GetByID(match.JobID); err == nil {
+		var jobData map[string]interface{}
+		if json.Unmarshal(job.StructuredJSON, &jobData) == nil {
+			if title, ok := jobData["title"].(string); ok {
+				jobTitle = title
+			}
+			if location, ok := jobData["location"].(string); ok {
+				jobLocation = location
+			}
+			if min, ok := jobData["salary_min"].(float64); ok {
+				salaryMin = int(min)
+			}
+			if max, ok := jobData["salary_max"].(float64); ok {
+				salaryMax = int(max)
+			}
+			if skills, ok := jobData["skills"].([]interface{}); ok {
+				for _, skill := range skills {
+					if sk, ok := skill.(string); ok {
+						jobSkills = append(jobSkills, sk)
+					}
+				}
+			}
+		}
+	}
+
+	var seekerSkills []string
+	var seekerName string
+	if seeker, err := s.agentRepo.GetByID(match.SeekerAgentID); err == nil {
+		var config map[string]interface{}
+		if json.Unmarshal(seeker.ConfigJSON, &config) == nil {
+			if skills, ok := config["skills"].([]interface{}); ok {
+				for _, skill := range skills {
+					if sk, ok := skill.(string); ok {
+						seekerSkills = append(seekerSkills, sk)
+					}
+				}
+			}
+			if name, ok := config["name"].(string); ok {
+				seekerName = name
+			}
+		}
+	}
+
+	return fmt.Sprintf(
+		"[Job Context] Position: %s | Location: %s | Salary: $%d-$%d | Required: %v | Candidate: %s | Skills: %v",
+		jobTitle, jobLocation, salaryMin, salaryMax, jobSkills,
+		seekerName, seekerSkills,
+	)
+}
+
 // generateEinoResponse uses DeepRecruiter to generate response
 // Returns nil if Eino is not configured or fails, triggering fallback
-func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) *AutoResponse {
+func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
 	if s.einoRunner == nil {
 		return nil
 	}
@@ -592,15 +676,21 @@ func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, m
 		msgContent = msg.Intent
 	}
 
+	// Inject job context into the message so Eino agents see actual role details
+	enrichedMsg := msgContent
+	if jobContext != "" {
+		enrichedMsg = fmt.Sprintf("%s\n\n%s", jobContext, msgContent)
+	}
+
 	deepRecruiter := s.einoRunner.GetDeepRecruiter(match.ID)
 
 	var response string
 	var err error
 
 	if senderAgent.Type == "seeker" {
-		response, err = deepRecruiter.ProcessRecruiterMessage(ctx, msgContent)
+		response, err = deepRecruiter.ProcessRecruiterMessage(ctx, enrichedMsg)
 	} else {
-		response, err = deepRecruiter.ProcessSeekerMessage(ctx, msgContent)
+		response, err = deepRecruiter.ProcessSeekerMessage(ctx, enrichedMsg)
 	}
 
 	if err != nil {
@@ -698,12 +788,34 @@ func (s *MessageQueueService) HandleHumanConfirm(matchID uuid.UUID, approved boo
 	s.conversationMu.Unlock()
 	log.Printf("Conversation rounds reset for match %s after human approval", matchID)
 
-	// Update match status: approved offer -> hired
-	_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired)
+	// Update match status based on confirmation type
+	switch cr.Type {
+	case model.ConfirmationTypeOffer:
+		_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired)
+		s.broadcastStateChange(matchID.String(), string(model.MatchStatusHired), "Offer accepted, match completed")
+		log.Printf("Match %s status updated to hired after offer confirmation", matchID)
+	case model.ConfirmationTypeInterview:
+		_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusInterviewing)
+		s.broadcastStateChange(matchID.String(), string(model.MatchStatusInterviewing), "Interview scheduled, conversation resumes")
+		log.Printf("Match %s status updated to interviewing after schedule confirmation", matchID)
+	default:
+		_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired)
+	}
 
 	// Continue the conversation loop
 	s.continueAgentConversation(matchID, cr)
 	return nil
+}
+
+func (s *MessageQueueService) broadcastStateChange(matchID string, newState string, reason string) {
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID, "fsm_state_change", map[string]interface{}{
+			"match_id":  matchID,
+			"new_state": newState,
+			"reason":    reason,
+			"timestamp": time.Now(),
+		})
+	}
 }
 
 // continueAgentConversation re-publishes to RabbitMQ after human approval

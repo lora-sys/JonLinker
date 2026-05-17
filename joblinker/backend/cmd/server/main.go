@@ -155,7 +155,7 @@ func main() {
 	}
 
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
-	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo)
+	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo, rmq)
 	messageSvc := service.NewMessageService(messageRepo, matchRepo, agentRepo)
 	securitySvc := service.NewSecurityService(securityRepo)
 	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)
@@ -270,6 +270,7 @@ func main() {
 		api.GET("/matches/:id", matchHandler.Get)
 		api.POST("/matches/auto", matchHandler.AutoCreate)
 		api.POST("/matches/:id/confirm", matchHandler.Confirm)
+		api.POST("/matches/:id/decline", matchHandler.Decline)
 		api.POST("/matches/:id/human-confirm", messageHandler.HandleHumanConfirm)
 
 		api.GET("/messages", messageHandler.GetMessages)
@@ -287,6 +288,7 @@ func main() {
 		api.POST("/interviews/match/:matchId/cancel", interviewHandler.Cancel)
 		api.POST("/interviews/:matchId/cancel", interviewHandler.Cancel) // short form
 
+		api.GET("/offers", offerHandler.List)
 		api.GET("/offers/:matchId", offerHandler.GetByMatchID)
 		api.GET("/offers/item/:id", offerHandler.Get)
 		api.POST("/offers", offerHandler.Create)

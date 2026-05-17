@@ -37,6 +37,16 @@ func (h *MatchHandler) Confirm(c *gin.Context) {
 	c.JSON(http.StatusOK, match)
 }
 
+func (h *MatchHandler) Decline(c *gin.Context) {
+	id := uuid.MustParse(c.Param("id"))
+	match, err := h.svc.DeclineMatch(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decline match"})
+		return
+	}
+	c.JSON(http.StatusOK, match)
+}
+
 func (h *MatchHandler) Get(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	match, err := h.svc.GetMatch(id)

@@ -126,7 +126,7 @@ export function MatchesContent({ initialMatches }: { initialMatches: MatchWithSc
 
   const handleConfirm = async (matchId: string) => {
     try {
-      await apiClient.patch(`/api/matches/${matchId}`, { status: 'mutual_interest' })
+      await apiClient.post(`/api/matches/${matchId}/confirm`)
       fetchMatches()
     }
     catch (err) {
@@ -136,7 +136,7 @@ export function MatchesContent({ initialMatches }: { initialMatches: MatchWithSc
 
   const handleDecline = async (matchId: string) => {
     try {
-      await apiClient.patch(`/api/matches/${matchId}`, { status: 'rejected' })
+      await apiClient.post(`/api/matches/${matchId}/decline`)
       fetchMatches()
     }
     catch (err) {
