@@ -69,7 +69,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
       .then((data) => {
         if (!Array.isArray(data) || data.length === 0)
           return
-        const { seeker, recruiter } = agentIdsRef.current
+        const { seeker } = agentIdsRef.current
         const msgs: UIMessage[] = data
           .filter(m => extractTextFromXML(m.content_xml || ''))
           .map((m) => {
@@ -169,11 +169,16 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             setFsmStage(matchStatusToStage(String(data.new_state || '')))
             break
           case 'confirmation_needed':
-            setPendingConfirm({
-              match_id: String(data.match_id || matchId),
-              intent: String(data.intent || ''),
-              message_id: String(data.message_id || ''),
-              content_xml: String(data.content_xml || ''),
+            setPendingConfirm((prev) => {
+              const intent = String(data.intent || '')
+              if (prev && prev.intent === intent && prev.match_id === String(data.match_id || matchId))
+                return prev
+              return {
+                match_id: String(data.match_id || matchId),
+                intent,
+                message_id: String(data.message_id || ''),
+                content_xml: String(data.content_xml || ''),
+              }
             })
             break
           case 'human_rejected':
@@ -278,7 +283,7 @@ interface MessageItem {
 function extractTextFromXML(xml: string): string {
   if (!xml || xml.startsWith('{'))
     return ''
-  const match = xml.match(/<parameters>({.*?})<\/parameters>/)
+  const match = xml.match(/<parameters>(\{.*?\})<\/parameters>/)
   if (!match || !match[1])
     return xml
   try {

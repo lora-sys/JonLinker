@@ -43,7 +43,7 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, in
   const handleAccept = async () => {
     try {
       setIsUpdating(true)
-      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'accepted' })
+      await apiClient.post(`/api/offers/item/${offer.id}/respond`, { response: 'accept' })
       onUpdate()
     }
     catch (err) {
@@ -54,10 +54,24 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, in
     }
   }
 
+  const handleNegotiate = async () => {
+    try {
+      setIsUpdating(true)
+      await apiClient.post(`/api/offers/item/${offer.id}/respond`, { response: 'negotiate', counter_amount: negotiateValue })
+      onUpdate()
+    }
+    catch (err) {
+      console.error('Failed to negotiate offer:', err)
+    }
+    finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleDecline = async () => {
     try {
       setIsUpdating(true)
-      await apiClient.patch(`/api/offers/${offer.id}`, { status: 'declined' })
+      await apiClient.post(`/api/offers/item/${offer.id}/respond`, { response: 'decline' })
       onUpdate()
     }
     catch (err) {
@@ -186,6 +200,14 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, in
                           k
                         </span>
                       </div>
+                      <Button
+                        variant="primary"
+                        className="w-full mt-3 bg-blue-600 hover:bg-blue-700"
+                        onClick={handleNegotiate}
+                        disabled={isUpdating}
+                      >
+                        Submit Negotiation
+                      </Button>
                     </motion.div>
                   )}
                 </AnimatePresence>

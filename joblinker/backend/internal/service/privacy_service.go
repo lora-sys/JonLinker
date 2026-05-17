@@ -12,16 +12,22 @@ import (
 )
 
 type PrivacyService struct {
-	userRepo  *repository.UserRepository
-	agentRepo *repository.AgentRepository
-	matchRepo *repository.MatchRepository
+	userRepo      *repository.UserRepository
+	agentRepo     *repository.AgentRepository
+	matchRepo     *repository.MatchRepository
+	messageRepo   *repository.MessageRepository
+	interviewRepo *repository.InterviewRepository
+	offerRepo     *repository.OfferRepository
 }
 
-func NewPrivacyService(userRepo *repository.UserRepository, agentRepo *repository.AgentRepository, matchRepo *repository.MatchRepository) *PrivacyService {
+func NewPrivacyService(userRepo *repository.UserRepository, agentRepo *repository.AgentRepository, matchRepo *repository.MatchRepository, messageRepo *repository.MessageRepository, interviewRepo *repository.InterviewRepository, offerRepo *repository.OfferRepository) *PrivacyService {
 	return &PrivacyService{
-		userRepo:  userRepo,
-		agentRepo: agentRepo,
-		matchRepo: matchRepo,
+		userRepo:      userRepo,
+		agentRepo:     agentRepo,
+		matchRepo:     matchRepo,
+		messageRepo:   messageRepo,
+		interviewRepo: interviewRepo,
+		offerRepo:     offerRepo,
 	}
 }
 
@@ -57,10 +63,13 @@ func (s *PrivacyService) DeleteUserAccount(userID uuid.UUID) error {
 		return fmt.Errorf("failed to get user agents: %w", err)
 	}
 
-	// Delete matches for each agent
+	// Delete matches for each agent (with cascading messages/interviews/offers)
 	for _, agent := range agents {
 		matches, _ := s.matchRepo.ListByAgentIDs([]uuid.UUID{agent.ID})
 		for _, match := range matches {
+			s.messageRepo.DeleteByMatchID(match.ID)
+			s.interviewRepo.Delete(match.ID)
+			s.offerRepo.DeleteByMatchID(match.ID)
 			if err := s.matchRepo.Delete(match.ID); err != nil {
 				log.Printf("Failed to delete match %s: %v", match.ID, err)
 			}

@@ -6,9 +6,10 @@ const PUBLIC_PATHS = [
   '/login',
   '/register',
   '/privacy',
+  '/terms',
+  '/contact',
   '/api/auth/login',
   '/api/auth/register',
-  '/api/chat',
   '/',
 ]
 

@@ -63,13 +63,14 @@ func (h *OfferHandler) Get(c *gin.Context) {
 func (h *OfferHandler) Respond(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	var req struct {
-		Response string `json:"response" binding:"required,oneof=accept decline negotiate"`
+		Response      string  `json:"response" binding:"required,oneof=accept decline negotiate"`
+		CounterAmount float64 `json:"counter_amount,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	offer, err := h.svc.RespondToOffer(id, req.Response)
+	offer, err := h.svc.RespondToOffer(id, req.Response, req.CounterAmount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to respond to offer"})
 		return

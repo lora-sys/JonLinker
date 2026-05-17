@@ -130,6 +130,9 @@ func createUsers(db *gorm.DB, orgs []model.Organization) []model.User {
 		// Innovation Labs HR
 		{Email: "hr.frank@innovation.com", PasswordHash: passwordHash, Role: model.RoleRecruiter, OrganizationID: &orgs[3].ID},
 
+		// Admin
+		{Email: "admin@joblinker.dev", PasswordHash: passwordHash, Role: model.RoleAdmin, OrganizationID: &orgs[0].ID},
+
 		// Seekers
 		{Email: "seeker.frank@email.com", PasswordHash: passwordHash, Role: model.RoleSeeker},
 		{Email: "seeker.grace@email.com", PasswordHash: passwordHash, Role: model.RoleSeeker},
@@ -444,12 +447,15 @@ func printSummary(users []model.User, agents map[string]model.Agent, jobs []mode
 	fmt.Println("\n========== SEED DATA SUMMARY ==========")
 	fmt.Printf("Organizations: 4 (TechCorp Inc., StartupHub, Enterprise Co., Innovation Labs)\n")
 	fmt.Printf("Users: %d total\n", len(users))
+	fmt.Printf("  - Admin: 1\n")
 	fmt.Printf("  - Recruiters: 7\n")
 	fmt.Printf("  - Seekers: 7\n")
 	fmt.Printf("Agents: %d total\n", len(agents))
 	fmt.Printf("Jobs: %d total\n", len(jobs))
 	fmt.Printf("Matches: %d total\n", len(matches))
 	fmt.Println("\nLogin credentials (all use password: password123):")
+	fmt.Println("  Admin:")
+	fmt.Println("    admin@joblinker.dev")
 	fmt.Println("  Recruiters:")
 	fmt.Println("    hr.alice@techcorp.com, hr.bob@techcorp.com, hr.carol@startuphub.com, hr.david@enterprise.com, hr.frank@innovation.com")
 	fmt.Println("  Seekers:")

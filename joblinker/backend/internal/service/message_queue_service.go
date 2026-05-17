@@ -176,7 +176,7 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	s.conversationMu.Unlock()
 	log.Printf("Conversation round: match=%s round=%d", matchID, currentRound)
 
-	if currentRound > 10 {
+	if currentRound > 20 {
 		log.Printf("Conversation max rounds reached for match %s, pausing", matchID)
 		return nil
 	}
@@ -802,8 +802,10 @@ func (s *MessageQueueService) HandleHumanConfirm(matchID uuid.UUID, approved boo
 		_ = s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired)
 	}
 
-	// Continue the conversation loop
-	s.continueAgentConversation(matchID, cr)
+	// Only continue conversation for interview scheduling — offer accept (hired) ends the match
+	if cr.Type != model.ConfirmationTypeOffer {
+		s.continueAgentConversation(matchID, cr)
+	}
 	return nil
 }
 

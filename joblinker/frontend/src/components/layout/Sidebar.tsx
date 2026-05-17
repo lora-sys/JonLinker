@@ -36,6 +36,7 @@ export function Sidebar() {
     { label: 'Messages', href: '/messages', icon: <MessageCircle className="w-5 h-5" /> },
     { label: 'Resume', href: '/resume', icon: <Upload className="w-5 h-5" /> },
     { label: 'Settings', href: '/settings', icon: <Settings className="w-5 h-5" /> },
+    { label: 'Privacy', href: '/privacy', icon: <FileText className="w-5 h-5" /> },
     { label: 'Logout', href: '#', icon: <LogOut className="w-5 h-5" />, onClick: handleLogout },
   ]
 

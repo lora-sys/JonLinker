@@ -50,6 +50,10 @@ func (r *OfferRepository) ListAll(limit, offset int) ([]*model.Offer, int64, err
 	return offers, total, nil
 }
 
+func (r *OfferRepository) DeleteByMatchID(matchID uuid.UUID) error {
+	return r.db.Where("match_id = ?", matchID).Delete(&model.Offer{}).Error
+}
+
 func (r *OfferRepository) Update(offer *model.Offer) error {
 	return r.db.Save(offer).Error
 }

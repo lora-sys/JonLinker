@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
 	"time"
@@ -102,13 +103,17 @@ func (s *OfferService) DeclineOffer(matchID uuid.UUID) (*model.Offer, error) {
 	return offer, nil
 }
 
-func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Offer, error) {
+func (s *OfferService) RespondToOffer(id uuid.UUID, response string, counterAmount ...float64) (*model.Offer, error) {
 	offer, err := s.offerRepo.GetByID(id)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
 	offer.RespondedAt = &now
+	details := map[string]interface{}{
+		"offer_id": id.String(),
+		"response": response,
+	}
 	switch response {
 	case "accept":
 		offer.Status = model.OfferStatusAccepted
@@ -117,6 +122,10 @@ func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Off
 		offer.Status = model.OfferStatusDeclined
 	case "negotiate":
 		offer.Status = model.OfferStatusNegotiating
+		if len(counterAmount) > 0 && counterAmount[0] > 0 {
+			details["counter_amount"] = counterAmount[0]
+			log.Printf("Counter-offer submitted for offer %s: %.2f", id, counterAmount[0])
+		}
 	}
 	if err := s.offerRepo.Update(offer); err != nil {
 		return nil, err
@@ -124,10 +133,7 @@ func (s *OfferService) RespondToOffer(id uuid.UUID, response string) (*model.Off
 
 	if s.securitySvc != nil {
 		actionType := "offer_" + response
-		s.securitySvc.LogEvent(offer.MatchID, actionType, map[string]interface{}{
-			"offer_id": id.String(),
-			"response": response,
-		}, "")
+		s.securitySvc.LogEvent(offer.MatchID, actionType, details, "")
 	}
 
 	return offer, nil

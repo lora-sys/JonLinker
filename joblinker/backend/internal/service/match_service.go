@@ -23,14 +23,16 @@ type MatchService struct {
 	agentRepo *repository.AgentRepository
 	jobRepo   *repository.JobRepository
 	rmq       *rabbitmq.RabbitMQ
+	mqSvc     *MessageQueueService
 }
 
-func NewMatchService(matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, jobRepo *repository.JobRepository, rmq *rabbitmq.RabbitMQ) *MatchService {
+func NewMatchService(matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, jobRepo *repository.JobRepository, rmq *rabbitmq.RabbitMQ, mqSvc *MessageQueueService) *MatchService {
 	return &MatchService{
 		matchRepo: matchRepo,
 		agentRepo: agentRepo,
 		jobRepo:   jobRepo,
 		rmq:       rmq,
+		mqSvc:     mqSvc,
 	}
 }
 
@@ -90,10 +92,6 @@ func (s *MatchService) DeclineMatch(id uuid.UUID) (*model.Match, error) {
 }
 
 func (s *MatchService) autoStartA2A(match *model.Match) error {
-	if s.rmq == nil {
-		return errors.New("rabbitmq not available")
-	}
-
 	// Transition match from pending → mutual_interest so A2A conversation starts
 	if match.Status == model.MatchStatusPending {
 		match.Status = model.MatchStatusMutualInterest
@@ -211,8 +209,18 @@ func (s *MatchService) autoStartA2A(match *model.Match) error {
 		Timestamp: time.Now(),
 	}
 
-	log.Printf("[autoStartA2A] Publishing initial INQUIRY for match %s from seeker %s", match.ID, seekerName)
-	return s.rmq.PublishAgentMessage(ctx, msg)
+	if s.rmq != nil {
+		log.Printf("[autoStartA2A] Publishing initial INQUIRY for match %s from seeker %s", match.ID, seekerName)
+		return s.rmq.PublishAgentMessage(ctx, msg)
+	}
+
+	if s.mqSvc != nil {
+		log.Printf("[autoStartA2A] Direct fallback: calling handleAgentMessage for match %s", match.ID)
+		return s.mqSvc.handleAgentMessage(msg)
+	}
+
+	log.Printf("[autoStartA2A] No RMQ or MessageQueueService available for match %s", match.ID)
+	return nil
 }
 
 func (s *MatchService) TransitionToNegotiating(id uuid.UUID) (*model.Match, error) {

@@ -32,6 +32,10 @@ func (r *MessageRepository) GetByID(id uuid.UUID) (*model.Message, error) {
 	return &message, nil
 }
 
+func (r *MessageRepository) DeleteByMatchID(matchID uuid.UUID) error {
+	return r.db.Where("match_id = ?", matchID).Delete(&model.Message{}).Error
+}
+
 func (r *MessageRepository) ListByMatchID(matchID uuid.UUID) ([]*model.Message, error) {
 	var messages []*model.Message
 	if err := r.db.Where("match_id = ?", matchID).Order("created_at ASC").Find(&messages).Error; err != nil {

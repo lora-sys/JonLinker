@@ -155,12 +155,12 @@ func main() {
 	}
 
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
-	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo, rmq)
+	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo, rmq, mqSvc)
 	messageSvc := service.NewMessageService(messageRepo, matchRepo, agentRepo)
 	securitySvc := service.NewSecurityService(securityRepo)
 	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)
 	offerSvc := service.NewOfferService(offerRepo, matchRepo, jobRepo, securitySvc)
-	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo)
+	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo, messageRepo, interviewRepo, offerRepo)
 	adminHandler := handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	// Initialize Eino Agent Runner (for T029 integration)
