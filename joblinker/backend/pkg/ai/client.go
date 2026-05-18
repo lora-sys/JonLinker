@@ -47,6 +47,29 @@ type ToolFunction struct {
 	Parameters  map[string]interface{} `json:"parameters"`
 }
 
+type EmbeddingRequest struct {
+	Model string   `json:"model"`
+	Task  string   `json:"task"`
+	Input []string `json:"input"`
+}
+
+type EmbeddingResponse struct {
+	Model  string      `json:"model"`
+	Object string      `json:"object"`
+	Usage  EmbedUsage  `json:"usage"`
+	Data   []EmbedData `json:"data"`
+}
+
+type EmbedUsage struct {
+	TotalTokens int `json:"total_tokens"`
+}
+
+type EmbedData struct {
+	Object    string    `json:"object"`
+	Index     int       `json:"index"`
+	Embedding []float64 `json:"embedding"`
+}
+
 type ChatResponse struct {
 	ID      string   `json:"id"`
 	Choices []Choice `json:"choices"`
@@ -354,6 +377,58 @@ func (c *Client) mockChat(systemPrompt, userPrompt string) (string, string, erro
 	idx := (mockRound - 1) % len(cycle)
 	log.Printf("[Mock AI] Round %d, returning intent=%s", mockRound, cycle[idx].intent)
 	return cycle[idx].message, "", nil
+}
+
+// GenerateEmbedding generates an embedding vector using Jina AI API
+func (c *Client) GenerateEmbedding(text string) ([]float64, error) {
+	jinaAPIKey := getEnv("JINA_API_KEY", "")
+	if jinaAPIKey == "" {
+		return nil, fmt.Errorf("JINA_API_KEY not set")
+	}
+
+	jinaModel := getEnv("JINA_EMBEDDING_MODEL", "jina-embeddings-v3")
+	jinaTask := getEnv("JINA_EMBEDDING_TASK", "text-matching")
+
+	reqBody := EmbeddingRequest{
+		Model: jinaModel,
+		Task:  jinaTask,
+		Input: []string{text},
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal embedding request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://api.jina.ai/v1/embeddings", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embedding request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jinaAPIKey)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send embedding request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("embedding API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var embedResp EmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&embedResp); err != nil {
+		return nil, fmt.Errorf("failed to decode embedding response: %w", err)
+	}
+
+	if len(embedResp.Data) == 0 {
+		return nil, fmt.Errorf("no embedding data in response")
+	}
+
+	return embedResp.Data[0].Embedding, nil
 }
 
 // extractField extracts a field value from prompt text after "key: "

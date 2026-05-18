@@ -193,10 +193,49 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	}
 
 	jobCtx := s.getJobContextString(match)
-	response := s.generateEinoResponse(msg, match, senderAgent, jobCtx)
+
+	// Prefer ADK Runner (real Eino ADK agent)
+	var response *AutoResponse
+
+	if s.adkRunner != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		var msgContent string
+		if msg.Payload != nil {
+			if content, ok := msg.Payload["content"].(string); ok {
+				msgContent = content
+			}
+		}
+		if msgContent == "" {
+			msgContent = msg.Intent
+		}
+
+		enrichedMsg := msgContent
+		if jobCtx != "" {
+			enrichedMsg = fmt.Sprintf("%s\n\n%s", jobCtx, msgContent)
+		}
+
+		adkResponse, adkErr := s.generateWithADK(ctx, enrichedMsg, senderAgent)
+		if adkErr != nil {
+			log.Printf("ADK Runner failed: %v, falling back to legacy AI", adkErr)
+		} else {
+			intent := s.parseIntent(adkResponse, msg.Intent)
+			response = &AutoResponse{
+				Intent:  intent,
+				Payload: map[string]interface{}{"message": adkResponse},
+			}
+			log.Printf("ADK Runner generated response: intent=%s", intent)
+		}
+	}
+
+	// Fallback to old Eino or traditional AI
 	if response == nil {
-		log.Printf("DeepRecruiter returned nil, falling back to legacy AI")
-		response = s.generateAutoResponse(msg, match, senderAgent)
+		response = s.generateEinoResponse(msg, match, senderAgent, jobCtx)
+		if response == nil {
+			log.Printf("Eino returned nil, falling back to legacy AI")
+			response = s.generateAutoResponse(msg, match, senderAgent)
+		}
 	}
 
 	responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
@@ -851,12 +890,10 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 		return "", fmt.Errorf("adk runner not configured")
 	}
 
-	// Build query context — include agent identity
 	query := msgContent
 
 	events := s.adkRunner.Query(ctx, query)
 
-	// Collect the final response from the event stream
 	var response string
 	for {
 		event, ok := events.Next()
@@ -866,10 +903,23 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 		if event.Err != nil {
 			return "", event.Err
 		}
+
 		if event.Output != nil && event.Output.MessageOutput != nil {
 			mo := event.Output.MessageOutput
-			if !mo.IsStreaming && mo.Message != nil {
+			if mo.IsStreaming {
+				if s.broadcastFn != nil && mo.Message != nil {
+					log.Printf("ADK streaming: %s", mo.Message.Content)
+				}
+			} else if mo.Message != nil {
 				response = mo.Message.Content
+			}
+		}
+
+		if event.Action != nil {
+			if s.broadcastFn != nil {
+				s.broadcastFn("", "adk_tool_call", map[string]interface{}{
+					"action": event.Action,
+				})
 			}
 		}
 	}
