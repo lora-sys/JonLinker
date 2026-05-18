@@ -3,10 +3,12 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/cloudwego/eino/schema"
 	"joblinker/internal/repository"
+	"joblinker/pkg/ai"
 )
 
 // VectorRetriever implements Eino Retriever interface for vector search
@@ -49,9 +51,14 @@ func (r *VectorRetriever) Retrieve(ctx context.Context, query string, opts ...Op
 		return []*schema.Document{}, nil
 	}
 
-	// Search by collection "agent_memories" with an empty query vector
-	// In production, generate embedding from the query using AI API
-	ids, scores, err := r.vecRepo.SearchSimilar(ctx, "agent_memories", nil, topK)
+	// Generate embedding from the query using AI API
+	embedding, err := r.generateEmbedding(ctx, query)
+	if err != nil {
+		log.Printf("VectorRetriever: failed to generate embedding for query: %v", err)
+		return []*schema.Document{}, nil
+	}
+
+	ids, scores, err := r.vecRepo.SearchSimilar(ctx, "agent_memories", embedding, topK)
 	if err != nil {
 		log.Printf("VectorRetriever search failed: %v", err)
 		return []*schema.Document{}, nil
@@ -96,4 +103,14 @@ func WithScoreThreshold(threshold float64) Option {
 	return func(o *Options) {
 		o.ScoreThreshold = &threshold
 	}
+}
+
+// generateEmbedding generates an embedding vector for the given text
+func (r *VectorRetriever) generateEmbedding(ctx context.Context, text string) ([]float64, error) {
+	aiClient := ai.NewClient()
+	embedding, err := aiClient.GenerateEmbedding(text)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+	}
+	return embedding, nil
 }
