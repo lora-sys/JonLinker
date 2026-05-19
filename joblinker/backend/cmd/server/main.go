@@ -24,6 +24,7 @@ import (
 	"joblinker/pkg/ai"
 	"joblinker/pkg/chroma"
 	"joblinker/pkg/rabbitmq"
+	redispkg "joblinker/pkg/redis"
 
 	"joblinker/internal/eino/agent"
 	"joblinker/internal/eino/chatmodel"
@@ -140,6 +141,9 @@ func main() {
 	auditRepo := repository.NewAuditLogRepository().WithDB(db)
 	observabilityErrorRepo := repository.NewErrorEventRepository().WithDB(db)
 
+	vecRepo := repository.NewVectorRepository().WithDB(db)
+	prefRepo := repository.NewPreferenceVectorRepository().WithDB(db)
+
 	// Initialize tool cache (100 entries max, 5 min TTL)
 	toolCache := cache.NewToolCache(100, 5*time.Minute)
 
@@ -168,6 +172,11 @@ func main() {
 	einoRunner := eino_runner.NewAgentRunner(aiClient, nil)
 	log.Printf("Eino AgentRunner initialized with pool config: MaxAgents=%d, MinAgents=%d",
 		100, 5)
+
+	// Initialize MemoryService for persistent agent memory
+	memorySvc := service.NewAgentMemoryService(db, vecRepo, prefRepo, aiClient)
+	_ = memorySvc // Available for AgentMemory integration
+	log.Printf("AgentMemoryService initialized")
 
 	// Initialize ADK components
 	var adkRunner *eino_runner.ADKRunner
@@ -200,6 +209,21 @@ func main() {
 				}
 			}
 		}
+	}
+
+	// Initialize Redis Stack vector client for similarity search
+	{
+		redisVecClient := redis.NewClient(&redis.Options{
+			Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+		})
+		vecDim := 1024 // Jina AI embedding dimension
+		rvClient := redispkg.NewVectorClient(redisVecClient, "vec:", vecDim)
+		if err := rvClient.EnsureIndex(context.Background(), "agent_memories"); err != nil {
+			log.Printf("WARNING: failed to create Redis vector index: %v", err)
+		} else {
+			log.Printf("Redis Stack vector index initialized (dim=%d)", vecDim)
+		}
+		_ = rvClient
 	}
 
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
