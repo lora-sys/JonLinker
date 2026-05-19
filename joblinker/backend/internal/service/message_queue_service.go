@@ -216,7 +216,7 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 			enrichedMsg = fmt.Sprintf("%s\n\n%s", jobCtx, msgContent)
 		}
 
-		adkResponse, adkErr := s.generateWithADK(ctx, enrichedMsg, senderAgent)
+		adkResponse, adkErr := s.generateWithADK(ctx, enrichedMsg, senderAgent, matchID.String())
 		if adkErr != nil {
 			log.Printf("ADK Runner failed: %v, falling back to legacy AI", adkErr)
 		} else {
@@ -884,50 +884,71 @@ func (s *MessageQueueService) continueAgentConversation(matchID uuid.UUID, cr *m
 	}
 }
 
-// generateWithADK uses the ADK Runner to generate a response
-func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent string, senderAgent *model.Agent) (string, error) {
+// generateWithADK uses the ADK Runner to generate a response with real-time streaming
+func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent string, senderAgent *model.Agent, matchID ...string) (string, error) {
 	if s.adkRunner == nil {
 		return "", fmt.Errorf("adk runner not configured")
 	}
 
-	query := msgContent
+	mid := ""
+	if len(matchID) > 0 {
+		mid = matchID[0]
+	}
 
-	events := s.adkRunner.Query(ctx, query)
+	events := s.adkRunner.Query(ctx, msgContent)
 
-	var response string
+	var finalResponse string
+	var streamBuf string
 	for {
 		event, ok := events.Next()
 		if !ok {
 			break
 		}
 		if event.Err != nil {
+			log.Printf("ADK error for match %s: %v", mid, event.Err)
+			if s.broadcastFn != nil && mid != "" {
+				s.broadcastFn(mid, "adk_error", map[string]interface{}{
+					"error": event.Err.Error(),
+				})
+			}
 			return "", event.Err
 		}
 
 		if event.Output != nil && event.Output.MessageOutput != nil {
 			mo := event.Output.MessageOutput
-			if mo.IsStreaming {
-				if s.broadcastFn != nil && mo.Message != nil {
-					log.Printf("ADK streaming: %s", mo.Message.Content)
+			if mo.IsStreaming && mo.Message != nil {
+				streamBuf += mo.Message.Content
+				if s.broadcastFn != nil && mid != "" {
+					s.broadcastFn(mid, "adk_stream_chunk", map[string]interface{}{
+						"chunk":            mo.Message.Content,
+						"accumulated":      streamBuf,
+						"sender_agent_id":  senderAgent.ID.String(),
+					})
 				}
 			} else if mo.Message != nil {
-				response = mo.Message.Content
+				finalResponse = mo.Message.Content
 			}
 		}
 
 		if event.Action != nil {
-			if s.broadcastFn != nil {
-				s.broadcastFn("", "adk_tool_call", map[string]interface{}{
-					"action": event.Action,
+			log.Printf("ADK tool call for match %s: %v", mid, event.Action)
+			if s.broadcastFn != nil && mid != "" {
+				s.broadcastFn(mid, "adk_tool_call", map[string]interface{}{
+					"action":          event.Action,
+					"sender_agent_id": senderAgent.ID.String(),
 				})
 			}
 		}
 	}
 
-	if response == "" {
+	if finalResponse == "" && streamBuf != "" {
+		finalResponse = streamBuf
+	}
+
+	if finalResponse == "" {
 		return "", fmt.Errorf("adk runner: empty response")
 	}
-	return response, nil
+	return finalResponse, nil
 }
 
 // scenarioFromPromptType converts model.PromptScenarioType to prompt.Scenario

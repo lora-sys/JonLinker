@@ -9,6 +9,7 @@ import type { MatchStatus } from '@/types'
 
 import { apiClient } from '@/lib/api_client'
 import { buildMatchWSUrl } from '@/lib/websocket'
+import { useAuthStore } from '@/stores/auth'
 
 import { useWebSocket } from './useWebSocket'
 
@@ -135,9 +136,18 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   }, [matchId, enabled])
 
   const wsToken = useMemo(() => getToken(), [])
+  const user = useAuthStore(s => s.user)
   const wsUrl = useMemo(
-    () => (enabled ? buildMatchWSUrl(matchId, wsToken) : ''),
-    [enabled, matchId, wsToken],
+    () => {
+      if (!enabled)
+        return ''
+      return buildMatchWSUrl(matchId, wsToken, {
+        userId: user?.id,
+        agentId: agentIdsRef.current.current || undefined,
+        tenantId: undefined,
+      })
+    },
+    [enabled, matchId, wsToken, user?.id],
   )
 
   const { status: wsStatus } = useWebSocket({
@@ -180,6 +190,35 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
                 content_xml: String(data.content_xml || ''),
               }
             })
+            break
+          case 'adk_stream_chunk': {
+            const chunk = String(data.accumulated || data.chunk || '')
+            if (!chunk)
+              break
+            const streamId = `stream-${matchId}`
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              if (last && last.id === streamId) {
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, parts: [{ type: 'text', text: chunk }] as UIMessage['parts'] },
+                ]
+              }
+              return [
+                ...prev,
+                {
+                  id: streamId,
+                  role: 'assistant' as const,
+                  parts: [{ type: 'text', text: chunk }] as UIMessage['parts'],
+                  createdAt: new Date(),
+                } as UIMessage,
+              ]
+            })
+            break
+          }
+          case 'adk_tool_call':
+            break
+          case 'adk_error':
             break
           case 'human_rejected':
             setMessages(prev => [
