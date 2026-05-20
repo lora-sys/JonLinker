@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"joblinker/internal/eino/chatmodel"
 	"joblinker/internal/eino/runner"
+	"joblinker/internal/eino/stategraph"
 	"joblinker/internal/eino/prompt"
 	"joblinker/internal/agent"
 	"joblinker/internal/cache"
@@ -41,6 +43,8 @@ type MessageQueueService struct {
 	einoRunner         *runner.AgentRunner
 	// ADK Runner (optional, for ADK-based processing)
 	adkRunner          *runner.ADKRunner
+	// StateGraph Runner (optional, for Phase 1 full autonomous pipeline)
+	stategraphRunner   *runner.StateGraphRunner
 	// Context optimization for AI prompts
 	contextOptimizer   *ContextOptimizerService
 	// Observability
@@ -52,6 +56,9 @@ type MessageQueueService struct {
 	conversationMu     sync.RWMutex
 	// WebSocket broadcast callback
 	broadcastFn        BroadcastFunc
+	// StateGraph tracking: which matches already have a graph running
+	runningGraphs   map[string]bool
+	runningGraphsMu sync.Mutex
 }
 
 // SetEinoRunner sets the Eino AgentRunner for Eino-based processing
@@ -64,6 +71,12 @@ func (s *MessageQueueService) SetEinoRunner(einoRunner *runner.AgentRunner) {
 func (s *MessageQueueService) SetADKRunner(adkRunner *runner.ADKRunner) {
 	s.adkRunner = adkRunner
 	log.Printf("MessageQueueService: ADK Runner configured")
+}
+
+// SetStateGraphRunner sets the StateGraph Runner for autonomous pipeline processing
+func (s *MessageQueueService) SetStateGraphRunner(sgr *runner.StateGraphRunner) {
+	s.stategraphRunner = sgr
+	log.Printf("MessageQueueService: StateGraph Runner configured")
 }
 
 // SetContextOptimizer sets the context optimizer for AI prompts
@@ -124,6 +137,7 @@ func NewMessageQueueService(
 		auditSvc:           auditSvc,
 		alertSvc:           alertSvc,
 		conversationRounds: make(map[string]int),
+		runningGraphs:      make(map[string]bool),
 	}
 }
 
@@ -181,6 +195,24 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		return nil
 	}
 
+	// ── StateGraph trigger: on first round, kick off autonomous pipeline ──
+	if s.stategraphRunner != nil && currentRound == 1 {
+		s.runningGraphsMu.Lock()
+		already := s.runningGraphs[matchID.String()]
+		if !already {
+			s.runningGraphs[matchID.String()] = true
+		}
+		s.runningGraphsMu.Unlock()
+
+		if !already {
+			log.Printf("[StateGraph] Triggering autonomous pipeline for match=%s", matchID)
+			// Run in a detached goroutine so the handler returns immediately
+			go s.runStateGraphForMatch(context.Background(), matchID, msg, match, senderAgent)
+			// Return early — the graph goroutine broadcasts all messages itself
+			return nil
+		}
+	}
+
 	if s.metricsSvc != nil {
 		s.metricsSvc.UpdateHeartbeat(senderAgent.ID)
 		s.metricsSvc.RecordMessage(senderAgent.ID)
@@ -230,14 +262,20 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		}
 	}
 
-	// Fallback to old Eino or traditional AI
+	// Fallback to Eino streaming (preferred), then sync Eino, then legacy AI
+	if response == nil && s.einoRunner != nil {
+		response = s.generateEinoResponseStream(msg, match, senderAgent, jobCtx)
+	}
 	if response == nil {
-		response = s.generateEinoResponse(msg, match, senderAgent, jobCtx)
-		if response == nil {
-		 log.Printf("Eino returned nil, falling back to legacy AI")
-		 legacyFallback = true
-		 response = s.generateAutoResponse(msg, match, senderAgent)
+		legacyEinoResponse := s.generateEinoResponse(msg, match, senderAgent, jobCtx)
+		if legacyEinoResponse != nil {
+			response = legacyEinoResponse
 		}
+	}
+	if response == nil {
+		log.Printf("Eino returned nil, falling back to legacy AI")
+		legacyFallback = true
+		response = s.generateAutoResponse(msg, match, senderAgent)
 	}
 
 	// Ensure DB records are created for OFFER/SCHEDULE intents
@@ -743,6 +781,70 @@ func (s *MessageQueueService) getJobContextString(match *model.Match) string {
 	)
 }
 
+// generateEinoResponseStream uses DeepRecruiter with streaming to generate a response.
+// It broadcasts each chunk via WebSocket as "adk_stream_chunk" events for typewriter animation.
+// Returns nil if Eino is not configured or fails, triggering fallback.
+func (s *MessageQueueService) generateEinoResponseStream(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
+	if s.einoRunner == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	var msgContent string
+	if msg.Payload != nil {
+		if content, ok := msg.Payload["content"].(string); ok {
+			msgContent = content
+		}
+	}
+	if msgContent == "" {
+		msgContent = msg.Intent
+	}
+
+	// Inject job context into the message so Eino agents see actual role details
+	enrichedMsg := msgContent
+	if jobContext != "" {
+		enrichedMsg = fmt.Sprintf("%s\n\n%s", jobContext, msgContent)
+	}
+
+	deepRecruiter := s.einoRunner.GetDeepRecruiter(match.ID)
+
+	// Streaming callback: broadcast each chunk via WebSocket
+	var streamBuf string
+	onChunk := func(chunk string) {
+		streamBuf += chunk
+		if s.broadcastFn != nil {
+			s.broadcastFn(match.ID.String(), "adk_stream_chunk", map[string]interface{}{
+				"chunk":           chunk,
+				"accumulated":     streamBuf,
+				"sender_agent_id": senderAgent.ID.String(),
+			})
+		}
+	}
+
+	var response string
+	var err error
+
+	if senderAgent.Type == "seeker" {
+		response, err = deepRecruiter.ProcessRecruiterMessageStream(ctx, enrichedMsg, onChunk)
+	} else {
+		response, err = deepRecruiter.ProcessSeekerMessageStream(ctx, enrichedMsg, onChunk)
+	}
+
+	if err != nil {
+		log.Printf("DeepRecruiter stream error: %v", err)
+		return nil
+	}
+
+	intent := s.parseIntent(response, msg.Intent)
+
+	return &AutoResponse{
+		Intent:  intent,
+		Payload: map[string]interface{}{"message": response},
+	}
+}
+
 // generateEinoResponse uses DeepRecruiter to generate response
 // Returns nil if Eino is not configured or fails, triggering fallback
 func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
@@ -903,6 +1005,80 @@ func (s *MessageQueueService) broadcastStateChange(matchID string, newState stri
 			"new_state": newState,
 			"reason":    reason,
 			"timestamp": time.Now(),
+		})
+	}
+}
+
+// runStateGraphForMatch runs the autonomous StateGraph pipeline for a match in the current goroutine.
+// It creates seeker/recruiter agents, runs all 5 phases (INTRODUCTION → COMPLETED),
+// and broadcasts each message and phase change in real-time.
+func (s *MessageQueueService) runStateGraphForMatch(ctx context.Context, matchID uuid.UUID, msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) {
+	graphCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	otherAgentID := s.getOtherAgentID(match, uuid.MustParse(msg.SenderID))
+	seekerAgentID := match.SeekerAgentID
+
+	// Broadcast callbacks
+	onMessage := func(sender, message string, phase stategraph.Phase) {
+		// Determine which agent ID sent this
+		agentID := otherAgentID
+		if sender == "Seeker" || strings.HasPrefix(sender, "Seeker") {
+			agentID = seekerAgentID
+		} else if sender == "Recruiter" || strings.HasPrefix(sender, "Recruiter") {
+			agentID = otherAgentID
+		}
+
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "state_graph_message", map[string]interface{}{
+				"match_id":        matchID.String(),
+				"sender_agent_id": agentID.String(),
+				"sender":          sender,
+				"text":            message,
+				"phase":           string(phase),
+				"timestamp":       time.Now(),
+			})
+		}
+	}
+
+	onPhase := func(phase stategraph.Phase) {
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "fsm_state_change", map[string]interface{}{
+				"match_id":  matchID.String(),
+				"new_state": string(phase),
+				"reason":    "stategraph_progression",
+				"timestamp": time.Now(),
+			})
+		}
+	}
+
+	log.Printf("[StateGraph] Running autonomous pipeline for match=%s", matchID)
+
+	state, err := s.stategraphRunner.RunGraph(graphCtx, matchID,
+		stategraph.WithCallbacks(onMessage, onPhase),
+		stategraph.WithMaxNegotiationRounds(10),
+		stategraph.WithMaxInterviewRounds(5),
+		stategraph.WithMaxOfferRounds(3),
+	)
+	if err != nil {
+		log.Printf("[StateGraph] Error for match=%s: %v", matchID, err)
+		s.broadcastStateChange(matchID.String(), "ERROR", err.Error())
+		return
+	}
+
+	log.Printf("[StateGraph] Completed for match=%s: final=%s accepted=%v", matchID, state.Phase, state.OfferAccepted)
+
+	// Broadcast completion event
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID.String(), "state_graph_complete", map[string]interface{}{
+			"match_id":   matchID.String(),
+			"phase":      string(state.Phase),
+			"candidate":  state.CandidateName,
+			"job_title":  state.JobTitle,
+			"accepted":   state.OfferAccepted,
+			"declined":   state.OfferDeclined,
+			"msg_count":  len(state.Messages),
+			"timestamp":  time.Now(),
 		})
 	}
 }
