@@ -15,9 +15,8 @@ import { useWebSocket } from './useWebSocket'
 
 export type FSMStage
   = | 'INTRODUCTION'
-    | 'JOB_DESCRIPTION'
-    | 'SALARY_NEGOTIATION'
-    | 'INTERVIEWING'
+    | 'NEGOTIATION'
+    | 'INTERVIEW'
     | 'OFFER'
     | 'COMPLETED'
 
@@ -35,9 +34,8 @@ interface UseAIChatOptions {
 
 function matchStatusToStage(status: string): FSMStage {
   switch (status) {
-    case 'mutual_interest': return 'JOB_DESCRIPTION'
-    case 'negotiating': return 'SALARY_NEGOTIATION'
-    case 'interviewing': return 'INTERVIEWING'
+    case 'mutual_interest': case 'negotiating': return 'NEGOTIATION'
+    case 'interviewing': return 'INTERVIEW'
     case 'offered': return 'OFFER'
     case 'hired': case 'rejected': case 'completed': return 'COMPLETED'
     default: return 'INTRODUCTION'

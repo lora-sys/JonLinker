@@ -17,9 +17,8 @@ interface ConversationHeaderProps {
 
 const stageColors: Record<string, string> = {
   INTRODUCTION: 'bg-blue-100 text-blue-700',
-  JOB_DESCRIPTION: 'bg-indigo-100 text-indigo-700',
-  SALARY_NEGOTIATION: 'bg-amber-100 text-amber-700',
-  INTERVIEWING: 'bg-purple-100 text-purple-700',
+  NEGOTIATION: 'bg-amber-100 text-amber-700',
+  INTERVIEW: 'bg-purple-100 text-purple-700',
   OFFER: 'bg-green-100 text-green-700',
   COMPLETED: 'bg-gray-100 text-gray-700',
 }
