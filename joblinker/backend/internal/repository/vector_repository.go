@@ -2,93 +2,52 @@ package repository
 
 import (
 	"context"
-	"math"
+	"log"
 
-	"gorm.io/gorm"
+	redispkg "joblinker/pkg/redis"
 )
 
+// VectorRepository provides vector storage and similarity search via Redis Stack
 type VectorRepository struct {
-	db *gorm.DB
+	rvClient *redispkg.VectorClient
 }
 
-func NewVectorRepository() *VectorRepository {
-	return &VectorRepository{db: nil}
+// NewVectorRepository creates a VectorRepository backed by Redis Stack
+func NewVectorRepository(rvClient *redispkg.VectorClient) *VectorRepository {
+	return &VectorRepository{rvClient: rvClient}
 }
 
-func (r *VectorRepository) WithDB(db *gorm.DB) *VectorRepository {
-	r.db = db
-	return r
-}
-
-type VectorRecord struct {
-	ID           string  `json:"id" gorm:"column:id"`
-	CollectionID string  `json:"collection_id" gorm:"column:collection_id"`
-	Vector       []float64 `json:"vector" gorm:"column:vector"`
-	Document     string  `json:"document" gorm:"column:document"`
-	Metadata     string  `json:"metadata" gorm:"column:metadata"`
-}
-
+// StoreVector stores a document with its vector embedding
 func (r *VectorRepository) StoreVector(ctx context.Context, collectionID string, id string, vector []float64, document string, metadata map[string]interface{}) error {
-	// This would integrate with Chroma in production
-	// For now, we store the mapping in PostgreSQL
-	record := &VectorRecord{
+	if r.rvClient == nil {
+		log.Printf("VectorRepository: Redis client not configured, skipping vector storage")
+		return nil
+	}
+	doc := &redispkg.VectorDocument{
 		ID:           id,
 		CollectionID: collectionID,
+		Content:      document,
 		Vector:       vector,
-		Document:     document,
+		Metadata:     metadata,
 	}
-	return r.db.WithContext(ctx).Create(record).Error
+	return r.rvClient.Store(ctx, doc)
 }
 
-func (r *VectorRepository) GetVector(ctx context.Context, id string) ([]float64, error) {
-	var record VectorRecord
-	if err := r.db.WithContext(ctx).First(&record, "id = ?", id).Error; err != nil {
-		return nil, err
-	}
-	return record.Vector, nil
-}
-
-func (r *VectorRepository) DeleteVector(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&VectorRecord{}, "id = ?", id).Error
-}
-
+// SearchSimilar performs vector similarity search using Redis Stack KNN
 func (r *VectorRepository) SearchSimilar(ctx context.Context, collectionID string, queryVector []float64, limit int) ([]string, []float64, error) {
-	// This is a simplified implementation
-	// In production, this would call Chroma's API
-	var records []VectorRecord
-	if err := r.db.WithContext(ctx).
-		Where("collection_id = ?", collectionID).
-		Limit(limit).
-		Find(&records).Error; err != nil {
+	if r.rvClient == nil {
+		log.Printf("VectorRepository: Redis client not configured, returning empty results")
+		return nil, nil, nil
+	}
+	results, err := r.rvClient.SearchSimilar(ctx, collectionID, collectionID, queryVector, limit)
+	if err != nil {
 		return nil, nil, err
 	}
-
-	ids := make([]string, len(records))
-	scores := make([]float64, len(records))
-	for i, record := range records {
-		ids[i] = record.ID
-		scores[i] = cosineSimilarity(queryVector, record.Vector)
+	ids := make([]string, len(results))
+	scores := make([]float64, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+		scores[i] = r.Score
 	}
 	return ids, scores, nil
-}
-
-func cosineSimilarity(a, b []float64) float64 {
-	if len(a) != len(b) {
-		return 0
-	}
-	var dotProduct, normA, normB float64
-	for i := range a {
-		dotProduct += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-	denom := sqrt(normA) * sqrt(normB)
-	if denom == 0 {
-		return 0
-	}
-	return dotProduct / denom
-}
-
-func sqrt(x float64) float64 {
-	return math.Sqrt(x)
 }

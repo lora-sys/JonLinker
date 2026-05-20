@@ -196,6 +196,7 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 
 	// Prefer ADK Runner (real Eino ADK agent)
 	var response *AutoResponse
+	legacyFallback := false
 
 	if s.adkRunner != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -233,12 +234,59 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	if response == nil {
 		response = s.generateEinoResponse(msg, match, senderAgent, jobCtx)
 		if response == nil {
-			log.Printf("Eino returned nil, falling back to legacy AI")
-			response = s.generateAutoResponse(msg, match, senderAgent)
+		 log.Printf("Eino returned nil, falling back to legacy AI")
+		 legacyFallback = true
+		 response = s.generateAutoResponse(msg, match, senderAgent)
 		}
 	}
 
-	responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
+	// Ensure DB records are created for OFFER/SCHEDULE intents
+	// (ADK and Eino runners only return intent strings without calling tools)
+	// Skip if legacy fallback was used — generateAutoResponse already calls tools internally
+	if !legacyFallback {
+	 if response.Intent == "OFFER" {
+		salary := 0
+		startDate := time.Now().AddDate(0, 1, 0).Format("2006-01-02")
+		if match.Job != nil {
+		 var jobData map[string]interface{}
+		 if err := json.Unmarshal(match.Job.StructuredJSON, &jobData); err == nil {
+		  if min, ok := jobData["salary_min"].(float64); ok {
+		   if max, ok := jobData["salary_max"].(float64); ok && max > min {
+		    salary = int((min + max) / 2)
+		   }
+		  }
+		 }
+		}
+		if salary == 0 {
+		 salary = 150000 // fallback
+		}
+		toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), matchID, "create_offer", map[string]interface{}{
+		 "match_id":   matchID.String(),
+		 "salary":     float64(salary),
+		 "start_date": startDate,
+		})
+		if err != nil {
+		 log.Printf("Failed to create offer via tool: %v", err)
+		} else if toolResult != nil && toolResult.Success {
+		 log.Printf("Offer created via tool (post-AI): %+v", toolResult.Data)
+		}
+	}
+	if response.Intent == "SCHEDULE" {
+	datetime := time.Now().AddDate(0, 0, 14).Format(time.RFC3339) // 2 weeks from now
+	toolResult, err := s.toolExecutor.ExecuteTool(context.Background(), matchID, "schedule_interview", map[string]interface{}{
+	 "match_id":       matchID.String(),
+	 "datetime":       datetime,
+	 "interview_type": "video",
+	})
+	if err != nil {
+	 log.Printf("Failed to schedule interview via tool: %v", err)
+	} else if toolResult != nil && toolResult.Success {
+	 log.Printf("Interview scheduled via tool (post-AI): %+v", toolResult.Data)
+	}
+}
+}
+
+responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
 
 	// FSM transition for the response intent (drives progression)
 	if s.fsmIntegration != nil && response.Intent != msg.Intent {

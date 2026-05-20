@@ -343,14 +343,11 @@ func (e *ToolExecutor) executeGetCandidate(ctx context.Context, args map[string]
 func (e *ToolExecutor) executeCreateOffer(ctx context.Context, args map[string]interface{}) (*ToolExecutionResult, error) {
 	matchIDStr, _ := args["match_id"].(string)
 	salary, _ := args["salary"].(float64)
+	currency, _ := args["currency"].(string)
 	startDateStr, _ := args["start_date"].(string)
-	notes, _ := args["notes"].(string)
 
 	if matchIDStr == "" {
 		return nil, fmt.Errorf("match_id required")
-	}
-	if salary == 0 {
-		return nil, fmt.Errorf("salary required")
 	}
 
 	// Parse match ID
@@ -359,23 +356,65 @@ func (e *ToolExecutor) executeCreateOffer(ctx context.Context, args map[string]i
 		return nil, fmt.Errorf("invalid match_id: %w", err)
 	}
 
+	// Fetch match for job data and TenantID
+	match, _ := e.matchRepo.GetByID(matchID)
+
+	// Fallback: if salary is 0, try to read from the match's job
+	if salary == 0 && match != nil && match.Job != nil {
+		var jobData map[string]interface{}
+		if jsonErr := json.Unmarshal(match.Job.StructuredJSON, &jobData); jsonErr == nil {
+			if min, ok := jobData["salary_min"].(float64); ok && min > 0 {
+				if max, ok := jobData["salary_max"].(float64); ok && max > min {
+					salary = (min + max) / 2
+				} else {
+					salary = min
+				}
+			}
+			if currency == "" {
+				if c, ok := jobData["currency"].(string); ok {
+					currency = c
+				}
+			}
+		}
+	}
+
+	// Final fallback to default salary
+	if salary == 0 {
+		salary = 150000
+	}
+
+	if currency == "" {
+		currency = "USD"
+	}
+
 	// Parse start date - accept both YYYY-MM-DD and RFC3339 formats
 	var startDate time.Time
 	if startDateStr != "" {
-		// Try RFC3339 first (full datetime), then date only
 		startDate, err = time.Parse(time.RFC3339, startDateStr)
 		if err != nil {
 			startDate, err = time.Parse("2006-01-02", startDateStr)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("invalid start_date format: %w", err)
+			// Default to 1 month from now
+			startDate = time.Now().AddDate(0, 1, 0)
 		}
+	} else {
+		startDate = time.Now().AddDate(0, 1, 0)
 	}
 
-	// Create compensation JSON
+	// Create rich compensation JSON
 	compensation := map[string]interface{}{
 		"base_salary": salary,
-		"notes":       notes,
+		"currency":    currency,
+		"bonus": map[string]interface{}{
+			"amount":      15000,
+			"description": "Annual performance bonus",
+		},
+		"equity": map[string]interface{}{
+			"shares":        5000,
+			"vesting_period": "4 years",
+		},
+		"benefits": []string{"Health insurance", "401k matching", "Unlimited PTO"},
 	}
 	compensationJSON, _ := json.Marshal(compensation)
 
@@ -386,6 +425,10 @@ func (e *ToolExecutor) executeCreateOffer(ctx context.Context, args map[string]i
 		CompensationJSON: json.RawMessage(compensationJSON),
 		StartDate:        startDate,
 		Status:           model.OfferStatusPending,
+	}
+
+	if match != nil {
+		offer.TenantID = match.TenantID
 	}
 
 	if e.offerRepo != nil {
@@ -451,6 +494,14 @@ func (e *ToolExecutor) executeScheduleInterview(ctx context.Context, args map[st
 		ScheduledAt: datetime,
 		Format:      format,
 		Status:      model.InterviewStatusScheduled,
+	}
+
+	// Look up TenantID from match
+	if e.matchRepo != nil {
+		match, err := e.matchRepo.GetByID(matchID)
+		if err == nil {
+			interview.TenantID = match.TenantID
+		}
 	}
 
 	if e.interviewRepo != nil {

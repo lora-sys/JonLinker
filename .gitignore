@@ -26,3 +26,5 @@ joblinker/backend/server
 
 # TypeScript build info
 *.tsbuildinfo
+
+.atomcode

@@ -49,21 +49,7 @@ services:
       timeout: 5s
       retries: 5
 
-  chroma:
-    image: chromadb/chroma:0.6.3
-    container_name: joblinker-chroma
-    ports:
-      - "8000:8000"
-    volumes:
-      - chroma_data:/chroma/chroma
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
-  chroma_data:

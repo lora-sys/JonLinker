@@ -22,7 +22,6 @@ import (
 	"joblinker/internal/repository"
 	"joblinker/internal/service"
 	"joblinker/pkg/ai"
-	"joblinker/pkg/chroma"
 	"joblinker/pkg/rabbitmq"
 	redispkg "joblinker/pkg/redis"
 
@@ -65,22 +64,6 @@ func main() {
 
 	// Validate required environment variables at startup
 	getEnvOrFail("JWT_SECRET")
-
-	// Initialize Chroma client
-	chromaHost := getEnv("CHROMA_HOST", "localhost")
-	chromaPort := getEnvInt("CHROMA_PORT", 8000)
-	chromaClient := chroma.NewClient(chromaHost, chromaPort)
-	if err := chromaClient.Heartbeat(); err != nil {
-		log.Printf("WARNING: Chroma not reachable at %s:%d: %v", chromaHost, chromaPort, err)
-	} else {
-		log.Printf("Connected to Chroma at %s:%d", chromaHost, chromaPort)
-		if _, err := chromaClient.EnsureCollection("agent_memories"); err != nil {
-			log.Printf("WARNING: failed to ensure agent_memories collection: %v", err)
-		}
-		if _, err := chromaClient.EnsureCollection("user_preferences"); err != nil {
-			log.Printf("WARNING: failed to ensure user_preferences collection: %v", err)
-		}
-	}
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.SetOutput(os.Stdout)
@@ -141,7 +124,19 @@ func main() {
 	auditRepo := repository.NewAuditLogRepository().WithDB(db)
 	observabilityErrorRepo := repository.NewErrorEventRepository().WithDB(db)
 
-	vecRepo := repository.NewVectorRepository().WithDB(db)
+	// Initialize Redis Stack vector client for similarity search
+	redisVecClient := redis.NewClient(&redis.Options{
+		Addr: getEnv("REDIS_ADDR", "localhost:6379"),
+	})
+	vecDim := 1024 // Jina AI embedding dimension
+	rvClient := redispkg.NewVectorClient(redisVecClient, "vec:", vecDim)
+	if err := rvClient.EnsureIndex(context.Background(), "agent_memories"); err != nil {
+		log.Printf("WARNING: failed to create Redis vector index: %v", err)
+	} else {
+		log.Printf("Redis Stack vector index initialized (dim=%d)", vecDim)
+	}
+
+	vecRepo := repository.NewVectorRepository(rvClient)
 	prefRepo := repository.NewPreferenceVectorRepository().WithDB(db)
 
 	// Initialize tool cache (100 entries max, 5 min TTL)
@@ -209,21 +204,6 @@ func main() {
 				}
 			}
 		}
-	}
-
-	// Initialize Redis Stack vector client for similarity search
-	{
-		redisVecClient := redis.NewClient(&redis.Options{
-			Addr: getEnv("REDIS_ADDR", "localhost:6379"),
-		})
-		vecDim := 1024 // Jina AI embedding dimension
-		rvClient := redispkg.NewVectorClient(redisVecClient, "vec:", vecDim)
-		if err := rvClient.EnsureIndex(context.Background(), "agent_memories"); err != nil {
-			log.Printf("WARNING: failed to create Redis vector index: %v", err)
-		} else {
-			log.Printf("Redis Stack vector index initialized (dim=%d)", vecDim)
-		}
-		_ = rvClient
 	}
 
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
