@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-// Real integration tests for memory persistence via Chroma.
+// Real integration tests for memory persistence via Redis Stack.
 package integration
 
 import (
@@ -16,14 +16,13 @@ import (
 
 // TestMemoryPersistence verifies that StoreMemory actually persists data
 // and GetRecentMemories returns non-empty results.
-// If Chroma is not connected, this test FAILS (not skip).
+// Requires backend server + Redis Stack to be running.
 func TestMemoryPersistence(t *testing.T) {
 	baseURL := testutil.RequireServerURL(t)
-	chromaHost := testutil.RequireEnv(t, "CHROMA_HOST")
 
-	// Verify Chroma is reachable first
-	if _, err := testutil.HTTPClient.Get("http://" + chromaHost + "/api/v1/heartbeat"); err != nil {
-		t.Fatalf("Chroma not reachable at %s: %v — %s", chromaHost, err, testutil.ENV_MISSING_MSG)
+	// Verify the backend server is reachable
+	if _, err := testutil.HTTPClient.Get(baseURL + "/health"); err != nil {
+		t.Fatalf("Backend server not reachable at %s: %v — %s", baseURL, err, testutil.ENV_MISSING_MSG)
 	}
 
 	// Setup: create match context
@@ -72,7 +71,7 @@ func TestMemoryPersistence(t *testing.T) {
 	}
 
 	if len(memories) == 0 {
-		t.Fatal("FAKE: GetRecentMemories returned empty — StoreMemory does not persist to Chroma")
+		t.Fatal("GetRecentMemories returned empty — StoreMemory may not be persisting to Redis Stack")
 	}
 
 	// Verify memory content is not hardcoded
@@ -87,10 +86,10 @@ func TestMemoryPersistence(t *testing.T) {
 // TestVectorSearch verifies that vector similarity search returns relevant results.
 func TestVectorSearch(t *testing.T) {
 	baseURL := testutil.RequireServerURL(t)
-	chromaHost := testutil.RequireEnv(t, "CHROMA_HOST")
 
-	if _, err := testutil.HTTPClient.Get("http://" + chromaHost + "/api/v1/heartbeat"); err != nil {
-		t.Fatalf("Chroma not reachable: %v — %s", err, testutil.ENV_MISSING_MSG)
+	// Verify the backend server is reachable (it proxies vector search to Redis Stack)
+	if _, err := testutil.HTTPClient.Get(baseURL + "/health"); err != nil {
+		t.Fatalf("Backend server not reachable at %s: %v — %s", baseURL, err, testutil.ENV_MISSING_MSG)
 	}
 
 	// Search for skills that should match stored preferences
