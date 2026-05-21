@@ -105,6 +105,8 @@ func main() {
 		&model.ConversationSummary{},
 		&model.AgentToolCall{},
 		&model.ConfirmationRequest{},
+		&model.SessionMeta{},
+		&model.SessionMessage{},
 	); err != nil {
 		log.Fatalf("Failed to auto migrate: %v", err)
 	}
