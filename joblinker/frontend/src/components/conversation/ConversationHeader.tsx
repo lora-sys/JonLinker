@@ -63,7 +63,8 @@ export function ConversationHeader({
       {/* Session Version Badge */}
       {sessionVersion != null && (
         <span className="px-2 py-1 rounded text-xs font-mono bg-gray-100 text-gray-500">
-          v{sessionVersion}
+          v
+          {sessionVersion}
         </span>
       )}
 

@@ -3,6 +3,8 @@
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { use, useCallback, useEffect, useState } from 'react'
 
+import type { Interview, Offer } from '@/types'
+
 import {
   Conversation,
   ConversationContent,
@@ -16,12 +18,10 @@ import {
 } from '@/components/ai-elements/message'
 import {
   PromptInput,
-  PromptInputTextarea,
-  PromptInputSubmit,
   PromptInputProvider,
+  PromptInputSubmit,
+  PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input'
-import type { Interview, Offer } from '@/types'
-
 import { ConversationHeader } from '@/components/conversation/ConversationHeader'
 import { FlowPanel } from '@/components/conversation/FlowPanel'
 import { SummaryPanel } from '@/components/conversation/SummaryPanel'
@@ -46,13 +46,8 @@ export default function ConversationPage({ params }: PageProps) {
   const {
     messages,
     setMessages,
-    input,
-    setInput,
-    handleSubmit,
     isLoading,
-    error,
     stop,
-    reload,
     wsStatus,
     fsmStage,
     sessionVersion,
@@ -119,7 +114,8 @@ export default function ConversationPage({ params }: PageProps) {
 
   const handlePromptSubmit = useCallback(
     ({ text }: { text: string }) => {
-      if (!text.trim() || isLoading) return
+      if (!text.trim() || isLoading)
+        return
 
       setMessages(prev => [
         ...prev,

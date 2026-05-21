@@ -43,7 +43,6 @@ function matchStatusToStage(status: string): FSMStage {
 }
 
 export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
-  const [initialLoaded, setInitialLoaded] = useState(false)
   const [input, setInput] = useState('')
   const checkedConfirmRef = useRef(false)
   const agentIdsRef = useRef({ seeker: '', recruiter: '', current: '' })
@@ -64,7 +63,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
   const [sessionVersion, setSessionVersion] = useState<number | undefined>(undefined)
   const [sessionStatus, setSessionStatus] = useState<'active' | 'concluded' | undefined>(undefined)
-  const [sessionSummary, setSessionSummary] = useState<string | undefined>(undefined)
+  const [sessionSummary] = useState<string | undefined>(undefined)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
   const loadInitialMessagesRef = useRef(false)
@@ -135,7 +134,6 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             return prev
           return msgs
         })
-        setInitialLoaded(true)
       })
       .catch(() => {})
     return () => {

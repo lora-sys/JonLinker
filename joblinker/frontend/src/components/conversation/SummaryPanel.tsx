@@ -18,7 +18,7 @@ export function SummaryPanel({ matchId }: SummaryPanelProps) {
     if (!open || summary !== null || loading)
       return
     setLoading(true)
-    apiClient.get<{ summary_text?: string; summary?: string }>(`/api/sessions/${matchId}/summary`)
+    apiClient.get<{ summary_text?: string, summary?: string }>(`/api/sessions/${matchId}/summary`)
       .then((data) => {
         setSummary(data.summary_text || data.summary || null)
       })
