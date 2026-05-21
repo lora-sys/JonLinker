@@ -2,6 +2,8 @@ package handler
 
 import (
 	"database/sql"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -43,18 +45,26 @@ func (h *HealthHandler) Health(c *gin.Context) {
 		checks["db"] = checkResult{Status: "not_configured"}
 	}
 
-	// Check RabbitMQ (best effort - check if env is configured)
-	rmqURL := os.Getenv("RABBITMQ_URL")
-	if rmqURL != "" {
-		client := &http.Client{Timeout: 3 * time.Second}
-		resp, err := client.Get("http://" + rmqURL + "/api/health/checks/alarms")
+	// Check RabbitMQ (best effort - try to connect to AMQP port)
+	rmqUser := os.Getenv("RABBITMQ_USER")
+	rmqHost := os.Getenv("RABBITMQ_HOST")
+	if rmqHost == "" {
+		rmqHost = "localhost"
+	}
+	if rmqUser != "" {
+		port := os.Getenv("RABBITMQ_PORT")
+		if port == "" {
+			port = "5672"
+		}
+		addr := net.JoinHostPort(rmqHost, port)
+		conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 		if err != nil {
-			checks["rabbitmq"] = checkResult{Status: "down", Detail: "Cannot reach RabbitMQ management API"}
+			checks["rabbitmq"] = checkResult{Status: "down", Detail: fmt.Sprintf("Cannot reach RabbitMQ at %s: %v", addr, err)}
 			if overall == "healthy" {
 				overall = "degraded"
 			}
 		} else {
-			resp.Body.Close()
+			conn.Close()
 			checks["rabbitmq"] = checkResult{Status: "ok"}
 		}
 	} else {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -785,64 +787,19 @@ func (s *MessageQueueService) getJobContextString(match *model.Match) string {
 // It broadcasts each chunk via WebSocket as "adk_stream_chunk" events for typewriter animation.
 // Returns nil if Eino is not configured or fails, triggering fallback.
 func (s *MessageQueueService) generateEinoResponseStream(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
-	if s.einoRunner == nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	var msgContent string
-	if msg.Payload != nil {
-		if content, ok := msg.Payload["content"].(string); ok {
-			msgContent = content
-		}
-	}
-	if msgContent == "" {
-		msgContent = msg.Intent
-	}
-
-	// Inject job context into the message so Eino agents see actual role details
-	enrichedMsg := msgContent
-	if jobContext != "" {
-		enrichedMsg = fmt.Sprintf("%s\n\n%s", jobContext, msgContent)
-	}
-
-	deepRecruiter := s.einoRunner.GetDeepRecruiter(match.ID)
-
-	// Streaming callback: broadcast each chunk via WebSocket
-	var streamBuf string
-	onChunk := func(chunk string) {
-		streamBuf += chunk
-		if s.broadcastFn != nil {
+	// Streaming removed in S2 refactor; fall back to non-streaming response.
+	// Broadcast the full response as a single chunk for backwards compatibility.
+	resp := s.generateEinoResponse(msg, match, senderAgent, jobContext)
+	if resp != nil && s.broadcastFn != nil {
+		if payload, ok := resp.Payload["message"].(string); ok {
 			s.broadcastFn(match.ID.String(), "adk_stream_chunk", map[string]interface{}{
-				"chunk":           chunk,
-				"accumulated":     streamBuf,
+				"chunk":           payload,
+				"accumulated":     payload,
 				"sender_agent_id": senderAgent.ID.String(),
 			})
 		}
 	}
-
-	var response string
-	var err error
-
-	if senderAgent.Type == "seeker" {
-		response, err = deepRecruiter.ProcessRecruiterMessageStream(ctx, enrichedMsg, onChunk)
-	} else {
-		response, err = deepRecruiter.ProcessSeekerMessageStream(ctx, enrichedMsg, onChunk)
-	}
-
-	if err != nil {
-		log.Printf("DeepRecruiter stream error: %v", err)
-		return nil
-	}
-
-	intent := s.parseIntent(response, msg.Intent)
-
-	return &AutoResponse{
-		Intent:  intent,
-		Payload: map[string]interface{}{"message": response},
-	}
+	return resp
 }
 
 // generateEinoResponse uses DeepRecruiter to generate response
@@ -1039,6 +996,20 @@ func (s *MessageQueueService) runStateGraphForMatch(ctx context.Context, matchID
 				"timestamp":       time.Now(),
 			})
 		}
+
+		// Persist message to database
+		contentXML := fmt.Sprintf("<message><text>%s</text></message>", message)
+		msgRecord := &model.Message{
+			ID:            uuid.New(),
+			MatchID:       matchID,
+			TenantID:      match.TenantID,
+			SenderAgentID: agentID,
+			ContentXML:    contentXML,
+			IntentType:    string(phase),
+		}
+		if err := s.messageRepo.Create(msgRecord); err != nil {
+			log.Printf("[StateGraph] Failed to persist message for match=%s: %v", matchID, err)
+		}
 	}
 
 	onPhase := func(phase stategraph.Phase) {
@@ -1068,6 +1039,29 @@ func (s *MessageQueueService) runStateGraphForMatch(ctx context.Context, matchID
 
 	log.Printf("[StateGraph] Completed for match=%s: final=%s accepted=%v", matchID, state.Phase, state.OfferAccepted)
 
+	// Update match status based on offer outcome
+	switch {
+	case state.OfferAccepted:
+		if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired); err != nil {
+			log.Printf("[StateGraph] Failed to update match %s to Hired: %v", matchID, err)
+		} else {
+			log.Printf("[StateGraph] Match %s status set to Hired (offer accepted)", matchID)
+		}
+
+		// Create an offer record so the Offers page shows this offer
+		if err := s.createOfferFromState(matchID, match.TenantID, state); err != nil {
+			log.Printf("[StateGraph] Failed to create offer record for match %s: %v", matchID, err)
+		}
+	case state.OfferDeclined:
+		if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatusRejected); err != nil {
+			log.Printf("[StateGraph] Failed to update match %s to Rejected: %v", matchID, err)
+		} else {
+			log.Printf("[StateGraph] Match %s status set to Rejected (offer declined)", matchID)
+		}
+	default:
+		log.Printf("[StateGraph] No status update for match %s (no offer decision)", matchID)
+	}
+
 	// Broadcast completion event
 	if s.broadcastFn != nil {
 		s.broadcastFn(matchID.String(), "state_graph_complete", map[string]interface{}{
@@ -1081,6 +1075,65 @@ func (s *MessageQueueService) runStateGraphForMatch(ctx context.Context, matchID
 			"timestamp":  time.Now(),
 		})
 	}
+}
+
+// createOfferFromState creates an offer record in the database from StateGraph completion state.
+func (s *MessageQueueService) createOfferFromState(matchID, tenantID uuid.UUID, state *stategraph.RecruitmentState) error {
+	// Extract a salary amount from the state
+	salaryStr := state.OfferAmount
+	if salaryStr == "" {
+		// Try to extract from the last negotiation round
+		if len(state.NegotiationRounds) > 0 {
+			last := state.NegotiationRounds[len(state.NegotiationRounds)-1]
+			salaryStr = last.RecruiterOffer
+		}
+	}
+	if salaryStr == "" {
+		salaryStr = "80000"
+	}
+
+	// Parse salary as integer (best-effort)
+	baseSalary := 80000
+	if parsed, err := strconv.Atoi(regexp.MustCompile(`\d+`).FindString(salaryStr)); err == nil && parsed > 0 {
+		baseSalary = parsed
+	}
+
+	compensation := map[string]interface{}{
+		"base_salary": baseSalary,
+		"currency":    "USD",
+		"bonus": map[string]interface{}{
+			"amount":      baseSalary * 10 / 100,
+			"description": "Annual performance bonus",
+		},
+		"equity": map[string]interface{}{
+			"shares":         1000,
+			"vesting_period": "4-year vesting with 1-year cliff",
+		},
+		"benefits": []string{"Health Insurance", "401(k) matching", "Unlimited PTO"},
+	}
+
+	compJSON, err := json.Marshal(compensation)
+	if err != nil {
+		return fmt.Errorf("marshal compensation: %w", err)
+	}
+
+	offer := &model.Offer{
+		ID:               uuid.New(),
+		MatchID:          matchID,
+		TenantID:         tenantID,
+		CompensationJSON: json.RawMessage(compJSON),
+		StartDate:        time.Now().AddDate(0, 1, 0), // 1 month from now
+		Status:           model.OfferStatusAccepted,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	if err := s.offerRepo.Create(offer); err != nil {
+		return fmt.Errorf("create offer: %w", err)
+	}
+
+	log.Printf("[StateGraph] Created offer record %s for match %s (salary=%d)", offer.ID, matchID, baseSalary)
+	return nil
 }
 
 // continueAgentConversation re-publishes to RabbitMQ after human approval

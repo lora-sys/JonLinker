@@ -3,8 +3,6 @@ package stategraph
 import (
 	"context"
 	"fmt"
-
-	"github.com/cloudwego/eino/schema"
 )
 
 // offerNode runs one round of offer presentation and response between recruiter and seeker.
@@ -32,7 +30,7 @@ func (g *RecruitmentGraph) offerNode(ctx context.Context, state *RecruitmentStat
 			state.SalaryAgreed,
 		)
 	}
-	recruiterResp, err := g.recruiter.Chat(ctx, recruiterPrompt)
+	recruiterResp, err := g.recruiter.Chat(ctx, nil, recruiterPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter offer round %d: %w", roundNum, err)
 	}
@@ -47,19 +45,11 @@ func (g *RecruitmentGraph) offerNode(ctx context.Context, state *RecruitmentStat
 		state.JobTitle,
 		recruiterResp,
 	)
-	seekerResp, err := g.seeker.Chat(ctx, seekerPrompt)
+	seekerResp, err := g.seeker.Chat(ctx, nil, seekerPrompt)
 	if err != nil {
 		return state, fmt.Errorf("seeker offer response: %w", err)
 	}
 	state.Messages = append(state.Messages, fmt.Sprintf("[Seeker Offer R%d] %s", roundNum, seekerResp))
-
-	// Also store in seeker agent's memory for context
-	if err := g.seeker.AddMemoryMessage(ctx, schema.Assistant, recruiterResp); err != nil {
-		return state, fmt.Errorf("store recruiter offer in seeker memory: %w", err)
-	}
-	if err := g.seeker.AddMemoryMessage(ctx, schema.User, seekerResp); err != nil {
-		return state, fmt.Errorf("store seeker response in seeker memory: %w", err)
-	}
 
 	state.OfferMade = true
 

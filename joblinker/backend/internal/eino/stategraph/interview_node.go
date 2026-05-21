@@ -19,7 +19,7 @@ func (g *RecruitmentGraph) interviewNode(ctx context.Context, state *Recruitment
 		roundNum,
 		state.JobTitle,
 	)
-	question, err := g.recruiter.Chat(ctx, recruiterPrompt)
+	question, err := g.recruiter.Chat(ctx, nil, recruiterPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter interview round %d: %w", roundNum, err)
 	}
@@ -31,7 +31,7 @@ func (g *RecruitmentGraph) interviewNode(ctx context.Context, state *Recruitment
 		roundNum,
 		state.JobTitle,
 	)
-	answer, err := g.seeker.Chat(ctx, seekerPrompt)
+	answer, err := g.seeker.Chat(ctx, nil, seekerPrompt)
 	if err != nil {
 		return state, fmt.Errorf("seeker interview round %d: %w", roundNum, err)
 	}
@@ -44,7 +44,7 @@ func (g *RecruitmentGraph) interviewNode(ctx context.Context, state *Recruitment
 		question,
 		answer,
 	)
-	evalResp, err := g.recruiter.Chat(ctx, evalPrompt)
+	evalResp, err := g.recruiter.Chat(ctx, nil, evalPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter evaluation round %d: %w", roundNum, err)
 	}

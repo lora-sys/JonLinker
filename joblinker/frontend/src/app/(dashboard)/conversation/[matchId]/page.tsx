@@ -57,7 +57,7 @@ export default function ConversationPage({ params }: PageProps) {
           }
           catch {}
         }
-        if (matchData.status === 'offer_sent' || matchData.status === 'offered') {
+        if (matchData.status === 'offer_sent' || matchData.status === 'offered' || matchData.status === 'hired') {
           try {
             const data = await apiClient.get<Offer>(`/api/offers/${matchId}`)
             setOffer(data)

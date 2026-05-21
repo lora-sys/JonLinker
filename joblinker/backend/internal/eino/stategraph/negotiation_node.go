@@ -11,11 +11,18 @@ func (g *RecruitmentGraph) negotiationNode(ctx context.Context, state *Recruitme
 
 	// Seeker states salary expectation
 	seekerPrompt := fmt.Sprintf(
-		"This is negotiation round %d. State your expected salary range for the %s position. Be reasonable based on your skills.",
+		"This is negotiation round %d. State your expected salary range for the %s position. Be reasonable based on your skills and market value.\n\n"+
+			"Examples of good responses:\n"+
+			"- \"I'm looking for $80,000-$90,000 based on my 5 years of experience.\"\n"+
+			"- \"Your offer of $75,000 is reasonable. I'd accept $80,000.\"\n"+
+			"- \"After reviewing the benefits package, I'm happy with $85,000.\"\n\n"+
+			"At the end of your response, include exactly one of these markers on its own line:\n"+
+			"  [AGREED] if you accept the latest offer and want to finalize the deal\n"+
+			"  [COUNTER] if you want to propose a different amount and continue negotiating",
 		roundNum,
 		state.JobTitle,
 	)
-	seekerResp, err := g.seeker.Chat(ctx, seekerPrompt)
+	seekerResp, err := g.seeker.Chat(ctx, nil, seekerPrompt)
 	if err != nil {
 		return state, fmt.Errorf("seeker negotiation round %d: %w", roundNum, err)
 	}
@@ -24,11 +31,23 @@ func (g *RecruitmentGraph) negotiationNode(ctx context.Context, state *Recruitme
 	// Recruiter responds with offer/counter
 	recruiterPrompt := fmt.Sprintf(
 		"This is negotiation round %d. Respond to the candidate's salary expectation for the %s position. "+
-			"If acceptable, confirm the agreed salary. If not, make a counter-offer.",
+			"The candidate previously said: \"%s\"\n\n"+
+			"Examples of appropriate recruiter responses:\n"+
+			"- \"We can offer $82,000 which is within your expected range. Welcome aboard!\" + [AGREED]\n"+
+			"- \"Our budget caps at $78,000. Can we meet at $78,000 with an extra week of vacation?\" + [COUNTER]\n"+
+			"- \"$85,000 is above our range. Our best offer is $80,000.\" + [COUNTER $80000]\n\n"+
+			"Policies:\n"+
+			"- If this is a late round (round 8+), you should aim to reach agreement rather than prolonging.\n"+
+			"- If the candidate's request is within the company budget, agree and finalize.\n"+
+			"- If not, make a reasonable counter-offer that's fair for both sides.\n\n"+
+			"At the end of your response, include exactly one of these markers on its own line:\n"+
+			"  [AGREED] if you accept the candidate's expectation and finalize the deal\n"+
+			"  [COUNTER $AMOUNT] if you want to negotiate further, replacing $AMOUNT with your offer",
 		roundNum,
 		state.JobTitle,
+		seekerResp,
 	)
-	recruiterResp, err := g.recruiter.Chat(ctx, recruiterPrompt)
+	recruiterResp, err := g.recruiter.Chat(ctx, nil, recruiterPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter negotiation round %d: %w", roundNum, err)
 	}
@@ -54,8 +73,13 @@ func (g *RecruitmentGraph) negotiationNode(ctx context.Context, state *Recruitme
 // detectAgreement uses simple heuristics to check if both sides agreed.
 // In Phase 1 this is a placeholder — replace with intent extraction.
 func detectAgreement(seekerResp, recruiterResp string) bool {
-	// Simple keyword check (placeholder)
-	agreeKeywords := []string{"agree", "accept", "deal", "confirmed", "sounds good", "works for me"}
+	// Check for structured [AGREED] marker (from prompt instructions)
+	if contains(seekerResp, "[AGREED]") || contains(recruiterResp, "[AGREED]") {
+		return true
+	}
+
+	// Simple keyword check (placeholder) — both sides must express agreement
+	agreeKeywords := []string{"agree", "accept", "deal", "confirmed", "sounds good", "works for me", "同意", "接受", "可以", "成交", "没问题"}
 	for _, kw := range agreeKeywords {
 		if contains(seekerResp, kw) && contains(recruiterResp, kw) {
 			return true

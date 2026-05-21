@@ -138,7 +138,7 @@ func (g *RecruitmentGraph) Run(ctx context.Context, matchID uuid.UUID, opts ...R
 func (g *RecruitmentGraph) introductionNode(ctx context.Context, state *RecruitmentState) (*RecruitmentState, error) {
 	// Seeker introduces themselves
 	seekerPrompt := "Introduce yourself as a job seeker. State your name, background, and what kind of role you're looking for."
-	seekerResp, err := g.seeker.Chat(ctx, seekerPrompt)
+	seekerResp, err := g.seeker.Chat(ctx, nil, seekerPrompt)
 	if err != nil {
 		return state, fmt.Errorf("seeker introduction: %w", err)
 	}
@@ -147,7 +147,7 @@ func (g *RecruitmentGraph) introductionNode(ctx context.Context, state *Recruitm
 
 	// Recruiter introduces the job
 	recruiterPrompt := "Introduce the job position. State the job title, key responsibilities, and what the company is looking for."
-	recruiterResp, err := g.recruiter.Chat(ctx, recruiterPrompt)
+	recruiterResp, err := g.recruiter.Chat(ctx, nil, recruiterPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter introduction: %w", err)
 	}

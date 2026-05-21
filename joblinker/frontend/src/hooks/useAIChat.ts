@@ -35,8 +35,8 @@ interface UseAIChatOptions {
 function matchStatusToStage(status: string): FSMStage {
   switch (status) {
     case 'mutual_interest': case 'negotiating': return 'NEGOTIATION'
-    case 'interviewing': return 'INTERVIEW'
-    case 'offered': return 'OFFER'
+    case 'interview_scheduled': case 'interviewing': return 'INTERVIEW'
+    case 'offer_sent': case 'offered': return 'OFFER'
     case 'hired': case 'rejected': case 'completed': return 'COMPLETED'
     default: return 'INTRODUCTION'
   }
@@ -61,10 +61,36 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     id: matchId,
   })
 
+  const loadInitialMessagesRef = useRef(false)
+
   useEffect(() => {
-    if (!enabled || initialLoaded)
+    if (!enabled || loadInitialMessagesRef.current)
       return
-    apiClient.get<MessageItem[]>(`/api/conversation/${matchId}`)
+    loadInitialMessagesRef.current = true
+
+    // Step 1: fetch match data to get agent IDs first
+    apiClient.get<Record<string, unknown>>(`/api/matches/${matchId}`)
+      .then((data) => {
+        if (data.status) {
+          setFsmStage(matchStatusToStage(String(data.status)))
+        }
+        const seeker = String(data.seeker_agent_id || '')
+        const recruiter = String(data.recruiter_agent_id || '')
+        const current = String(data.seeker_agent_id || '')
+        agentIdsRef.current = { seeker, recruiter, current }
+
+        if (data.status === 'offered' && !checkedConfirmRef.current) {
+          checkedConfirmRef.current = true
+          setPendingConfirm({
+            match_id: matchId,
+            intent: 'OFFER',
+            message_id: '',
+          })
+        }
+
+        // Step 2: now fetch messages with agent IDs available
+        return apiClient.get<MessageItem[]>(`/api/conversation/${matchId}`)
+      })
       .then((data) => {
         if (!Array.isArray(data) || data.length === 0)
           return
@@ -89,7 +115,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
         setInitialLoaded(true)
       })
       .catch(() => {})
-  }, [matchId, enabled, initialLoaded, setMessages])
+  }, [matchId, enabled, setMessages])
 
   const isLoading = status === 'submitted' || status === 'streaming'
 
@@ -176,18 +202,26 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
           case 'fsm_state_change':
             setFsmStage(matchStatusToStage(String(data.new_state || '')))
             break
-          case 'confirmation_needed':
-            setPendingConfirm((prev) => {
-              const intent = String(data.intent || '')
-              if (prev && prev.intent === intent && prev.match_id === String(data.match_id || matchId))
-                return prev
-              return {
-                match_id: String(data.match_id || matchId),
-                intent,
-                message_id: String(data.message_id || ''),
-                content_xml: String(data.content_xml || ''),
-              }
-            })
+          case 'state_graph_message': {
+            const rawText = String(data.text || '')
+            if (!rawText)
+              break
+            const text = extractTextFromXML(rawText)
+            const { seeker } = agentIdsRef.current
+            const isSeeker = data.sender_agent_id && String(data.sender_agent_id) === seeker
+            setMessages(prev => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: isSeeker ? 'user' : 'assistant',
+                parts: [{ type: 'text', text }] as UIMessage['parts'],
+                createdAt: data.timestamp ? new Date(String(data.timestamp)) : new Date(),
+              } as UIMessage,
+            ])
+            break
+          }
+          case 'state_graph_complete':
+            setFsmStage('COMPLETED')
             break
           case 'adk_stream_chunk': {
             const chunk = String(data.accumulated || data.chunk || '')
@@ -320,16 +354,30 @@ interface MessageItem {
 function extractTextFromXML(xml: string): string {
   if (!xml || xml.startsWith('{'))
     return ''
+
+  // Try <message><text>...</text></message> format (StateGraph messages)
+  const textMatch = xml.match(/<text>([\s\S]*?)<\/text>/)
+  if (textMatch && textMatch[1] && textMatch[1].trim())
+    return textMatch[1].trim()
+
+  // Try <parameters>{"message":"..."} format (Agent/ADK)
   const match = xml.match(/<parameters>(\{.*?\})<\/parameters>/)
-  if (!match || !match[1])
-    return xml
-  try {
-    const parsed = JSON.parse(match[1])
-    return parsed.message || parsed.text || ''
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1])
+      return parsed.message || parsed.text || ''
+    }
+    catch {
+      return xml
+    }
   }
-  catch {
-    return xml
-  }
+
+  // Fallback: try any <text> tag
+  const anyText = xml.match(/<text>([\s\S]*?)<\/text>/)
+  if (anyText && anyText[1])
+    return anyText[1].trim()
+
+  return xml
 }
 
 function getToken(): string {

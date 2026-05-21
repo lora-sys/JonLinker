@@ -1,7 +1,9 @@
 package ai
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,6 +35,7 @@ type ChatRequest struct {
 	Messages    []Message `json:"messages"`
 	MaxTokens   int       `json:"max_tokens"`
 	Temperature float64   `json:"temperature"`
+	Stream      bool      `json:"stream,omitempty"`
 	Tools       []Tool    `json:"tools,omitempty"`
 }
 
@@ -221,6 +224,81 @@ func (c *Client) DoChat(reqBody ChatRequest) (*ChatResponse, error) {
 	}
 
 	return &chatResp, nil
+}
+
+// DoChatStream sends a streaming chat request and returns a channel of content chunks.
+// The channel is closed when the stream ends or the context is cancelled.
+func (c *Client) DoChatStream(ctx context.Context, reqBody ChatRequest) (<-chan string, error) {
+	reqBody.Stream = true
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	ch := make(chan string, 64)
+	go func() {
+		defer resp.Body.Close()
+		defer close(ch)
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			data := line[6:] // strip "data: "
+			if data == "[DONE]" {
+				return
+			}
+
+			var streamResp struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				log.Printf("Failed to parse SSE chunk: %v", err)
+				continue
+			}
+			if len(streamResp.Choices) > 0 && streamResp.Choices[0].Delta.Content != "" {
+				select {
+				case ch <- streamResp.Choices[0].Delta.Content:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("SSE stream read error: %v", err)
+		}
+	}()
+
+	return ch, nil
 }
 
 // Chat is the basic chat method without function calling

@@ -26,7 +26,7 @@ func (r *OfferRepository) Create(offer *model.Offer) error {
 
 func (r *OfferRepository) GetByID(id uuid.UUID) (*model.Offer, error) {
 	var offer model.Offer
-	if err := r.db.Preload("Match").First(&offer, "id = ?", id).Error; err != nil {
+	if err := r.db.Preload("Match.Job").Preload("Match").First(&offer, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &offer, nil
@@ -34,7 +34,7 @@ func (r *OfferRepository) GetByID(id uuid.UUID) (*model.Offer, error) {
 
 func (r *OfferRepository) GetByMatchID(matchID uuid.UUID) (*model.Offer, error) {
 	var offer model.Offer
-	if err := r.db.First(&offer, "match_id = ?", matchID).Error; err != nil {
+	if err := r.db.Preload("Match.Job").Preload("Match").First(&offer, "match_id = ?", matchID).Error; err != nil {
 		return nil, err
 	}
 	return &offer, nil
@@ -44,7 +44,7 @@ func (r *OfferRepository) ListAll(limit, offset int) ([]*model.Offer, int64, err
 	var offers []*model.Offer
 	var total int64
 	r.db.Model(&model.Offer{}).Count(&total)
-	if err := r.db.Limit(limit).Offset(offset).Preload("Match").Find(&offers).Error; err != nil {
+	if err := r.db.Limit(limit).Offset(offset).Preload("Match.Job").Preload("Match").Find(&offers).Error; err != nil {
 		return nil, 0, err
 	}
 	return offers, total, nil

@@ -24,8 +24,8 @@ redis:
 rabbitmq:
   host: "localhost"
   port: 5672
-  user: "guest"
-  password: "guest"
+  user: "joblinker"
+  password: "joblinker_dev"
   vhost: "/"
 
 chroma:

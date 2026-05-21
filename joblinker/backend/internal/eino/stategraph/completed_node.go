@@ -3,8 +3,6 @@ package stategraph
 import (
 	"context"
 	"fmt"
-
-	"github.com/cloudwego/eino/schema"
 )
 
 // completedNode finalises the recruitment process and generates a summary.
@@ -37,13 +35,7 @@ func (g *RecruitmentGraph) completedNode(ctx context.Context, state *Recruitment
 
 	state.Messages = append(state.Messages, "[System] "+summary)
 
-	// Store in both agents' memory for future reference
-	if g.seeker != nil {
-		_ = g.seeker.AddMemoryMessage(ctx, schema.Assistant, "[Summary] "+summary)
-	}
-	if g.recruiter != nil {
-		_ = g.recruiter.AddMemoryMessage(ctx, schema.Assistant, "[Summary] "+summary)
-	}
+
 
 	return state, nil
 }

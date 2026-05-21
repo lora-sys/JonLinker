@@ -160,7 +160,7 @@ func (r *AgentRunner) RunSeekerTask(ctx context.Context, msg string) (string, er
 	}
 	defer r.ReturnSeeker(seeker)
 
-	return seeker.ChatWithMemory(ctx, msg)
+	return seeker.Chat(ctx, nil, msg)
 }
 
 // RunRecruiterTask executes a task with a recruiter agent
@@ -174,7 +174,7 @@ func (r *AgentRunner) RunRecruiterTask(ctx context.Context, msg string) (string,
 	}
 	defer r.ReturnRecruiter(recruiter)
 
-	return recruiter.ChatWithMemory(ctx, msg)
+	return recruiter.Chat(ctx, nil, msg)
 }
 
 // PoolStats returns current pool statistics

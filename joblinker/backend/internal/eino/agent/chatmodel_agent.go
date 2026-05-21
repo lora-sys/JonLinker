@@ -55,3 +55,14 @@ func NewRecruiterChatModelAgent(ctx context.Context, chatModel model.ToolCalling
 		tools,
 	)
 }
+
+// NewGeneralRecruiterAgent creates a general-purpose recruiter ChatModelAgent
+// for use in the routing supervisor as the fallback agent.
+func NewGeneralRecruiterAgent(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool) (adk.Agent, error) {
+	a, err := NewRecruiterChatModelAgent(ctx, chatModel, tools)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("GeneralRecruiterAgent created")
+	return a, nil
+}
