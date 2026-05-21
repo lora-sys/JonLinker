@@ -107,6 +107,7 @@ func main() {
 		&model.ConfirmationRequest{},
 		&model.SessionMeta{},
 		&model.SessionMessage{},
+		&model.SessionSummary{},
 	); err != nil {
 		log.Fatalf("Failed to auto migrate: %v", err)
 	}

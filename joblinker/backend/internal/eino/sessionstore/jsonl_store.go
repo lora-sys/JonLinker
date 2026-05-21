@@ -311,6 +311,10 @@ func readMessages(path string) ([]Message, error) {
 
 	var msgs []Message
 	scanner := bufio.NewScanner(f)
+	// Increase buffer to handle large message content (e.g. long candidate
+	// responses). Default 64KB is too small; use 10MB.
+	buf := make([]byte, 10*1024*1024)
+	scanner.Buffer(buf, 10*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" {
