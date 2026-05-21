@@ -22,7 +22,12 @@ recruiter.json
 # Go build artifacts
 joblinker/backend/joblinker
 joblinker/backend/server
+joblinker/backend/joblinker-server
+joblinker/backend/seed-data
 /tmp/
+
+# Runtime data
+data/
 
 # TypeScript build info
 *.tsbuildinfo

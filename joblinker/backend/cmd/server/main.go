@@ -23,12 +23,12 @@ import (
 	"joblinker/internal/service"
 	"joblinker/pkg/ai"
 	"joblinker/pkg/rabbitmq"
-	redispkg "joblinker/pkg/redis"
 
 	"joblinker/internal/eino/agent"
 	"joblinker/internal/eino/chatmodel"
 	"joblinker/internal/eino/memory"
 	eino_runner "joblinker/internal/eino/runner"
+	"joblinker/internal/eino/sessionstore"
 	"joblinker/internal/eino/tools"
 
 	"github.com/cloudwego/eino/adk"
@@ -101,8 +101,6 @@ func main() {
 		&model.AgentMetrics{},
 		&model.AuditLog{},
 		&model.ErrorEvent{},
-		&model.AgentMemory{},
-		&model.ConversationSummary{},
 		&model.AgentToolCall{},
 		&model.ConfirmationRequest{},
 		&model.SessionMeta{},
@@ -127,21 +125,6 @@ func main() {
 	metricsRepo := repository.NewAgentMetricsRepository().WithDB(db)
 	auditRepo := repository.NewAuditLogRepository().WithDB(db)
 	observabilityErrorRepo := repository.NewErrorEventRepository().WithDB(db)
-
-	// Initialize Redis Stack vector client for similarity search
-	redisVecClient := redis.NewClient(&redis.Options{
-		Addr: getEnv("REDIS_ADDR", "localhost:6379"),
-	})
-	vecDim := 1024 // Jina AI embedding dimension
-	rvClient := redispkg.NewVectorClient(redisVecClient, "vec:", vecDim)
-	if err := rvClient.EnsureIndex(context.Background(), "agent_memories"); err != nil {
-		log.Printf("WARNING: failed to create Redis vector index: %v", err)
-	} else {
-		log.Printf("Redis Stack vector index initialized (dim=%d)", vecDim)
-	}
-
-	vecRepo := repository.NewVectorRepository(rvClient)
-	prefRepo := repository.NewPreferenceVectorRepository().WithDB(db)
 
 	// Initialize tool cache (100 entries max, 5 min TTL)
 	toolCache := cache.NewToolCache(100, 5*time.Minute)
@@ -169,6 +152,18 @@ func main() {
 	securitySvc := service.NewSecurityService(securityRepo)
 	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)
 	offerSvc := service.NewOfferService(offerRepo, matchRepo, jobRepo, securitySvc)
+
+	// Initialize SessionStore (JSONL for now, PG when PostgresStore is production-ready)
+	var sessionStore sessionstore.Store
+	sessionDataDir := getEnv("SESSION_DATA_DIR", "./data/sessions")
+	sessionStore, sessionStoreErr := sessionstore.NewJSONLSessionStore(sessionDataDir)
+	if sessionStoreErr != nil {
+		log.Printf("WARNING: failed to create JSONL session store: %v (continuing without)", sessionStoreErr)
+		sessionStore = nil
+	} else {
+		log.Printf("JSONL SessionStore initialized at %s", sessionDataDir)
+	}
+
 	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo, messageRepo, interviewRepo, offerRepo)
 	adminHandler := handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
@@ -178,10 +173,14 @@ func main() {
 	log.Printf("Eino AgentRunner initialized with pool config: MaxAgents=%d, MinAgents=%d",
 		100, 5)
 
-	// Initialize MemoryService for persistent agent memory
-	memorySvc := service.NewAgentMemoryService(db, vecRepo, prefRepo, aiClient)
-	_ = memorySvc // Available for AgentMemory integration
-	log.Printf("AgentMemoryService initialized")
+	// Initialize SessionService for session-based conversation management
+	var sessionSvc *sessionstore.SessionService
+	if sessionStore != nil {
+		legacySeeker := agent.NewSeekerAgent(aiClient)
+		legacyRecruiter := agent.NewRecruiterAgent(aiClient)
+		sessionSvc = sessionstore.NewSessionService(sessionStore, legacySeeker, legacyRecruiter)
+		log.Printf("SessionService initialized with session store")
+	}
 
 	// Initialize ADK components
 	var adkRunner *eino_runner.ADKRunner
@@ -226,7 +225,7 @@ func main() {
 	interviewHandler := handler.NewInterviewHandler(interviewSvc)
 	offerHandler := handler.NewOfferHandler(offerSvc)
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
-	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc)
+	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
 	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
 	resumeHandler := handler.NewResumeHandler()
 	sqlDB, _ := db.DB()
@@ -253,6 +252,16 @@ func main() {
 
 		mqSvc.SetBroadcastCallback(messageHandler.BroadcastAgentResponse)
 		log.Printf("Broadcast callback wired to MessageQueueService")
+
+		if sessionStore != nil {
+			mqSvc.SetSessionStore(sessionStore)
+			log.Printf("SessionStore wired to MessageQueueService")
+
+			if sessionSvc != nil {
+				mqSvc.SetSessionService(sessionSvc)
+				log.Printf("SessionService wired to MessageQueueService")
+			}
+		}
 	}
 
 	r.GET("/health", healthHandler.Health)
@@ -299,6 +308,11 @@ func main() {
 		api.GET("/messages/:matchId", messageHandler.GetMessages)
 		api.POST("/messages/:matchId", messageHandler.SendMessage)
 		api.GET("/conversation/:matchId", messageHandler.GetConversation)
+
+		api.GET("/sessions/:matchId", messageHandler.GetSessionInfo)
+		api.GET("/sessions/:matchId/messages", messageHandler.GetSessionMessages)
+		api.GET("/sessions/:matchId/summary", messageHandler.GetSessionSummary)
+		api.POST("/sessions/:matchId/reopen", messageHandler.ReopenSession)
 
 		api.GET("/interviews", interviewHandler.List)
 		api.POST("/interviews", interviewHandler.Create)

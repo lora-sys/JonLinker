@@ -2,7 +2,7 @@ import { Inbox, Plus } from 'lucide-react'
 import Link from 'next/link'
 import React from 'react'
 
-import Button from './Button'
+import Button from './button'
 
 interface EmptyStateProps {
   icon?: React.ReactNode

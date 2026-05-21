@@ -10,6 +10,10 @@ import (
 	"joblinker/pkg/ai"
 )
 
+// Deprecated: DeepRecruiter is a legacy hand-rolled state machine.
+// Replaced by stateless agent.Chat(ctx, history, msg) via SessionService.
+// Kept only for reference; will be removed after full migration.
+//
 // DeepRecruiter coordinates multi-agent interactions between Seeker and Recruiter
 // It manages the conversation lifecycle and ensures proper message routing
 type DeepRecruiter struct {

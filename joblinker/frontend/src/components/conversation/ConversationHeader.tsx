@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, Loader, Wifi, WifiOff } from 'lucide-react'
+import { ArrowLeft, Loader, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import Link from 'next/link'
 
 import type { WSConnectionStatus } from '@/hooks/useWebSocket'
@@ -13,6 +13,9 @@ interface ConversationHeaderProps {
   seekerName?: string
   fsmStage?: FSMStage
   wsStatus?: WSConnectionStatus
+  sessionVersion?: number
+  sessionStatus?: 'active' | 'concluded'
+  onReopen?: () => void
 }
 
 const stageColors: Record<string, string> = {
@@ -28,6 +31,9 @@ export function ConversationHeader({
   seekerName = 'Seeker Agent',
   fsmStage = 'INTRODUCTION',
   wsStatus = 'Disconnected',
+  sessionVersion,
+  sessionStatus,
+  onReopen,
 }: ConversationHeaderProps) {
   return (
     <header className="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-4 shrink-0">
@@ -53,6 +59,31 @@ export function ConversationHeader({
       >
         {fsmStage.replace(/_/g, ' ')}
       </span>
+
+      {/* Session Version Badge */}
+      {sessionVersion != null && (
+        <span className="px-2 py-1 rounded text-xs font-mono bg-gray-100 text-gray-500">
+          v{sessionVersion}
+        </span>
+      )}
+
+      {/* Session Status */}
+      {sessionStatus === 'concluded' && (
+        <span className="px-2 py-1 rounded text-xs font-mono bg-orange-100 text-orange-600">
+          concluded
+        </span>
+      )}
+
+      {/* Reopen Button */}
+      {sessionStatus === 'concluded' && onReopen && (
+        <button
+          onClick={onReopen}
+          className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" />
+          Reopen
+        </button>
+      )}
 
       {/* WS Status */}
       <div className="flex items-center gap-1.5">

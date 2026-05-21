@@ -20,6 +20,11 @@ func NewPostgresStore(db *gorm.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
+// DB returns the underlying gorm.DB for direct queries.
+func (s *PostgresStore) DB() *gorm.DB {
+	return s.db
+}
+
 func (s *PostgresStore) Create(ctx context.Context, sessionID string, matchID uuid.UUID, version int) error {
 	meta := model.SessionMeta{
 		SessionID: sessionID,

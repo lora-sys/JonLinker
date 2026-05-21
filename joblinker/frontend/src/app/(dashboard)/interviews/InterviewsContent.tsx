@@ -7,7 +7,7 @@ import { useCallback, useState } from 'react'
 import type { Interview } from '@/types'
 
 import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/components/ui'
-import Button from '@/components/ui/Button'
+import Button from '@/components/ui/button'
 import Card from '@/components/ui/Card'
 import { apiClient } from '@/lib/api_client'
 
@@ -125,7 +125,7 @@ function InterviewCardInner({ interview, index, onUpdate }: { interview: Intervi
                   <X className="w-4 h-4 mr-1" />
                   Decline
                 </Button>
-                <Button variant="primary" size="sm" onClick={handleConfirm} disabled={isUpdating}>
+                <Button variant="default" size="sm" onClick={handleConfirm} disabled={isUpdating}>
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Accept
                 </Button>

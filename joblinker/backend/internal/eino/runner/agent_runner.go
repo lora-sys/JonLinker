@@ -4,10 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"time"
-
-	"github.com/google/uuid"
 
 	"joblinker/internal/eino/agent"
 	"joblinker/pkg/ai"
@@ -37,8 +34,6 @@ type AgentRunner struct {
 	aiClient    *ai.Client
 	seekerPool  chan *agent.SeekerAgent
 	recruiterPool chan *agent.RecruiterAgent
-	deepPool    map[uuid.UUID]*agent.DeepRecruiter
-	mu          sync.RWMutex
 }
 
 // NewAgentRunner creates a new agent runner with pool management
@@ -52,7 +47,6 @@ func NewAgentRunner(aiClient *ai.Client, config *PoolConfig) *AgentRunner {
 		aiClient:     aiClient,
 		seekerPool:   make(chan *agent.SeekerAgent, config.MaxAgents),
 		recruiterPool: make(chan *agent.RecruiterAgent, config.MaxAgents),
-		deepPool:     make(map[uuid.UUID]*agent.DeepRecruiter),
 	}
 
 	// Pre-warm the pools
@@ -120,35 +114,6 @@ func (r *AgentRunner) ReturnRecruiter(recruiter *agent.RecruiterAgent) {
 	}
 }
 
-// GetDeepRecruiter gets or creates a deep recruiter for a match
-func (r *AgentRunner) GetDeepRecruiter(matchID uuid.UUID) *agent.DeepRecruiter {
-	r.mu.RLock()
-	if dr, ok := r.deepPool[matchID]; ok {
-		r.mu.RUnlock()
-		return dr
-	}
-	r.mu.RUnlock()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Double-check after acquiring write lock
-	if dr, ok := r.deepPool[matchID]; ok {
-		return dr
-	}
-
-	dr := agent.NewDeepRecruiter(r.aiClient, matchID)
-	r.deepPool[matchID] = dr
-	return dr
-}
-
-// ReleaseDeepRecruiter removes a deep recruiter from the pool
-func (r *AgentRunner) ReleaseDeepRecruiter(matchID uuid.UUID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.deepPool, matchID)
-}
-
 // RunSeekerTask executes a task with a seeker agent
 func (r *AgentRunner) RunSeekerTask(ctx context.Context, msg string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.config.AgentTimeout)
@@ -181,7 +146,6 @@ func (r *AgentRunner) RunRecruiterTask(ctx context.Context, msg string) (string,
 type PoolStats struct {
 	SeekerPoolSize   int
 	RecruiterPoolSize int
-	ActiveDeepAgents  int
 }
 
 // Stats returns current pool statistics
@@ -189,23 +153,11 @@ func (r *AgentRunner) Stats() *PoolStats {
 	return &PoolStats{
 		SeekerPoolSize:   len(r.seekerPool),
 		RecruiterPoolSize: len(r.recruiterPool),
-		ActiveDeepAgents: func() int {
-			r.mu.RLock()
-			defer r.mu.RUnlock()
-			return len(r.deepPool)
-		}(),
 	}
 }
 
-// Close shuts down the agent runner
+// Close drains agent pools
 func (r *AgentRunner) Close() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	// Drain pools
 	close(r.seekerPool)
 	close(r.recruiterPool)
-
-	// Clear deep pool
-	r.deepPool = make(map[uuid.UUID]*agent.DeepRecruiter)
 }

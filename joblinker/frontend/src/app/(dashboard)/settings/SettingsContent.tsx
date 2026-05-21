@@ -6,7 +6,7 @@ import { useState } from 'react'
 import type { User as UserType } from '@/types'
 
 import { LoadingSkeleton } from '@/components/ui'
-import Button from '@/components/ui/Button'
+import Button from '@/components/ui/button'
 import Card from '@/components/ui/Card'
 import { useAuthStore } from '@/stores/auth'
 

@@ -55,31 +55,57 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     stop,
     error,
     setMessages,
-    regenerate,
     status,
   } = useChat({
     id: matchId,
   })
 
+  // Session metadata (not available on useChat.data in @ai-sdk/react v3)
+  const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
+  const [sessionVersion, setSessionVersion] = useState<number | undefined>(undefined)
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'concluded' | undefined>(undefined)
+  const [sessionSummary, setSessionSummary] = useState<string | undefined>(undefined)
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+
   const loadInitialMessagesRef = useRef(false)
+  const initialLoadAttemptedRef = useRef(false)
 
   useEffect(() => {
+    // Skip during SSR — no localStorage available
+    if (typeof window === 'undefined')
+      return
     if (!enabled || loadInitialMessagesRef.current)
       return
     loadInitialMessagesRef.current = true
+    initialLoadAttemptedRef.current = false
 
-    // Step 1: fetch match data to get agent IDs first
-    apiClient.get<Record<string, unknown>>(`/api/matches/${matchId}`)
-      .then((data) => {
-        if (data.status) {
-          setFsmStage(matchStatusToStage(String(data.status)))
+    // Step 1: fetch match data + session meta in parallel
+    Promise.all([
+      apiClient.get<Record<string, unknown>>(`/api/matches/${matchId}`),
+      apiClient.get<Record<string, unknown>>(`/api/sessions/${matchId}`).catch(() => null),
+      apiClient.get<ConversationResponse>(`/api/conversation/${matchId}`),
+    ])
+      .then(([matchData, sessionData, convData]) => {
+        const seeker = String(matchData.seeker_agent_id || '')
+        const recruiter = String(matchData.recruiter_agent_id || '')
+        agentIdsRef.current = { seeker, recruiter, current: seeker }
+
+        if (matchData.status) {
+          setFsmStage(matchStatusToStage(String(matchData.status)))
         }
-        const seeker = String(data.seeker_agent_id || '')
-        const recruiter = String(data.recruiter_agent_id || '')
-        const current = String(data.seeker_agent_id || '')
-        agentIdsRef.current = { seeker, recruiter, current }
-
-        if (data.status === 'offered' && !checkedConfirmRef.current) {
+        if (sessionData && sessionData.version != null) {
+          setSessionVersion(Number(sessionData.version))
+        }
+        if (sessionData && sessionData.status) {
+          setSessionStatus(String(sessionData.status) as 'active' | 'concluded')
+        }
+        if (convData.session_version != null) {
+          setSessionVersion(Number(convData.session_version))
+        }
+        if (convData.session_status) {
+          setSessionStatus(String(convData.session_status) as 'active' | 'concluded')
+        }
+        if (matchData.status === 'offered' && !checkedConfirmRef.current) {
           checkedConfirmRef.current = true
           setPendingConfirm({
             match_id: matchId,
@@ -88,14 +114,11 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
           })
         }
 
-        // Step 2: now fetch messages with agent IDs available
-        return apiClient.get<MessageItem[]>(`/api/conversation/${matchId}`)
-      })
-      .then((data) => {
-        if (!Array.isArray(data) || data.length === 0)
+        // Load messages
+        const msgsData = convData.messages || []
+        if (msgsData.length === 0)
           return
-        const { seeker } = agentIdsRef.current
-        const msgs: UIMessage[] = data
+        const msgs: UIMessage[] = msgsData
           .filter(m => extractTextFromXML(m.content_xml || ''))
           .map((m) => {
             const text = extractTextFromXML(m.content_xml || '')
@@ -115,12 +138,13 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
         setInitialLoaded(true)
       })
       .catch(() => {})
+    return () => {
+      // Reset guard ref on unmount so Strict Mode double-invoke re-fetches
+      loadInitialMessagesRef.current = false
+    }
   }, [matchId, enabled, setMessages])
 
   const isLoading = status === 'submitted' || status === 'streaming'
-
-  const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
   useEffect(() => {
     if (!enabled)
@@ -263,6 +287,22 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             ])
             setPendingConfirm(null)
             break
+          case 'session_created':
+            if (data.version != null) {
+              setSessionVersion(Number(data.version))
+            }
+            setSessionStatus('active')
+            break
+          case 'session_concluded':
+            setSessionStatus('concluded')
+            break
+          case 'session_reopened':
+            setMessages([])
+            if (data.version != null) {
+              setSessionVersion(Number(data.version))
+            }
+            setSessionStatus('active')
+            break
         }
       },
       [matchId, setMessages],
@@ -325,8 +365,22 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     [pendingConfirm, matchId, setMessages],
   )
 
+  const handleReopen = useCallback(async () => {
+    try {
+      const res = await apiClient.post<{ session_id: string }>(`/api/sessions/${matchId}/reopen`)
+      if (res.session_id) {
+        setMessages([])
+        setSessionStatus('active')
+      }
+    }
+    catch (err) {
+      console.error('Reopen failed:', err)
+    }
+  }, [matchId, setMessages])
+
   return {
     messages: aiMessages as UIMessage[],
+    setMessages,
     input,
     setInput,
     handleSubmit,
@@ -334,12 +388,25 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     status,
     error: error?.message || null,
     stop,
-    reload: () => regenerate({}),
+    reload: () => {
+      // WebSocket mode: messages are streamed via WS, not useChat API.
+      // Errors are cleared on the next WS message — no regenerate needed.
+    },
     wsStatus,
     fsmStage,
+    sessionVersion,
+    sessionStatus,
+    sessionSummary,
     pendingConfirm,
     handleHumanConfirm,
+    handleReopen,
   }
+}
+
+interface ConversationResponse {
+  messages: MessageItem[]
+  session_version?: number
+  session_status?: string
 }
 
 interface MessageItem {
