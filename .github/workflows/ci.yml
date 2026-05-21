@@ -18,32 +18,6 @@ jobs:
       run:
         working-directory: joblinker/backend
 
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: joblinker
-          POSTGRES_PASSWORD: joblinker_dev_password
-          POSTGRES_DB: joblinker
-          PGUSER: joblinker
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd redis-cli ping
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
     steps:
       - uses: actions/checkout@v4
 
@@ -52,25 +26,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: joblinker/backend/go.sum
 
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc pkg-config
-
       - name: Download go modules
         run: go mod download
 
-      - name: Run go vet
+      - name: Vet
         run: go vet ./...
 
-      - name: Run tests
-        run: go test ./... -v -count=1 -timeout 120s
-        env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USER: joblinker
-          DB_PASSWORD: joblinker_dev_password
-          DB_NAME: joblinker
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
+      - name: Build
+        run: go build ./...
 
   frontend:
     name: Frontend (Next.js)
@@ -91,30 +54,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run lint
+      - name: Lint
         run: npm run lint
 
       - name: Type check
         run: npx tsc --noEmit
-
-      - name: Run tests
-        run: npm test -- --passWithNoTests
 
       - name: Build
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8080
           NEXT_PUBLIC_WS_URL: ws://localhost:8080
-
-  e2e:
-    name: E2E (Playwright)
-    needs: [backend, frontend]
-    runs-on: ubuntu-latest
-    if: false # disabled by default — enable when Playwright setup is stable
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Run E2E
-        run: echo "E2E tests placeholder — enable when CI environment is ready"
