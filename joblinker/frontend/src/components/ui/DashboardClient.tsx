@@ -146,10 +146,15 @@ function AgentCard({ agent, index }: { agent: any, index: number }) {
 }
 
 function MatchCard({ match, index }: { match: any, index: number }) {
-  const statusColors = {
-    mutual_interest: 'bg-green-100 text-green-700',
+  const statusColors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-700',
-    declined: 'bg-slate-200 text-slate-600',
+    mutual_interest: 'bg-green-100 text-green-700',
+    negotiating: 'bg-blue-100 text-blue-700',
+    interview_scheduled: 'bg-purple-100 text-purple-700',
+    offer_sent: 'bg-indigo-100 text-indigo-700',
+    offered: 'bg-indigo-100 text-indigo-700',
+    hired: 'bg-emerald-100 text-emerald-700',
+    rejected: 'bg-slate-200 text-slate-600',
   }
 
   return (

@@ -21,8 +21,13 @@ function MatchCard({ match, onConfirm, onDecline }: {
   const scorePercent = Math.round((match.score || 0) * 100)
 
   const statusColors: Record<string, string> = {
-    mutual_interest: 'bg-green-100 text-green-700',
     pending: 'bg-yellow-100 text-yellow-700',
+    mutual_interest: 'bg-blue-100 text-blue-700',
+    negotiating: 'bg-purple-100 text-purple-700',
+    interview_scheduled: 'bg-indigo-100 text-indigo-700',
+    offer_sent: 'bg-orange-100 text-orange-700',
+    offered: 'bg-cyan-100 text-cyan-700',
+    hired: 'bg-emerald-100 text-emerald-700',
     rejected: 'bg-slate-200 text-slate-600',
   }
 
@@ -72,6 +77,13 @@ function MatchCard({ match, onConfirm, onDecline }: {
 
       {/* Action Buttons */}
       <div className="flex gap-3">
+        {(match.status === 'hired' || match.status === 'offered') && (
+          <Link href={`/offer/${match.id}`} className="flex-1">
+            <button className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition-colors">
+              View Offer
+            </button>
+          </Link>
+        )}
         {match.status === 'pending' && (
           <>
             <button

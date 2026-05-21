@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"joblinker/internal/config"
+	"joblinker/internal/eino/sessionstore"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
@@ -46,24 +47,165 @@ var upgrader = websocket.Upgrader{
 }
 
 type MessageHandler struct {
-	messageRepo *repository.MessageRepository
-	matchRepo   *repository.MatchRepository
-	agentRepo   *repository.AgentRepository
-	rmq         *rabbitmq.RabbitMQ
-	mqSvc       *service.MessageQueueService
-	clients     map[string]map[string]*websocket.Conn // matchID -> clientID -> conn
-	mu          sync.RWMutex
+	messageRepo  *repository.MessageRepository
+	matchRepo    *repository.MatchRepository
+	agentRepo    *repository.AgentRepository
+	rmq          *rabbitmq.RabbitMQ
+	mqSvc        *service.MessageQueueService
+	sessionStore sessionstore.Store
+	clients      map[string]map[string]*websocket.Conn // matchID -> clientID -> conn
+	mu           sync.RWMutex
 }
 
-func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, rmq *rabbitmq.RabbitMQ, mqSvc *service.MessageQueueService) *MessageHandler {
+func NewMessageHandler(messageRepo *repository.MessageRepository, matchRepo *repository.MatchRepository, agentRepo *repository.AgentRepository, rmq *rabbitmq.RabbitMQ, mqSvc *service.MessageQueueService, sessionStore sessionstore.Store) *MessageHandler {
 	return &MessageHandler{
-		messageRepo: messageRepo,
-		matchRepo:   matchRepo,
-		agentRepo:   agentRepo,
-		rmq:         rmq,
-		mqSvc:       mqSvc,
-		clients:     make(map[string]map[string]*websocket.Conn),
+		messageRepo:  messageRepo,
+		matchRepo:    matchRepo,
+		agentRepo:    agentRepo,
+		rmq:          rmq,
+		mqSvc:        mqSvc,
+		sessionStore: sessionStore,
+		clients:      make(map[string]map[string]*websocket.Conn),
 	}
+}
+
+// SetSessionStore sets the session store for persisting session data
+func (h *MessageHandler) SetSessionStore(sessionStore sessionstore.Store) {
+	h.sessionStore = sessionStore
+}
+
+// GetSessionInfo returns the latest session info for a match
+func (h *MessageHandler) GetSessionInfo(c *gin.Context) {
+	matchIDStr := c.Param("matchId")
+	if h.sessionStore == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session store not available"})
+		return
+	}
+	matchID, err := uuid.Parse(matchIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match ID"})
+		return
+	}
+	sessions, err := h.sessionStore.ListByMatchID(c.Request.Context(), matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(sessions) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no sessions found"})
+		return
+	}
+	c.JSON(http.StatusOK, sessions[len(sessions)-1])
+}
+
+// GetSessionMessages returns session messages for a match
+func (h *MessageHandler) GetSessionMessages(c *gin.Context) {
+	matchIDStr := c.Param("matchId")
+	version := c.Query("version")
+	if version == "" {
+		version = "latest"
+	}
+	if h.sessionStore == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session store not available"})
+		return
+	}
+	matchID, err := uuid.Parse(matchIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match ID"})
+		return
+	}
+	sessions, err := h.sessionStore.ListByMatchID(c.Request.Context(), matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(sessions) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no sessions found"})
+		return
+	}
+	var sessionID string
+	if version == "latest" {
+		sessionID = sessions[len(sessions)-1].SessionID
+	} else {
+		for _, s := range sessions {
+			if s.SessionID == version {
+				sessionID = s.SessionID
+				break
+			}
+		}
+	}
+	if sessionID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+	session, err := h.sessionStore.Load(c.Request.Context(), sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, session.Messages)
+}
+
+// GetSessionSummary returns a session summary for a match
+func (h *MessageHandler) GetSessionSummary(c *gin.Context) {
+	matchIDStr := c.Param("matchId")
+	if h.sessionStore == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session store not available"})
+		return
+	}
+	matchID, err := uuid.Parse(matchIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match ID"})
+		return
+	}
+	sessions, err := h.sessionStore.ListByMatchID(c.Request.Context(), matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(sessions) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no sessions found"})
+		return
+	}
+	session := sessions[len(sessions)-1]
+
+	// Try PostgresStore first (has summary table)
+	if pg, ok := h.sessionStore.(*sessionstore.PostgresStore); ok {
+		var summary model.SessionSummary
+		result := pg.DB().WithContext(c.Request.Context()).
+			Where("session_id = ?", session.SessionID).
+			First(&summary)
+		if result.Error != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "summary not found"})
+			return
+		}
+		c.JSON(http.StatusOK, summary)
+		return
+	}
+
+	// JSONL store: return no summary for now
+	c.JSON(http.StatusNotFound, gin.H{"error": "summary not available for JSONL store"})
+}
+
+// ReopenSession creates a new session version for a paused match.
+func (h *MessageHandler) ReopenSession(c *gin.Context) {
+	matchIDStr := c.Param("matchId")
+	if h.sessionStore == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session store not available"})
+		return
+	}
+	matchID, err := uuid.Parse(matchIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid match ID"})
+		return
+	}
+
+	newSid := h.mqSvc.ReopenSession(c.Request.Context(), matchID)
+	if newSid == "" {
+		c.JSON(http.StatusConflict, gin.H{"error": "failed to reopen session"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"session_id": newSid})
 }
 
 // BroadcastAgentResponse sends a payload to all WebSocket clients in a match room
@@ -711,7 +853,23 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, messages)
+	// Enhance with session metadata if session store is available
+	sessionVersion := 0
+	sessionStatus := ""
+	if h.sessionStore != nil {
+		sessions, listErr := h.sessionStore.ListByMatchID(c.Request.Context(), uuid.MustParse(matchID))
+		if listErr == nil && len(sessions) > 0 {
+			latest := sessions[len(sessions)-1]
+			sessionVersion = latest.Version
+			sessionStatus = string(latest.Status)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"messages":       messages,
+		"session_version": sessionVersion,
+		"session_status":  sessionStatus,
+	})
 }
 
 // SalaryNegotiator handles salary and compensation negotiations

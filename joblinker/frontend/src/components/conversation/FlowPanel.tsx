@@ -4,9 +4,8 @@ import { CheckCircle, Circle, Loader2, Wrench } from 'lucide-react'
 
 export type FSMStage
   = | 'INTRODUCTION'
-    | 'JOB_DESCRIPTION'
-    | 'SALARY_NEGOTIATION'
-    | 'INTERVIEWING'
+    | 'NEGOTIATION'
+    | 'INTERVIEW'
     | 'OFFER'
     | 'COMPLETED'
 
@@ -24,9 +23,8 @@ interface FlowPanelProps {
 
 const STAGES: { key: FSMStage, label: string }[] = [
   { key: 'INTRODUCTION', label: 'Introduction' },
-  { key: 'JOB_DESCRIPTION', label: 'Job Description' },
-  { key: 'SALARY_NEGOTIATION', label: 'Salary Negotiation' },
-  { key: 'INTERVIEWING', label: 'Interview' },
+  { key: 'NEGOTIATION', label: 'Negotiation' },
+  { key: 'INTERVIEW', label: 'Interview' },
   { key: 'OFFER', label: 'Offer' },
   { key: 'COMPLETED', label: 'Completed' },
 ]

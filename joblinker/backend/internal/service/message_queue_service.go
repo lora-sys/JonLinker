@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"joblinker/internal/eino/chatmodel"
 	"joblinker/internal/eino/runner"
+	"joblinker/internal/eino/sessionstore"
+	"joblinker/internal/eino/stategraph"
 	"joblinker/internal/eino/prompt"
 	"joblinker/internal/agent"
 	"joblinker/internal/cache"
@@ -41,6 +46,8 @@ type MessageQueueService struct {
 	einoRunner         *runner.AgentRunner
 	// ADK Runner (optional, for ADK-based processing)
 	adkRunner          *runner.ADKRunner
+	// StateGraph Runner (optional, for Phase 1 full autonomous pipeline)
+	stategraphRunner   *runner.StateGraphRunner
 	// Context optimization for AI prompts
 	contextOptimizer   *ContextOptimizerService
 	// Observability
@@ -52,6 +59,13 @@ type MessageQueueService struct {
 	conversationMu     sync.RWMutex
 	// WebSocket broadcast callback
 	broadcastFn        BroadcastFunc
+	// StateGraph tracking: which matches already have a graph running
+	runningGraphs   map[string]bool
+	runningGraphsMu sync.Mutex
+	// Session store for persisting autonomous conversation sessions
+	sessionStore sessionstore.Store
+	// Session service for higher-level session operations (reopen, etc.)
+	sessionSvc *sessionstore.SessionService
 }
 
 // SetEinoRunner sets the Eino AgentRunner for Eino-based processing
@@ -66,6 +80,12 @@ func (s *MessageQueueService) SetADKRunner(adkRunner *runner.ADKRunner) {
 	log.Printf("MessageQueueService: ADK Runner configured")
 }
 
+// SetStateGraphRunner sets the StateGraph Runner for autonomous pipeline processing
+func (s *MessageQueueService) SetStateGraphRunner(sgr *runner.StateGraphRunner) {
+	s.stategraphRunner = sgr
+	log.Printf("MessageQueueService: StateGraph Runner configured")
+}
+
 // SetContextOptimizer sets the context optimizer for AI prompts
 func (s *MessageQueueService) SetContextOptimizer(ctxOptimizer *ContextOptimizerService) {
 	s.contextOptimizer = ctxOptimizer
@@ -76,6 +96,124 @@ func (s *MessageQueueService) SetContextOptimizer(ctxOptimizer *ContextOptimizer
 func (s *MessageQueueService) SetBroadcastCallback(fn BroadcastFunc) {
 	s.broadcastFn = fn
 	log.Printf("MessageQueueService: Broadcast callback configured")
+}
+
+// SetSessionStore sets the session store for persisting autonomous conversation sessions
+func (s *MessageQueueService) SetSessionStore(store sessionstore.Store) {
+	s.sessionStore = store
+	log.Printf("MessageQueueService: Session store configured")
+}
+
+// SetSessionService sets the SessionService for higher-level session operations.
+func (s *MessageQueueService) SetSessionService(svc *sessionstore.SessionService) {
+	s.sessionSvc = svc
+	log.Printf("MessageQueueService: SessionService configured")
+}
+
+// ReopenSession creates a new session version for a paused match (delegates to SessionService).
+// Returns the new session ID or empty string on failure.
+func (s *MessageQueueService) ReopenSession(ctx context.Context, matchID uuid.UUID) string {
+	if s.sessionSvc == nil {
+		log.Printf("[Session] ReopenSession: SessionService not configured")
+		return ""
+	}
+	sid, err := s.sessionSvc.ReopenSession(ctx, matchID)
+	if err != nil {
+		log.Printf("[Session] ReopenSession failed for match=%s: %v", matchID, err)
+		return ""
+	}
+	log.Printf("[Session] Reopened session %s for match=%s", sid, matchID)
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID.String(), "session_reopened", map[string]interface{}{
+			"match_id":   matchID.String(),
+			"session_id": sid,
+			"version":    func() int { _, v, _ := sessionstore.ParseSessionID(sid); return v }(),
+			"timestamp":  time.Now(),
+		})
+	}
+	return sid
+}
+
+// RecordTurn records a single message turn to the session store.
+// Creates a new session if none exists for the match.
+// Called from handleAgentMessage for both incoming and outgoing messages.
+func (s *MessageQueueService) RecordTurn(ctx context.Context, matchID uuid.UUID, role, content string) {
+	if s.sessionStore == nil {
+		return
+	}
+
+	ver, err := s.sessionStore.LatestVersion(ctx, matchID)
+	if err != nil {
+		log.Printf("[Session] RecordTurn: failed to get version for match=%s: %v", matchID, err)
+		return
+	}
+
+	var sessionID string
+	if ver == 0 {
+		// No session exists — create one
+		sessionID = s.CreateSession(ctx, matchID)
+		if sessionID == "" {
+			log.Printf("[Session] RecordTurn: failed to create session for match=%s", matchID)
+			return
+		}
+	} else {
+		sessionID = sessionstore.SessionID(matchID, ver)
+		session, loadErr := s.sessionStore.Load(ctx, sessionID)
+		if loadErr != nil {
+			log.Printf("[Session] RecordTurn: failed to load session %s: %v", sessionID, loadErr)
+			return
+		}
+		if session.Status == sessionstore.SessionStatusConcluded {
+			// Session concluded — try to reopen (creates a new version)
+			newSid := s.ReopenSession(ctx, matchID)
+			if newSid == "" {
+				// Reopen failed — create fresh session
+				sessionID = s.CreateSession(ctx, matchID)
+				if sessionID == "" {
+					return
+				}
+			} else {
+				sessionID = newSid
+			}
+		}
+	}
+
+	if err := s.sessionStore.AppendMessages(ctx, sessionID, []sessionstore.Message{
+		{Role: role, Content: content},
+	}); err != nil {
+		log.Printf("[Session] RecordTurn: append to %s failed: %v", sessionID, err)
+	}
+}
+
+// CreateSession creates a new session for the given match and returns the session ID.
+func (s *MessageQueueService) CreateSession(ctx context.Context, matchID uuid.UUID) string {
+	if s.sessionStore == nil {
+		log.Printf("[Session] sessionStore is nil, cannot create session for match=%s", matchID)
+		return ""
+	}
+	ver, err := s.sessionStore.LatestVersion(ctx, matchID)
+	if err != nil {
+		log.Printf("[Session] Failed to get latest version for match=%s: %v", matchID, err)
+		return ""
+	}
+	newVer := ver + 1
+	sessionID := sessionstore.SessionID(matchID, newVer)
+	if err := s.sessionStore.Create(ctx, sessionID, matchID, newVer); err != nil {
+		log.Printf("[Session] Failed to create session for match=%s: %v", matchID, err)
+		return ""
+	}
+	log.Printf("[Session] Created session %s for match=%s", sessionID, matchID)
+
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID.String(), "session_created", map[string]interface{}{
+			"match_id":   matchID.String(),
+			"session_id": sessionID,
+			"version":    newVer,
+			"timestamp":  time.Now(),
+		})
+	}
+
+	return sessionID
 }
 
 func NewMessageQueueService(
@@ -124,6 +262,7 @@ func NewMessageQueueService(
 		auditSvc:           auditSvc,
 		alertSvc:           alertSvc,
 		conversationRounds: make(map[string]int),
+		runningGraphs:      make(map[string]bool),
 	}
 }
 
@@ -181,6 +320,24 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		return nil
 	}
 
+	// ── StateGraph trigger: on first round, kick off autonomous pipeline ──
+	if s.stategraphRunner != nil && currentRound == 1 {
+		s.runningGraphsMu.Lock()
+		already := s.runningGraphs[matchID.String()]
+		if !already {
+			s.runningGraphs[matchID.String()] = true
+		}
+		s.runningGraphsMu.Unlock()
+
+		if !already {
+			log.Printf("[StateGraph] Triggering autonomous pipeline for match=%s", matchID)
+			// Run in a detached goroutine so the handler returns immediately
+			go s.runStateGraphForMatch(context.Background(), matchID, msg, match, senderAgent)
+			// Return early — the graph goroutine broadcasts all messages itself
+			return nil
+		}
+	}
+
 	if s.metricsSvc != nil {
 		s.metricsSvc.UpdateHeartbeat(senderAgent.ID)
 		s.metricsSvc.RecordMessage(senderAgent.ID)
@@ -194,6 +351,18 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 
 	jobCtx := s.getJobContextString(match)
 
+	// Extract incoming message content for session recording
+	msgContent := ""
+	if msg.Payload != nil {
+		if content, ok := msg.Payload["content"].(string); ok {
+			msgContent = content
+		}
+	}
+	if msgContent == "" {
+		msgContent = msg.Intent
+	}
+	senderRole := string(senderAgent.Type)
+
 	// Prefer ADK Runner (real Eino ADK agent)
 	var response *AutoResponse
 	legacyFallback := false
@@ -201,16 +370,6 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	if s.adkRunner != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-
-		var msgContent string
-		if msg.Payload != nil {
-			if content, ok := msg.Payload["content"].(string); ok {
-				msgContent = content
-			}
-		}
-		if msgContent == "" {
-			msgContent = msg.Intent
-		}
 
 		enrichedMsg := msgContent
 		if jobCtx != "" {
@@ -230,14 +389,36 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 		}
 	}
 
-	// Fallback to old Eino or traditional AI
+	// Fallback to Eino streaming (preferred), then sync Eino, then legacy AI
+	if response == nil && s.einoRunner != nil {
+		response = s.generateEinoResponseStream(msg, match, senderAgent, jobCtx)
+	}
 	if response == nil {
-		response = s.generateEinoResponse(msg, match, senderAgent, jobCtx)
-		if response == nil {
-		 log.Printf("Eino returned nil, falling back to legacy AI")
-		 legacyFallback = true
-		 response = s.generateAutoResponse(msg, match, senderAgent)
+		legacyEinoResponse := s.generateEinoResponse(msg, match, senderAgent, jobCtx)
+		if legacyEinoResponse != nil {
+			response = legacyEinoResponse
 		}
+	}
+	if response == nil {
+		log.Printf("Eino returned nil, falling back to legacy AI")
+		legacyFallback = true
+		response = s.generateAutoResponse(msg, match, senderAgent)
+	}
+
+	// Record both sides of this turn to the session store
+	incomingRole := senderRole
+	if incomingRole == "seeker" {
+		incomingRole = "user"
+	}
+	s.RecordTurn(context.Background(), matchID, incomingRole, msgContent)
+	var responseText string
+	if response.Payload != nil {
+		if text, ok := response.Payload["message"].(string); ok {
+			responseText = text
+		}
+	}
+	if responseText != "" {
+		s.RecordTurn(context.Background(), matchID, "assistant", responseText)
 	}
 
 	// Ensure DB records are created for OFFER/SCHEDULE intents
@@ -308,13 +489,6 @@ responseAgentID := s.getOtherAgentID(match, senderAgent.ID)
 	}
 	if err := s.messageRepo.Create(responseMsg); err != nil {
 		log.Printf("Failed to store response message: %v", err)
-	}
-
-	var responseText string
-	if response.Payload != nil {
-		if text, ok := response.Payload["message"].(string); ok {
-			responseText = text
-		}
 	}
 
 	if s.broadcastFn != nil {
@@ -743,7 +917,25 @@ func (s *MessageQueueService) getJobContextString(match *model.Match) string {
 	)
 }
 
-// generateEinoResponse uses DeepRecruiter to generate response
+// generateEinoResponseStream wraps generateEinoResponse and broadcasts each chunk via WebSocket.
+// Returns nil if Eino is not configured or fails, triggering fallback.
+func (s *MessageQueueService) generateEinoResponseStream(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
+	// Streaming removed in S2 refactor; fall back to non-streaming response.
+	// Broadcast the full response as a single chunk for backwards compatibility.
+	resp := s.generateEinoResponse(msg, match, senderAgent, jobContext)
+	if resp != nil && s.broadcastFn != nil {
+		if payload, ok := resp.Payload["message"].(string); ok {
+			s.broadcastFn(match.ID.String(), "adk_stream_chunk", map[string]interface{}{
+				"chunk":           payload,
+				"accumulated":     payload,
+				"sender_agent_id": senderAgent.ID.String(),
+			})
+		}
+	}
+	return resp
+}
+
+// generateEinoResponse generates a response using Eino agents (seeker/recruiter pool)
 // Returns nil if Eino is not configured or fails, triggering fallback
 func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent, jobContext string) *AutoResponse {
 	if s.einoRunner == nil {
@@ -769,19 +961,17 @@ func (s *MessageQueueService) generateEinoResponse(msg *rabbitmq.AgentMessage, m
 		enrichedMsg = fmt.Sprintf("%s\n\n%s", jobContext, msgContent)
 	}
 
-	deepRecruiter := s.einoRunner.GetDeepRecruiter(match.ID)
-
 	var response string
 	var err error
 
 	if senderAgent.Type == "seeker" {
-		response, err = deepRecruiter.ProcessRecruiterMessage(ctx, enrichedMsg)
+		response, err = s.einoRunner.RunRecruiterTask(ctx, enrichedMsg)
 	} else {
-		response, err = deepRecruiter.ProcessSeekerMessage(ctx, enrichedMsg)
+		response, err = s.einoRunner.RunSeekerTask(ctx, enrichedMsg)
 	}
 
 	if err != nil {
-		log.Printf("DeepRecruiter error: %v", err)
+		log.Printf("Eino response error: %v", err)
 		return nil
 	}
 
@@ -905,6 +1095,203 @@ func (s *MessageQueueService) broadcastStateChange(matchID string, newState stri
 			"timestamp": time.Now(),
 		})
 	}
+}
+
+// runStateGraphForMatch runs the autonomous StateGraph pipeline for a match in the current goroutine.
+// It creates seeker/recruiter agents, runs all 5 phases (INTRODUCTION → COMPLETED),
+// and broadcasts each message and phase change in real-time.
+func (s *MessageQueueService) runStateGraphForMatch(ctx context.Context, matchID uuid.UUID, msg *rabbitmq.AgentMessage, match *model.Match, senderAgent *model.Agent) {
+	graphCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Create session for this match if session store is configured
+	var sessionID string
+	if s.sessionStore != nil {
+		sessionID = s.CreateSession(graphCtx, matchID)
+	}
+
+	otherAgentID := s.getOtherAgentID(match, uuid.MustParse(msg.SenderID))
+	seekerAgentID := match.SeekerAgentID
+
+	// Broadcast callbacks
+	onMessage := func(sender, message string, phase stategraph.Phase) {
+		// Determine which agent ID sent this
+		agentID := otherAgentID
+		if sender == "Seeker" || strings.HasPrefix(sender, "Seeker") {
+			agentID = seekerAgentID
+		} else if sender == "Recruiter" || strings.HasPrefix(sender, "Recruiter") {
+			agentID = otherAgentID
+		}
+
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "state_graph_message", map[string]interface{}{
+				"match_id":        matchID.String(),
+				"sender_agent_id": agentID.String(),
+				"sender":          sender,
+				"text":            message,
+				"phase":           string(phase),
+				"timestamp":       time.Now(),
+			})
+		}
+
+		// Persist message to database
+		contentXML := fmt.Sprintf("<message><text>%s</text></message>", message)
+		msgRecord := &model.Message{
+			ID:            uuid.New(),
+			MatchID:       matchID,
+			TenantID:      match.TenantID,
+			SenderAgentID: agentID,
+			ContentXML:    contentXML,
+			IntentType:    string(phase),
+		}
+		if err := s.messageRepo.Create(msgRecord); err != nil {
+			log.Printf("[StateGraph] Failed to persist message for match=%s: %v", matchID, err)
+		}
+
+		// Also append to session store if configured
+		if s.sessionStore != nil && sessionID != "" {
+			s.sessionStore.AppendMessages(graphCtx, sessionID, []sessionstore.Message{
+				{Role: sender, Content: message},
+			})
+		}
+	}
+
+	onPhase := func(phase stategraph.Phase) {
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "fsm_state_change", map[string]interface{}{
+				"match_id":  matchID.String(),
+				"new_state": string(phase),
+				"reason":    "stategraph_progression",
+				"timestamp": time.Now(),
+			})
+		}
+	}
+
+	log.Printf("[StateGraph] Running autonomous pipeline for match=%s", matchID)
+
+	state, err := s.stategraphRunner.RunGraph(graphCtx, matchID,
+		stategraph.WithCallbacks(onMessage, onPhase),
+		stategraph.WithMaxNegotiationRounds(10),
+		stategraph.WithMaxInterviewRounds(5),
+		stategraph.WithMaxOfferRounds(3),
+	)
+	if err != nil {
+		log.Printf("[StateGraph] Error for match=%s: %v", matchID, err)
+		s.broadcastStateChange(matchID.String(), "ERROR", err.Error())
+		return
+	}
+
+	log.Printf("[StateGraph] Completed for match=%s: final=%s accepted=%v", matchID, state.Phase, state.OfferAccepted)
+
+	// Conclude session if session store is configured
+	if s.sessionStore != nil && sessionID != "" {
+		if s.broadcastFn != nil {
+			s.broadcastFn(matchID.String(), "session_concluded", map[string]interface{}{
+				"match_id":   matchID.String(),
+				"session_id": sessionID,
+				"reason":     "naturally",
+				"timestamp":  time.Now(),
+			})
+		}
+		s.sessionStore.Conclude(graphCtx, sessionID, "naturally")
+		log.Printf("[Session] Concluded session %s for match=%s", sessionID, matchID)
+	}
+
+	// Update match status based on offer outcome
+	switch {
+	case state.OfferAccepted:
+		if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatusHired); err != nil {
+			log.Printf("[StateGraph] Failed to update match %s to Hired: %v", matchID, err)
+		} else {
+			log.Printf("[StateGraph] Match %s status set to Hired (offer accepted)", matchID)
+		}
+
+		// Create an offer record so the Offers page shows this offer
+		if err := s.createOfferFromState(matchID, match.TenantID, state); err != nil {
+			log.Printf("[StateGraph] Failed to create offer record for match %s: %v", matchID, err)
+		}
+	case state.OfferDeclined:
+		if err := s.matchRepo.UpdateStatus(matchID, model.MatchStatusRejected); err != nil {
+			log.Printf("[StateGraph] Failed to update match %s to Rejected: %v", matchID, err)
+		} else {
+			log.Printf("[StateGraph] Match %s status set to Rejected (offer declined)", matchID)
+		}
+	default:
+		log.Printf("[StateGraph] No status update for match %s (no offer decision)", matchID)
+	}
+
+	// Broadcast completion event
+	if s.broadcastFn != nil {
+		s.broadcastFn(matchID.String(), "state_graph_complete", map[string]interface{}{
+			"match_id":   matchID.String(),
+			"phase":      string(state.Phase),
+			"candidate":  state.CandidateName,
+			"job_title":  state.JobTitle,
+			"accepted":   state.OfferAccepted,
+			"declined":   state.OfferDeclined,
+			"msg_count":  len(state.Messages),
+			"timestamp":  time.Now(),
+		})
+	}
+}
+
+// createOfferFromState creates an offer record in the database from StateGraph completion state.
+func (s *MessageQueueService) createOfferFromState(matchID, tenantID uuid.UUID, state *stategraph.RecruitmentState) error {
+	// Extract a salary amount from the state
+	salaryStr := state.OfferAmount
+	if salaryStr == "" {
+		// Try to extract from the last negotiation round
+		if len(state.NegotiationRounds) > 0 {
+			last := state.NegotiationRounds[len(state.NegotiationRounds)-1]
+			salaryStr = last.RecruiterOffer
+		}
+	}
+	if salaryStr == "" {
+		salaryStr = "80000"
+	}
+
+	// Parse salary as integer (best-effort)
+	baseSalary := 80000
+	if parsed, err := strconv.Atoi(regexp.MustCompile(`\d+`).FindString(salaryStr)); err == nil && parsed > 0 {
+		baseSalary = parsed
+	}
+
+	compensation := map[string]interface{}{
+		"base_salary": baseSalary,
+		"currency":    "USD",
+		"bonus": map[string]interface{}{
+			"amount":      baseSalary * 10 / 100,
+			"description": "Annual performance bonus",
+		},
+		"equity": map[string]interface{}{
+			"shares":         1000,
+			"vesting_period": "4-year vesting with 1-year cliff",
+		},
+		"benefits": []string{"Health Insurance", "401(k) matching", "Unlimited PTO"},
+	}
+
+	compJSON, err := json.Marshal(compensation)
+	if err != nil {
+		return fmt.Errorf("marshal compensation: %w", err)
+	}
+
+	offer := &model.Offer{
+		ID:               uuid.New(),
+		MatchID:          matchID,
+		TenantID:         tenantID,
+		CompensationJSON: json.RawMessage(compJSON),
+		StartDate:        time.Now().AddDate(0, 1, 0), // 1 month from now
+		Status:           model.OfferStatusAccepted,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	if err := s.offerRepo.Create(offer); err != nil {
+		return fmt.Errorf("create offer: %w", err)
+	}
+
+	log.Printf("[StateGraph] Created offer record %s for match %s (salary=%d)", offer.ID, matchID, baseSalary)
+	return nil
 }
 
 // continueAgentConversation re-publishes to RabbitMQ after human approval

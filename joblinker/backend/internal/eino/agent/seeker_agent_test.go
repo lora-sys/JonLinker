@@ -31,7 +31,7 @@ func TestSeekerAgentChat(t *testing.T) {
 
 	// Test basic chat
 	ctx := context.Background()
-	resp, err := agent.Chat(ctx, "Hello, I'm looking for a software engineering job.")
+	resp, err := agent.Chat(ctx, nil, "Hello, I'm looking for a software engineering job.")
 	if err != nil {
 		t.Fatalf("Chat failed: %v", err)
 	}
@@ -68,9 +68,9 @@ func TestSeekerAgentChatWithHistory(t *testing.T) {
 		schema.AssistantMessage("Hello! I see you're interested in a software engineering position. What skills are you most proficient in?", nil),
 	}
 
-	resp, err := agent.ChatWithHistory(ctx, history, "I'm proficient in Go and Python.")
+	resp, err := agent.Chat(ctx, history, "I'm proficient in Go and Python.")
 	if err != nil {
-		t.Fatalf("ChatWithHistory failed: %v", err)
+		t.Fatalf("Chat failed: %v", err)
 	}
 
 	if resp == "" {

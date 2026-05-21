@@ -89,18 +89,56 @@ func (m *EinoChatModel) Generate(ctx context.Context, messages []*schema.Message
 	}, nil
 }
 
-// Stream implements the BaseChatModel interface (not implemented for MVP)
+// Stream implements the BaseChatModel interface with real SSE streaming.
 func (m *EinoChatModel) Stream(ctx context.Context, messages []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	// For MVP, fall back to non-streaming
-	msg, err := m.Generate(ctx, messages, opts...)
-	if err != nil {
-		return nil, err
+	// Apply options
+	options := model.GetCommonOptions(&model.Options{}, opts...)
+	if options.MaxTokens != nil {
+		m.maxTokens = *options.MaxTokens
+	}
+	if options.Temperature != nil {
+		m.temperature = float64(*options.Temperature)
+	}
+	if options.Model != nil {
+		m.modelName = *options.Model
 	}
 
-	// Wrap the single message in a stream
-	sr, sw := schema.Pipe[*schema.Message](1)
-	sw.Send(msg, nil)
-	sw.Close()
+	// Convert Eino messages to AI client messages
+	aiMessages := convertToAIMessages(messages)
+
+	// Build request
+	reqBody := ai.ChatRequest{
+		Model:       m.modelName,
+		Messages:    aiMessages,
+		MaxTokens:   m.maxTokens,
+		Temperature: m.temperature,
+	}
+
+	ch, err := m.client.DoChatStream(ctx, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("eino chatmodel: failed to start stream: %w", err)
+	}
+
+	// Pipe chunks into Eino stream reader
+	sr, sw := schema.Pipe[*schema.Message](64)
+	go func() {
+		defer sw.Close()
+		for {
+			select {
+			case chunk, ok := <-ch:
+				if !ok {
+					return
+				}
+				sw.Send(&schema.Message{
+					Role:    schema.Assistant,
+					Content: chunk,
+				}, nil)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	return sr, nil
 }
 

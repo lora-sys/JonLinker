@@ -1,6 +1,6 @@
 export { default as Avatar } from './Avatar'
-export { default as Badge } from './Badge'
-export { default as Button } from './Button'
+export { default as Badge } from './badge'
+export { default as Button } from './button'
 // UI Components - re-export with React.memo optimization
 export { default as Card } from './Card'
 export { default as CompensationCard } from './CompensationCard'

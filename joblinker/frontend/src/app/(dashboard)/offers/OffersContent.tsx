@@ -7,7 +7,7 @@ import { useCallback, useState } from 'react'
 import type { Compensation, Offer } from '@/types'
 
 import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/components/ui'
-import Button from '@/components/ui/Button'
+import Button from '@/components/ui/button'
 import Card from '@/components/ui/Card'
 import CompensationCard from '@/components/ui/CompensationCard'
 import CountdownDisplay from '@/components/ui/Countdown'
@@ -201,7 +201,7 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, in
                         </span>
                       </div>
                       <Button
-                        variant="primary"
+                        variant="default"
                         className="w-full mt-3 bg-blue-600 hover:bg-blue-700"
                         onClick={handleNegotiate}
                         disabled={isUpdating}
@@ -215,7 +215,7 @@ function OfferCardInner({ offer, index, onUpdate }: { offer: OfferWithParsed, in
                 {(offer.status === 'pending' || offer.status === 'negotiating') && (
                   <div className="flex gap-3 pt-2">
                     <Button
-                      variant="primary"
+                      variant="default"
                       className="flex-1 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-600"
                       onClick={handleAccept}
                       disabled={isUpdating}

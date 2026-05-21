@@ -6,9 +6,8 @@ import type { FSMStage } from '@/hooks/useAIChat'
 
 const STAGES: { key: FSMStage, label: string }[] = [
   { key: 'INTRODUCTION', label: 'Introduction' },
-  { key: 'JOB_DESCRIPTION', label: 'Job Description' },
-  { key: 'SALARY_NEGOTIATION', label: 'Salary' },
-  { key: 'INTERVIEWING', label: 'Interview' },
+  { key: 'NEGOTIATION', label: 'Negotiation' },
+  { key: 'INTERVIEW', label: 'Interview' },
   { key: 'OFFER', label: 'Offer' },
   { key: 'COMPLETED', label: 'Completed' },
 ]

@@ -15,9 +15,8 @@ import { useWebSocket } from './useWebSocket'
 
 export type FSMStage
   = | 'INTRODUCTION'
-    | 'JOB_DESCRIPTION'
-    | 'SALARY_NEGOTIATION'
-    | 'INTERVIEWING'
+    | 'NEGOTIATION'
+    | 'INTERVIEW'
     | 'OFFER'
     | 'COMPLETED'
 
@@ -35,17 +34,15 @@ interface UseAIChatOptions {
 
 function matchStatusToStage(status: string): FSMStage {
   switch (status) {
-    case 'mutual_interest': return 'JOB_DESCRIPTION'
-    case 'negotiating': return 'SALARY_NEGOTIATION'
-    case 'interviewing': return 'INTERVIEWING'
-    case 'offered': return 'OFFER'
+    case 'mutual_interest': case 'negotiating': return 'NEGOTIATION'
+    case 'interview_scheduled': case 'interviewing': return 'INTERVIEW'
+    case 'offer_sent': case 'offered': return 'OFFER'
     case 'hired': case 'rejected': case 'completed': return 'COMPLETED'
     default: return 'INTRODUCTION'
   }
 }
 
 export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
-  const [initialLoaded, setInitialLoaded] = useState(false)
   const [input, setInput] = useState('')
   const checkedConfirmRef = useRef(false)
   const agentIdsRef = useRef({ seeker: '', recruiter: '', current: '' })
@@ -57,21 +54,70 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     stop,
     error,
     setMessages,
-    regenerate,
     status,
   } = useChat({
     id: matchId,
   })
 
+  // Session metadata (not available on useChat.data in @ai-sdk/react v3)
+  const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
+  const [sessionVersion, setSessionVersion] = useState<number | undefined>(undefined)
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'concluded' | undefined>(undefined)
+  const [sessionSummary] = useState<string | undefined>(undefined)
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+
+  const loadInitialMessagesRef = useRef(false)
+  const initialLoadAttemptedRef = useRef(false)
+
   useEffect(() => {
-    if (!enabled || initialLoaded)
+    // Skip during SSR — no localStorage available
+    if (typeof window === 'undefined')
       return
-    apiClient.get<MessageItem[]>(`/api/conversation/${matchId}`)
-      .then((data) => {
-        if (!Array.isArray(data) || data.length === 0)
+    if (!enabled || loadInitialMessagesRef.current)
+      return
+    loadInitialMessagesRef.current = true
+    initialLoadAttemptedRef.current = false
+
+    // Step 1: fetch match data + session meta in parallel
+    Promise.all([
+      apiClient.get<Record<string, unknown>>(`/api/matches/${matchId}`),
+      apiClient.get<Record<string, unknown>>(`/api/sessions/${matchId}`).catch(() => null),
+      apiClient.get<ConversationResponse>(`/api/conversation/${matchId}`),
+    ])
+      .then(([matchData, sessionData, convData]) => {
+        const seeker = String(matchData.seeker_agent_id || '')
+        const recruiter = String(matchData.recruiter_agent_id || '')
+        agentIdsRef.current = { seeker, recruiter, current: seeker }
+
+        if (matchData.status) {
+          setFsmStage(matchStatusToStage(String(matchData.status)))
+        }
+        if (sessionData && sessionData.version != null) {
+          setSessionVersion(Number(sessionData.version))
+        }
+        if (sessionData && sessionData.status) {
+          setSessionStatus(String(sessionData.status) as 'active' | 'concluded')
+        }
+        if (convData.session_version != null) {
+          setSessionVersion(Number(convData.session_version))
+        }
+        if (convData.session_status) {
+          setSessionStatus(String(convData.session_status) as 'active' | 'concluded')
+        }
+        if (matchData.status === 'offered' && !checkedConfirmRef.current) {
+          checkedConfirmRef.current = true
+          setPendingConfirm({
+            match_id: matchId,
+            intent: 'OFFER',
+            message_id: '',
+          })
+        }
+
+        // Load messages
+        const msgsData = convData.messages || []
+        if (msgsData.length === 0)
           return
-        const { seeker } = agentIdsRef.current
-        const msgs: UIMessage[] = data
+        const msgs: UIMessage[] = msgsData
           .filter(m => extractTextFromXML(m.content_xml || ''))
           .map((m) => {
             const text = extractTextFromXML(m.content_xml || '')
@@ -88,15 +134,15 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             return prev
           return msgs
         })
-        setInitialLoaded(true)
       })
       .catch(() => {})
-  }, [matchId, enabled, initialLoaded, setMessages])
+    return () => {
+      // Reset guard ref on unmount so Strict Mode double-invoke re-fetches
+      loadInitialMessagesRef.current = false
+    }
+  }, [matchId, enabled, setMessages])
 
   const isLoading = status === 'submitted' || status === 'streaming'
-
-  const [fsmStage, setFsmStage] = useState<FSMStage>('INTRODUCTION')
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
   useEffect(() => {
     if (!enabled)
@@ -178,18 +224,26 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
           case 'fsm_state_change':
             setFsmStage(matchStatusToStage(String(data.new_state || '')))
             break
-          case 'confirmation_needed':
-            setPendingConfirm((prev) => {
-              const intent = String(data.intent || '')
-              if (prev && prev.intent === intent && prev.match_id === String(data.match_id || matchId))
-                return prev
-              return {
-                match_id: String(data.match_id || matchId),
-                intent,
-                message_id: String(data.message_id || ''),
-                content_xml: String(data.content_xml || ''),
-              }
-            })
+          case 'state_graph_message': {
+            const rawText = String(data.text || '')
+            if (!rawText)
+              break
+            const text = extractTextFromXML(rawText)
+            const { seeker } = agentIdsRef.current
+            const isSeeker = data.sender_agent_id && String(data.sender_agent_id) === seeker
+            setMessages(prev => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: isSeeker ? 'user' : 'assistant',
+                parts: [{ type: 'text', text }] as UIMessage['parts'],
+                createdAt: data.timestamp ? new Date(String(data.timestamp)) : new Date(),
+              } as UIMessage,
+            ])
+            break
+          }
+          case 'state_graph_complete':
+            setFsmStage('COMPLETED')
             break
           case 'adk_stream_chunk': {
             const chunk = String(data.accumulated || data.chunk || '')
@@ -230,6 +284,22 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
               } as UIMessage,
             ])
             setPendingConfirm(null)
+            break
+          case 'session_created':
+            if (data.version != null) {
+              setSessionVersion(Number(data.version))
+            }
+            setSessionStatus('active')
+            break
+          case 'session_concluded':
+            setSessionStatus('concluded')
+            break
+          case 'session_reopened':
+            setMessages([])
+            if (data.version != null) {
+              setSessionVersion(Number(data.version))
+            }
+            setSessionStatus('active')
             break
         }
       },
@@ -293,8 +363,22 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     [pendingConfirm, matchId, setMessages],
   )
 
+  const handleReopen = useCallback(async () => {
+    try {
+      const res = await apiClient.post<{ session_id: string }>(`/api/sessions/${matchId}/reopen`)
+      if (res.session_id) {
+        setMessages([])
+        setSessionStatus('active')
+      }
+    }
+    catch (err) {
+      console.error('Reopen failed:', err)
+    }
+  }, [matchId, setMessages])
+
   return {
     messages: aiMessages as UIMessage[],
+    setMessages,
     input,
     setInput,
     handleSubmit,
@@ -302,12 +386,25 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     status,
     error: error?.message || null,
     stop,
-    reload: () => regenerate({}),
+    reload: () => {
+      // WebSocket mode: messages are streamed via WS, not useChat API.
+      // Errors are cleared on the next WS message — no regenerate needed.
+    },
     wsStatus,
     fsmStage,
+    sessionVersion,
+    sessionStatus,
+    sessionSummary,
     pendingConfirm,
     handleHumanConfirm,
+    handleReopen,
   }
+}
+
+interface ConversationResponse {
+  messages: MessageItem[]
+  session_version?: number
+  session_status?: string
 }
 
 interface MessageItem {
@@ -322,16 +419,30 @@ interface MessageItem {
 function extractTextFromXML(xml: string): string {
   if (!xml || xml.startsWith('{'))
     return ''
+
+  // Try <message><text>...</text></message> format (StateGraph messages)
+  const textMatch = xml.match(/<text>([\s\S]*?)<\/text>/)
+  if (textMatch && textMatch[1] && textMatch[1].trim())
+    return textMatch[1].trim()
+
+  // Try <parameters>{"message":"..."} format (Agent/ADK)
   const match = xml.match(/<parameters>(\{.*?\})<\/parameters>/)
-  if (!match || !match[1])
-    return xml
-  try {
-    const parsed = JSON.parse(match[1])
-    return parsed.message || parsed.text || ''
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(match[1])
+      return parsed.message || parsed.text || ''
+    }
+    catch {
+      return xml
+    }
   }
-  catch {
-    return xml
-  }
+
+  // Fallback: try any <text> tag
+  const anyText = xml.match(/<text>([\s\S]*?)<\/text>/)
+  if (anyText && anyText[1])
+    return anyText[1].trim()
+
+  return xml
 }
 
 function getToken(): string {

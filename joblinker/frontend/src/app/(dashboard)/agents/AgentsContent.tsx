@@ -9,7 +9,7 @@ import type { Agent } from '@/types'
 
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
 import Avatar from '@/components/ui/Avatar'
-import Badge from '@/components/ui/Badge'
+import Badge from '@/components/ui/badge'
 import Card from '@/components/ui/Card'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import SkillTag from '@/components/ui/SkillTag'
@@ -51,7 +51,7 @@ function AgentCard({ agent, index }: { agent: AgentWithSkills, index: number }) 
               </div>
             </div>
           </div>
-          <Badge status={agent.status === 'active' ? 'active' : agent.status === 'paused' ? 'paused' : 'pending'}>
+          <Badge variant={agent.status === 'active' ? 'default' : agent.status === 'paused' ? 'secondary' : 'outline'}>
             {agent.status}
           </Badge>
         </div>

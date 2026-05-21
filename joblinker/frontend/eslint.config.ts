@@ -19,6 +19,7 @@ export default antfu({
     'node_modules/',
     '.next/',
     'next-env.d.ts',
+    'test-results/',
   ],
 }, {
   rules: {
