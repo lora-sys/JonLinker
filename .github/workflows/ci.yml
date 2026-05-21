@@ -25,8 +25,9 @@ jobs:
           POSTGRES_USER: joblinker
           POSTGRES_PASSWORD: joblinker_dev_password
           POSTGRES_DB: joblinker
+          PGUSER: joblinker
         options: >-
-          --health-cmd pg_isready -U joblinker
+          --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -36,7 +37,7 @@ jobs:
       redis:
         image: redis:7-alpine
         options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd redis-cli ping
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
