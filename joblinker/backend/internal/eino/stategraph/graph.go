@@ -136,8 +136,18 @@ func (g *RecruitmentGraph) Run(ctx context.Context, matchID uuid.UUID, opts ...R
 
 // introductionNode introduces the candidate and job to each other.
 func (g *RecruitmentGraph) introductionNode(ctx context.Context, state *RecruitmentState) (*RecruitmentState, error) {
-	// Seeker introduces themselves
-	seekerPrompt := "Introduce yourself as a job seeker. State your name, background, and what kind of role you're looking for."
+	// Seeker introduces themselves with actual profile context
+	profileCtx := ""
+	if state.CandidateName != "" {
+		profileCtx = fmt.Sprintf("Your name is %s.", state.CandidateName)
+	}
+	if state.CandidateBio != "" {
+		profileCtx = fmt.Sprintf("Your background: %s", state.CandidateBio)
+	}
+	seekerPrompt := fmt.Sprintf(
+		"[Phase: INTRODUCTION]\n%s\n\nIntroduce yourself as a job seeker. State your name, background, and what kind of role you're looking for.",
+		profileCtx,
+	)
 	seekerResp, err := g.seeker.Chat(ctx, nil, seekerPrompt)
 	if err != nil {
 		return state, fmt.Errorf("seeker introduction: %w", err)
@@ -145,8 +155,22 @@ func (g *RecruitmentGraph) introductionNode(ctx context.Context, state *Recruitm
 	state.Messages = append(state.Messages, "[Seeker] "+seekerResp)
 	state.CandidateName = extractName(seekerResp)
 
-	// Recruiter introduces the job
-	recruiterPrompt := "Introduce the job position. State the job title, key responsibilities, and what the company is looking for."
+	// Recruiter introduces the job with actual job context
+	jobCtx := ""
+	if state.JobTitle != "" {
+		jobCtx = fmt.Sprintf("The position is: %s.", state.JobTitle)
+	}
+	if state.JobDesc != "" {
+		desc := state.JobDesc
+		if len(desc) > 200 {
+			desc = desc[:200] + "..."
+		}
+		jobCtx = fmt.Sprintf("The position is: %s. Description: %s", state.JobTitle, desc)
+	}
+	recruiterPrompt := fmt.Sprintf(
+		"[Phase: INTRODUCTION]\n%s\n\nIntroduce the job position. State the job title, key responsibilities, and what the company is looking for.",
+		jobCtx,
+	)
 	recruiterResp, err := g.recruiter.Chat(ctx, nil, recruiterPrompt)
 	if err != nil {
 		return state, fmt.Errorf("recruiter introduction: %w", err)

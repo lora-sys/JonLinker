@@ -13,7 +13,7 @@ import (
 	"joblinker/internal/eino/prompt/templates"
 )
 
-func NewChatModelAgent(ctx context.Context, name string, description string, systemPrompt string, chatModel model.ToolCallingChatModel, tools []tool.BaseTool) (adk.Agent, error) {
+func NewChatModelAgent(ctx context.Context, name string, description string, systemPrompt string, chatModel model.ToolCallingChatModel, tools []tool.BaseTool, handlers ...adk.ChatModelAgentMiddleware) (adk.Agent, error) {
 	cfg := &adk.ChatModelAgentConfig{
 		Name:        name,
 		Description: description,
@@ -25,6 +25,7 @@ func NewChatModelAgent(ctx context.Context, name string, description string, sys
 			},
 		},
 		MaxIterations: 5,
+		Handlers:      handlers,
 	}
 
 	a, err := adk.NewChatModelAgent(ctx, cfg)
@@ -32,27 +33,29 @@ func NewChatModelAgent(ctx context.Context, name string, description string, sys
 		return nil, fmt.Errorf("new chat model agent %s: %w", name, err)
 	}
 
-	log.Printf("ChatModelAgent created: name=%s, tools=%d", name, len(tools))
+	log.Printf("ChatModelAgent created: name=%s, tools=%d, handlers=%d", name, len(tools), len(handlers))
 	return a, nil
 }
 
-func NewSeekerChatModelAgent(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool) (adk.Agent, error) {
+func NewSeekerChatModelAgent(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool, handlers ...adk.ChatModelAgentMiddleware) (adk.Agent, error) {
 	return NewChatModelAgent(ctx,
 		"seeker",
 		"Job seeker agent that evaluates opportunities and negotiates terms",
 		templates.SeekerSystemPrompt,
 		chatModel,
 		tools,
+		handlers...,
 	)
 }
 
-func NewRecruiterChatModelAgent(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool) (adk.Agent, error) {
+func NewRecruiterChatModelAgent(ctx context.Context, chatModel model.ToolCallingChatModel, tools []tool.BaseTool, handlers ...adk.ChatModelAgentMiddleware) (adk.Agent, error) {
 	return NewChatModelAgent(ctx,
 		"recruiter",
 		"Recruiter agent that posts jobs and evaluates candidates",
 		templates.RecruiterSystemPrompt,
 		chatModel,
 		tools,
+		handlers...,
 	)
 }
 

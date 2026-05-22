@@ -27,6 +27,7 @@ import (
 
 	"joblinker/internal/eino/agent"
 	"joblinker/internal/eino/chatmodel"
+	eino_hooks "joblinker/internal/eino/hooks"
 	"joblinker/internal/eino/memory"
 	eino_runner "joblinker/internal/eino/runner"
 	"joblinker/internal/eino/sessionstore"
@@ -192,7 +193,7 @@ func main() {
 		log.Printf("SessionService initialized with session store")
 	}
 
-	// Initialize ADK components
+	// Initialize ADK components with Layer 2/3 hooks
 	var adkRunner *eino_runner.ADKRunner
 	{
 		chatModel := chatmodel.NewEinoChatModel(aiClient)
@@ -206,11 +207,18 @@ func main() {
 		recruiterTools := filterTools(baseTools, model.AgentTypeRecruiter)
 		log.Printf("Filtered tools: seeker=%d, recruiter=%d (of %d total)", len(seekerTools), len(recruiterTools), len(baseTools))
 
-		seekerAgent, err := agent.NewSeekerChatModelAgent(context.Background(), chatModel, seekerTools)
+		// ── Layer 2 & 3: Hooks (context injection, rate limiting, compression) ──
+		ctxInjector := eino_hooks.NewContextInjector()
+		rateLimiter := eino_hooks.NewRateLimiter(10.0, 5, 100) // 10 tok/s, burst 5, max 100 turns/match
+		ctxCompressor := eino_hooks.NewContextCompressor(nil)   // uses defaults
+
+		seekerAgent, err := agent.NewSeekerChatModelAgent(context.Background(), chatModel, seekerTools,
+			ctxInjector, rateLimiter, ctxCompressor)
 		if err != nil {
 			log.Printf("WARNING: failed to create seeker ADK agent: %v", err)
 		} else {
-			recruiterAgent, err := agent.NewRecruiterChatModelAgent(context.Background(), chatModel, recruiterTools)
+			recruiterAgent, err := agent.NewRecruiterChatModelAgent(context.Background(), chatModel, recruiterTools,
+				ctxInjector, rateLimiter, ctxCompressor)
 			if err != nil {
 				log.Printf("WARNING: failed to create recruiter ADK agent: %v", err)
 			} else {
@@ -223,14 +231,15 @@ func main() {
 					})
 					cpStore := memory.NewRedisCheckPointStore(redisClient, "adk:cp:")
 					adkRunner = eino_runner.NewADKRunner(context.Background(), supervisor, cpStore)
-					log.Printf("ADK Runner initialized with Supervisor + CheckPointStore")
+					log.Printf("ADK Runner initialized with Supervisor + CheckPointStore + Layer2/3 hooks")
 
 					// ── Phase 2: DeepAgent + Routing Supervisor ──
 					deepRunner := initDeepAgentAndRouting(context.Background(), chatModel, recruiterTools, adkRunner)
 
-					// A2A Deep SSE endpoint
+					// A2A Deep SSE endpoint with match context injection
 					if deepRunner != nil {
 						a2aDeepHandler := handler.NewA2ASSEHandler(deepRunner)
+						a2aDeepHandler.WithMatchContext(matchRepo, jobRepo)
 						r.POST("/api/a2a/deep/chat", a2aDeepHandler.Chat)
 						log.Printf("A2A Deep SSE endpoint registered at POST /api/a2a/deep/chat")
 					}
