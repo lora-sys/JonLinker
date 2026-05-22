@@ -148,6 +148,13 @@ func main() {
 
 	agentSvc := service.NewAgentService(agentRepo, userRepo, securityRepo)
 	matchSvc := service.NewMatchService(matchRepo, agentRepo, jobRepo, rmq, mqSvc)
+
+	// ── Background auto-matcher ──
+	{
+		autoMatchInterval := getEnvInt("AUTO_MATCH_INTERVAL", 60) // seconds
+		matchSvc.StartAutoMatcher(context.Background(), time.Duration(autoMatchInterval)*time.Second)
+		log.Printf("Auto-matcher started (interval: %ds)", autoMatchInterval)
+	}
 	messageSvc := service.NewMessageService(messageRepo, matchRepo, agentRepo)
 	securitySvc := service.NewSecurityService(securityRepo)
 	interviewSvc := service.NewInterviewService(interviewRepo, matchRepo, messageSvc, securitySvc)

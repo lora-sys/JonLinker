@@ -27,7 +27,7 @@ joblinker/backend/seed-data
 /tmp/
 
 # Runtime data
-data/
+data
 
 # TypeScript build info
 *.tsbuildinfo

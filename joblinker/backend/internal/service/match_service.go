@@ -489,3 +489,110 @@ func (s *MatchService) AutoCreateMatches(userID uuid.UUID, jobIDs []uuid.UUID) (
 
 	return result, nil
 }
+
+// GlobalAutoMatch iterates over all active seeker agents and all active jobs,
+// scores each compatible pair, creates matches above threshold, and
+// auto-starts A2A conversations. Safe to call repeatedly — skips existing
+// seeker+job pairs.
+func (s *MatchService) GlobalAutoMatch() (*AutoMatchResult, error) {
+	result := &AutoMatchResult{}
+
+	// Fetch all active seeker agents
+	seekers, _, err := s.agentRepo.ListByStatus(model.AgentStatusActive, "", 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active seekers: %w", err)
+	}
+
+	// Fetch all active jobs
+	jobs, _, err := s.jobRepo.ListByStatus(model.JobStatusActive, 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list active jobs: %w", err)
+	}
+
+	if len(seekers) == 0 || len(jobs) == 0 {
+		log.Printf("[GlobalAutoMatch] No active seekers (%d) or jobs (%d) to match", len(seekers), len(jobs))
+		return result, nil
+	}
+
+	for _, seeker := range seekers {
+		if seeker.Type != model.AgentTypeSeeker {
+			continue
+		}
+
+		for _, job := range jobs {
+			// Skip if match already exists
+			existing, _ := s.matchRepo.FindBySeekerAndJob(seeker.ID, job.ID)
+			if existing != nil {
+				result.SkippedCount++
+				continue
+			}
+
+			// Score the pair
+			score, err := s.CalculateScore(seeker.ID, job.ID)
+			if err != nil {
+				result.SkippedCount++
+				continue
+			}
+
+			if score <= 0.5 {
+				result.SkippedCount++
+				continue
+			}
+
+			match := &model.Match{
+				SeekerAgentID:    seeker.ID,
+				RecruiterAgentID: &job.AgentID,
+				JobID:            job.ID,
+				Score:            score,
+				Status:           model.MatchStatusPending,
+			}
+			if err := s.matchRepo.Create(match); err != nil {
+				log.Printf("[GlobalAutoMatch] Failed to create match (seeker=%s, job=%s): %v", seeker.ID, job.ID, err)
+				result.SkippedCount++
+				continue
+			}
+			result.CreatedCount++
+			result.Matches = append(result.Matches, match)
+
+			// Auto-start A2A conversation
+			if err := s.autoStartA2A(match); err != nil {
+				log.Printf("[GlobalAutoMatch] Failed to auto-start A2A for match %s: %v", match.ID, err)
+			}
+		}
+	}
+
+	log.Printf("[GlobalAutoMatch] completed: %d created, %d skipped", result.CreatedCount, result.SkippedCount)
+	return result, nil
+}
+
+// StartAutoMatcher launches a background goroutine that periodically runs
+// GlobalAutoMatch to automatically discover and create matches between
+// active seekers and active jobs. The goroutine stops when ctx is cancelled.
+//
+// interval controls how often the scan runs (e.g. 30s, 5m).
+func (s *MatchService) StartAutoMatcher(ctx context.Context, interval time.Duration) {
+	go func() {
+		log.Printf("[AutoMatcher] started with interval %s", interval)
+
+		// Run once immediately on startup
+		if _, err := s.GlobalAutoMatch(); err != nil {
+			log.Printf("[AutoMatcher] initial run failed: %v", err)
+		}
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("[AutoMatcher] stopped: %v", ctx.Err())
+				return
+			case <-ticker.C:
+				log.Printf("[AutoMatcher] running periodic scan...")
+				if _, err := s.GlobalAutoMatch(); err != nil {
+					log.Printf("[AutoMatcher] scan failed: %v", err)
+				}
+			}
+		}
+	}()
+}
