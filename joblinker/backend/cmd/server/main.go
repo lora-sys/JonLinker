@@ -391,6 +391,7 @@ func main() {
 	// A2A SSE endpoint (ADK Runner streaming)
 	if adkRunner != nil {
 		a2aSSEHandler := handler.NewA2ASSEHandler(adkRunner)
+		a2aSSEHandler.WithMatchContext(matchRepo, jobRepo)
 		r.POST("/api/a2a/chat", a2aSSEHandler.Chat)
 		log.Printf("A2A SSE endpoint registered at POST /api/a2a/chat")
 	}

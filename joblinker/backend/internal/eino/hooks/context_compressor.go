@@ -80,16 +80,16 @@ func (h *ContextCompressor) BeforeAgent(ctx context.Context, c *adk.ChatModelAge
 	return ctx, c, nil
 }
 
-func (h *ContextCompressor) BeforeModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (h *ContextCompressor) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (h *ContextCompressor) AfterModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (h *ContextCompressor) AfterModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (h *ContextCompressor) AfterAgent(_ context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
-	return nil, state, action, nil
+func (h *ContextCompressor) AfterAgent(ctx context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
+	return ctx, state, action, nil
 }
 
 // ResetMatch clears compression state for a match.

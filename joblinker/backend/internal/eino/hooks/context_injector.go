@@ -93,16 +93,16 @@ func (h *ContextInjector) BeforeAgent(ctx context.Context, c *adk.ChatModelAgent
 	return ctx, c, nil
 }
 
-func (h *ContextInjector) BeforeModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (h *ContextInjector) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (h *ContextInjector) AfterModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (h *ContextInjector) AfterModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (h *ContextInjector) AfterAgent(_ context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
-	return nil, state, action, nil
+func (h *ContextInjector) AfterAgent(ctx context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
+	return ctx, state, action, nil
 }
 
 // buildContextBlock formats match context as a prompt preamble.

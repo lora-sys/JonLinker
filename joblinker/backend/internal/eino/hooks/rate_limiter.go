@@ -111,16 +111,16 @@ func (r *RateLimiter) BeforeAgent(ctx context.Context, c *adk.ChatModelAgentCont
 	return ctx, c, nil
 }
 
-func (r *RateLimiter) BeforeModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (r *RateLimiter) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (r *RateLimiter) AfterModelRewriteState(_ context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
-	return nil, state, nil
+func (r *RateLimiter) AfterModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	return ctx, state, nil
 }
 
-func (r *RateLimiter) AfterAgent(_ context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
-	return nil, state, action, nil
+func (r *RateLimiter) AfterAgent(ctx context.Context, state *adk.ChatModelAgentState, action *adk.AgentAction) (context.Context, *adk.ChatModelAgentState, *adk.AgentAction, error) {
+	return ctx, state, action, nil
 }
 
 // ResetMatch clears rate limit state for a match (e.g., when match completes).
