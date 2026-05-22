@@ -71,6 +71,47 @@ func mockAIServer(t *testing.T) *httptest.Server {
 			},
 		}
 
+		// Support streaming (SSE) format — EinoChatModel.Generate uses DoChatStream
+		if reqBody.Stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			flusher, _ := w.(http.Flusher)
+
+			chunk := struct {
+				Choices []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+					Finish string `json:"finish_reason"`
+				} `json:"choices"`
+			}{
+				Choices: []struct {
+					Delta struct {
+						Content string `json:"content"`
+					} `json:"delta"`
+					Finish string `json:"finish_reason"`
+				}{
+					{
+						Delta: struct {
+							Content string `json:"content"`
+						}{Content: respText},
+						Finish: "stop",
+					},
+				},
+			}
+			chunkData, _ := json.Marshal(chunk)
+			fmt.Fprintf(w, "data: %s\n\n", chunkData)
+			if flusher != nil {
+				flusher.Flush()
+			}
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}))
