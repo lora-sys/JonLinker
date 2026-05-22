@@ -19,19 +19,27 @@ type AgentToolConfig struct {
 }
 
 var DefaultSeekerTools = map[string]ToolPermission{
-	"query_jobs":        {Enabled: true, RateLimit: 10, MaxRetries: 3},
-	"get_candidate":     {Enabled: true, RateLimit: 20, MaxRetries: 3},
-	"search_candidates": {Enabled: true, RateLimit: 10, MaxRetries: 2},
-	"create_offer":      {Enabled: false},
-	"schedule_interview": {Enabled: false},
+	"query_jobs":          {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_candidate":       {Enabled: true, RateLimit: 20, MaxRetries: 3},
+	"search_candidates":   {Enabled: false},
+	"create_offer":        {Enabled: false},
+	"schedule_interview":  {Enabled: false},
+	"get_match_progress":  {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_interview_details": {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_offer_details":   {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_user_profile":    {Enabled: true, RateLimit: 10, MaxRetries: 3},
 }
 
 var DefaultRecruiterTools = map[string]ToolPermission{
-	"search_candidates": {Enabled: true, RateLimit: 15, MaxRetries: 3},
-	"get_candidate":     {Enabled: true, RateLimit: 20, MaxRetries: 3},
-	"query_jobs":        {Enabled: false},
-	"create_offer":      {Enabled: true, RateLimit: 5, MaxRetries: 2},
-	"schedule_interview": {Enabled: true, RateLimit: 5, MaxRetries: 2},
+	"search_candidates":   {Enabled: true, RateLimit: 15, MaxRetries: 3},
+	"get_candidate":       {Enabled: true, RateLimit: 20, MaxRetries: 3},
+	"query_jobs":          {Enabled: false},
+	"create_offer":        {Enabled: true, RateLimit: 5, MaxRetries: 2},
+	"schedule_interview":  {Enabled: true, RateLimit: 5, MaxRetries: 2},
+	"get_match_progress":  {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_interview_details": {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_offer_details":   {Enabled: true, RateLimit: 10, MaxRetries: 3},
+	"get_user_profile":    {Enabled: true, RateLimit: 10, MaxRetries: 3},
 }
 
 func GetDefaultToolsForAgentType(agentType model.AgentType) map[string]ToolPermission {
@@ -88,6 +96,13 @@ func (c *AgentToolConfig) GetMaxRetries(toolName string) int {
 func (c *AgentToolConfig) ToJSON() string {
 	bytes, _ := json.Marshal(c)
 	return string(bytes)
+}
+
+// IsToolAllowed checks if a tool is permitted for a given agent type.
+func IsToolAllowed(toolName string, agentType model.AgentType) bool {
+	tools := GetDefaultToolsForAgentType(agentType)
+	perm, ok := tools[toolName]
+	return ok && perm.Enabled
 }
 
 type ToolDefinition struct {

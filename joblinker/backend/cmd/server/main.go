@@ -16,6 +16,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"joblinker/internal/cache"
+	"joblinker/internal/config"
 	"joblinker/internal/handler"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
@@ -201,11 +202,15 @@ func main() {
 			baseTools[i] = t
 		}
 
-		seekerAgent, err := agent.NewSeekerChatModelAgent(context.Background(), chatModel, baseTools)
+		seekerTools := filterTools(baseTools, model.AgentTypeSeeker)
+		recruiterTools := filterTools(baseTools, model.AgentTypeRecruiter)
+		log.Printf("Filtered tools: seeker=%d, recruiter=%d (of %d total)", len(seekerTools), len(recruiterTools), len(baseTools))
+
+		seekerAgent, err := agent.NewSeekerChatModelAgent(context.Background(), chatModel, seekerTools)
 		if err != nil {
 			log.Printf("WARNING: failed to create seeker ADK agent: %v", err)
 		} else {
-			recruiterAgent, err := agent.NewRecruiterChatModelAgent(context.Background(), chatModel, baseTools)
+			recruiterAgent, err := agent.NewRecruiterChatModelAgent(context.Background(), chatModel, recruiterTools)
 			if err != nil {
 				log.Printf("WARNING: failed to create recruiter ADK agent: %v", err)
 			} else {
@@ -221,7 +226,7 @@ func main() {
 					log.Printf("ADK Runner initialized with Supervisor + CheckPointStore")
 
 					// ── Phase 2: DeepAgent + Routing Supervisor ──
-					deepRunner := initDeepAgentAndRouting(context.Background(), chatModel, baseTools, adkRunner)
+					deepRunner := initDeepAgentAndRouting(context.Background(), chatModel, recruiterTools, adkRunner)
 
 					// A2A Deep SSE endpoint
 					if deepRunner != nil {
@@ -492,4 +497,19 @@ Use the routing supervisor for standard recruitment tasks.`
 
 	log.Printf("Phase 2 components: RoutingSupervisor + DeepAgent + HiringGraph initialized")
 	return deepRunner
+}
+
+// filterTools filters tool.BaseTool slice by agent type using config.IsToolAllowed.
+func filterTools(tools []tool.BaseTool, agentType model.AgentType) []tool.BaseTool {
+	var result []tool.BaseTool
+	for _, t := range tools {
+		info, err := t.Info(context.Background())
+		if err != nil {
+			continue
+		}
+		if config.IsToolAllowed(info.Name, agentType) {
+			result = append(result, t)
+		}
+	}
+	return result
 }
