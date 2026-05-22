@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -16,11 +17,11 @@ import (
 
 // QueryJobsInput represents input for the query_jobs tool
 type QueryJobsInput struct {
-	Location string   `json:"location"`
-	Skills   []string `json:"skills,omitempty"`
+	Location  string `json:"location"`
+	Skills    string `json:"skills,omitempty"`
 	SalaryMin int    `json:"salary_min,omitempty"`
-	JobType  string   `json:"job_type,omitempty"`
-	Limit    int      `json:"limit,omitempty"`
+	JobType   string `json:"job_type,omitempty"`
+	Limit     int    `json:"limit,omitempty"`
 }
 
 // QueryJobsOutput represents output from the query_jobs tool
@@ -40,10 +41,10 @@ type JobInfo struct {
 
 // SearchCandidatesInput represents input for the search_candidates tool
 type SearchCandidatesInput struct {
-	Skills        []string `json:"skills"`
-	Location      string   `json:"location,omitempty"`
-	ExperienceMin int      `json:"experience_min,omitempty"`
-	Limit         int      `json:"limit,omitempty"`
+	Skills        string `json:"skills"`
+	Location      string `json:"location,omitempty"`
+	ExperienceMin int    `json:"experience_min,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
 }
 
 // SearchCandidatesOutput represents output from search_candidates
@@ -253,7 +254,7 @@ func GetAllTools() []tool.InvokableTool {
 	sc := SearchCandidates(func(ctx context.Context, input SearchCandidatesInput) (SearchCandidatesOutput, error) {
 		return SearchCandidatesOutput{
 			Candidates: []CandidateInfo{
-				{ID: "cand-1", Name: "John Doe", Skills: input.Skills, Experience: 5, Location: input.Location},
+				{ID: "cand-1", Name: "John Doe", Skills: splitSkills(input.Skills), Experience: 5, Location: input.Location},
 			},
 		}, nil
 	})
@@ -294,7 +295,7 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 	tools := make([]tool.InvokableTool, 0)
 
 	qj := QueryJobs(func(ctx context.Context, input QueryJobsInput) (QueryJobsOutput, error) {
-		jobs, err := jobRepo.Search(ctx, "", input.Skills, input.Location, input.SalaryMin, "", input.Limit)
+		jobs, err := jobRepo.Search(ctx, "", splitSkills(input.Skills), input.Location, input.SalaryMin, "", input.Limit)
 		if err != nil {
 			return QueryJobsOutput{Jobs: []JobInfo{}}, nil
 		}
@@ -310,7 +311,7 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 	tools = append(tools, qj)
 
 	sc := SearchCandidates(func(ctx context.Context, input SearchCandidatesInput) (SearchCandidatesOutput, error) {
-		agents, err := agentRepo.SearchBySkills(ctx, input.Skills, input.Location, input.ExperienceMin, input.Limit)
+		agents, err := agentRepo.SearchBySkills(ctx, splitSkills(input.Skills), input.Location, input.ExperienceMin, input.Limit)
 		if err != nil {
 			return SearchCandidatesOutput{Candidates: []CandidateInfo{}}, nil
 		}
@@ -384,6 +385,9 @@ func NewRealTools(jobRepo *repository.JobRepository, agentRepo *repository.Agent
 	})
 	tools = append(tools, si)
 
+	// Phase 2: Custom database tools
+	tools = AddDBTools(tools, matchRepo, interviewRepo, offerRepo, agentRepo)
+
 	return tools
 }
 
@@ -429,6 +433,21 @@ func GetToolByName(name string) tool.InvokableTool {
 	default:
 		return nil
 	}
+}
+
+// splitSkills splits a comma-separated skills string into a slice
+func splitSkills(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var result []string
+	for _, part := range strings.Split(s, ",") {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 // ToolName constants

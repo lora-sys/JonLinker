@@ -1,6 +1,8 @@
 'use client'
 
-import { CheckCircle, Circle, Loader2, Wrench } from 'lucide-react'
+import { CheckCircle, Circle, Loader2, Wrench, XCircle } from 'lucide-react'
+
+import type { ToolCall } from '@/types/ai'
 
 export type FSMStage
   = | 'INTRODUCTION'
@@ -8,12 +10,6 @@ export type FSMStage
     | 'INTERVIEW'
     | 'OFFER'
     | 'COMPLETED'
-
-interface ToolCall {
-  name: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  cached?: boolean
-}
 
 interface FlowPanelProps {
   currentStage: FSMStage
@@ -43,7 +39,6 @@ function StageProgress({ currentStage }: { currentStage: FSMStage }) {
 
         return (
           <div key={stage.key} className="relative flex items-center gap-3">
-            {/* Progress bar line connecting stages */}
             {idx < STAGES.length - 1 && (
               <div className="absolute left-[10px] top-6 w-0.5 h-6 -mb-6">
                 <div className={`w-full h-full transition-all duration-500 ${
@@ -78,22 +73,30 @@ function StageProgress({ currentStage }: { currentStage: FSMStage }) {
   )
 }
 
+function statusIcon(status: ToolCall['status']) {
+  switch (status) {
+    case 'in_progress':
+      return <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+    case 'done':
+      return <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+    case 'error':
+      return <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+    default:
+      return <Circle className="w-4 h-4 text-gray-300 shrink-0" />
+  }
+}
+
 function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
   if (toolCalls.length === 0)
     return null
 
   return (
     <div className="space-y-2">
-      {toolCalls.map((tc, idx) => (
-        <div key={idx} className="flex items-center gap-2 text-sm">
+      {toolCalls.map(tc => (
+        <div key={tc.id} className="flex items-center gap-2 text-sm">
           <Wrench className="w-4 h-4 text-gray-400 shrink-0" />
-          <span className="flex-1 text-gray-700 truncate">{tc.name}</span>
-          {tc.status === 'completed' && <CheckCircle className="w-4 h-4 text-green-500" />}
-          {tc.status === 'running' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
-          {tc.status === 'failed' && <Circle className="w-4 h-4 text-red-500" />}
-          {tc.cached && (
-            <span className="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">cached</span>
-          )}
+          <span className="flex-1 text-gray-700 truncate">{tc.toolName}</span>
+          {statusIcon(tc.status)}
         </div>
       ))}
     </div>
@@ -103,7 +106,6 @@ function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
 export function FlowPanel({ currentStage, toolCalls = [], className = '' }: FlowPanelProps) {
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* FSM Stage Badge */}
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Stage</h3>
         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
@@ -111,13 +113,11 @@ export function FlowPanel({ currentStage, toolCalls = [], className = '' }: Flow
         </span>
       </div>
 
-      {/* Progress */}
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Progress</h3>
         <StageProgress currentStage={currentStage} />
       </div>
 
-      {/* Tool Calls */}
       {toolCalls.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Tool Calls</h3>

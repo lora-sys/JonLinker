@@ -6,6 +6,7 @@ import { useChat } from '@ai-sdk/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { MatchStatus } from '@/types'
+import type { ToolCall } from '@/types/ai'
 
 import { apiClient } from '@/lib/api_client'
 import { buildMatchWSUrl } from '@/lib/websocket'
@@ -65,6 +66,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
   const [sessionStatus, setSessionStatus] = useState<'active' | 'concluded' | undefined>(undefined)
   const [sessionSummary] = useState<string | undefined>(undefined)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
+  const [toolCalls, setToolCalls] = useState<ToolCall[]>([])
 
   const loadInitialMessagesRef = useRef(false)
   const initialLoadAttemptedRef = useRef(false)
@@ -270,8 +272,33 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             })
             break
           }
-          case 'adk_tool_call':
+          case 'adk_tool_call_start': {
+            const toolName = String(data.tool_name || '')
+            const callId = String(data.call_id || crypto.randomUUID())
+            const args = data.arguments || {}
+            setToolCalls(prev => [...prev, {
+              id: callId,
+              toolName,
+              args: args as Record<string, unknown>,
+              status: 'in_progress',
+            }])
             break
+          }
+          case 'adk_tool_call': {
+            const callId = String(data.call_id || '')
+            const status = String(data.status || 'done')
+            setToolCalls(prev => prev.map(tc =>
+              tc.id === callId
+                ? {
+                    ...tc,
+                    status: status === 'completed' ? 'done' : 'error',
+                    result: data.result ?? undefined,
+                    error: String(data.error || ''),
+                  }
+                : tc,
+            ))
+            break
+          }
           case 'adk_error':
             break
           case 'human_rejected':
@@ -296,6 +323,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
             break
           case 'session_reopened':
             setMessages([])
+            setToolCalls([])
             if (data.version != null) {
               setSessionVersion(Number(data.version))
             }
@@ -398,6 +426,7 @@ export function useAIChat({ matchId, enabled = true }: UseAIChatOptions) {
     pendingConfirm,
     handleHumanConfirm,
     handleReopen,
+    toolCalls,
   }
 }
 

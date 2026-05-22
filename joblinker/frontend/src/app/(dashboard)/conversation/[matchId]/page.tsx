@@ -17,6 +17,13 @@ import {
   MessageResponse,
 } from '@/components/ai-elements/message'
 import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool'
+import {
   PromptInput,
   PromptInputProvider,
   PromptInputSubmit,
@@ -55,6 +62,7 @@ export default function ConversationPage({ params }: PageProps) {
     pendingConfirm,
     handleHumanConfirm,
     handleReopen,
+    toolCalls,
   } = useAIChat({ matchId })
 
   // Load interview/offer cards
@@ -184,13 +192,31 @@ export default function ConversationPage({ params }: PageProps) {
                         if (part.type === 'reasoning') {
                           return null
                         }
-                        if (part.type === 'tool-invocation') {
-                          return null
-                        }
                         return null
                       })}
                     </MessageContent>
                   </Message>
+                ))}
+
+                {toolCalls.map(tc => (
+                  <div key={tc.id} className="w-full max-w-[95%]">
+                    <Tool defaultOpen={false}>
+                      <ToolHeader
+                        toolName={tc.toolName}
+                        type="dynamic-tool"
+                        state={tc.status === 'done' ? 'output-available' : tc.status === 'error' ? 'output-error' : 'input-available'}
+                      />
+                      <ToolContent>
+                        <ToolInput input={tc.args} />
+                        {tc.result != null ? (
+                          <ToolOutput output={tc.result as string} errorText={undefined} />
+                        ) : null}
+                        {tc.error ? (
+                          <ToolOutput output={null} errorText={tc.error} />
+                        ) : null}
+                      </ToolContent>
+                    </Tool>
+                  </div>
                 ))}
               </ConversationContent>
               <ConversationScrollButton />
@@ -224,7 +250,7 @@ export default function ConversationPage({ params }: PageProps) {
                       <PanelRightClose className="w-4 h-4" />
                     </button>
                   </div>
-                  <FlowPanel currentStage={fsmStage} />
+                  <FlowPanel currentStage={fsmStage} toolCalls={toolCalls} />
                   <div className="mt-4">
                     <SummaryPanel matchId={matchId} />
                   </div>
@@ -259,7 +285,7 @@ export default function ConversationPage({ params }: PageProps) {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <FlowPanel currentStage={fsmStage} />
+                <FlowPanel currentStage={fsmStage} toolCalls={toolCalls} />
                 <div className="mt-4">
                   <SummaryPanel matchId={matchId} />
                 </div>

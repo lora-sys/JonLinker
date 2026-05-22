@@ -32,7 +32,9 @@ import (
 	"joblinker/internal/eino/tools"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/adk/filesystem"
 	"github.com/cloudwego/eino/components/tool"
+	localbk "github.com/cloudwego/eino-ext/adk/backend/local"
 )
 
 func getEnv(key, fallback string) string {
@@ -219,7 +221,14 @@ func main() {
 					log.Printf("ADK Runner initialized with Supervisor + CheckPointStore")
 
 					// ── Phase 2: DeepAgent + Routing Supervisor ──
-					initDeepAgentAndRouting(context.Background(), chatModel, baseTools, adkRunner)
+					deepRunner := initDeepAgentAndRouting(context.Background(), chatModel, baseTools, adkRunner)
+
+					// A2A Deep SSE endpoint
+					if deepRunner != nil {
+						a2aDeepHandler := handler.NewA2ASSEHandler(deepRunner)
+						r.POST("/api/a2a/deep/chat", a2aDeepHandler.Chat)
+						log.Printf("A2A Deep SSE endpoint registered at POST /api/a2a/deep/chat")
+					}
 				}
 			}
 		}
@@ -419,48 +428,58 @@ log.Printf("Server starting on :%s", port)
 //
 // This augments the basic A2A supervisor with intent-based routing and
 // deep task decomposition capabilities.
-func initDeepAgentAndRouting(ctx context.Context, chatModel *chatmodel.EinoChatModel, baseTools []tool.BaseTool, adkRunner *eino_runner.ADKRunner) {
+func initDeepAgentAndRouting(ctx context.Context, chatModel *chatmodel.EinoChatModel, baseTools []tool.BaseTool, adkRunner *eino_runner.ADKRunner) *eino_runner.ADKRunner {
 	// Create workflow agents for routing supervisor
 	screeningAgent, err := agent.NewScreeningAgent(ctx, chatModel, baseTools)
 	if err != nil {
 		log.Printf("WARNING: failed to create screening agent: %v", err)
-		return
+		return nil
 	}
 
 	interviewAgent, err := agent.NewInterviewAgent(ctx, chatModel, baseTools)
 	if err != nil {
 		log.Printf("WARNING: failed to create interview agent: %v", err)
-		return
+		return nil
 	}
 
 	offerAgent, err := agent.NewOfferAgent(ctx, chatModel, baseTools)
 	if err != nil {
 		log.Printf("WARNING: failed to create offer agent: %v", err)
-		return
+		return nil
 	}
 
 	generalAgent, err := agent.NewGeneralRecruiterAgent(ctx, chatModel, baseTools)
 	if err != nil {
 		log.Printf("WARNING: failed to create general recruiter agent: %v", err)
-		return
+		return nil
 	}
 
 	// Create routing supervisor (intent-based delegation)
 	routingSupervisor, err := agent.NewRoutingSupervisor(ctx, screeningAgent, interviewAgent, offerAgent, generalAgent)
 	if err != nil {
 		log.Printf("WARNING: failed to create routing supervisor: %v", err)
-		return
+		return nil
 	}
 	log.Printf("Routing Supervisor initialized with screening/interview/offer/general agents")
+
+	// Initialize LocalBackend for filesystem access (read_file, write_file, etc.)
+	var backend filesystem.Backend
+	localBackend, err := localbk.NewBackend(ctx, &localbk.Config{})
+	if err != nil {
+		log.Printf("WARNING: failed to create LocalBackend: %v", err)
+	} else {
+		backend = localBackend
+		log.Printf("LocalBackend created for DeepAgent filesystem tools")
+	}
 
 	// Create DeepAgent for task decomposition (wraps the routing supervisor as a sub-agent)
 	deepInstruction := `You are a deep recruiting agent that decomposes complex hiring tasks into steps.
 For each user request, break it down into sub-tasks and delegate to the appropriate sub-agent.
 Use the routing supervisor for standard recruitment tasks.`
-	deepRecruiter, err := agent.NewDeepRecruiterAgent(ctx, chatModel, deepInstruction, []adk.Agent{routingSupervisor})
+	deepRecruiter, err := agent.NewDeepRecruiterAgent(ctx, chatModel, deepInstruction, []adk.Agent{routingSupervisor}, baseTools, backend)
 	if err != nil {
 		log.Printf("WARNING: failed to create deep recruiter: %v", err)
-		return
+		return nil
 	}
 	log.Printf("DeepRecruiterAgent initialized with routing supervisor as sub-agent")
 
@@ -471,10 +490,6 @@ Use the routing supervisor for standard recruitment tasks.`
 	deepRunner := eino_runner.NewADKRunner(ctx, deepRecruiter, deepCpStore)
 	log.Printf("DeepAgent Runner initialized")
 
-	// Route the DeepAgent through the existing A2A SSE handler
-	_ = deepRunner
-	// In a full integration, we'd register deepRunner as a new SSE endpoint:
-	//   a2aDeepHandler := handler.NewA2ASSEHandler(deepRunner)
-	//   r.POST("/api/a2a/deep/chat", a2aDeepHandler.Chat)
 	log.Printf("Phase 2 components: RoutingSupervisor + DeepAgent + HiringGraph initialized")
+	return deepRunner
 }

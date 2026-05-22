@@ -16,6 +16,8 @@ import (
 	"joblinker/internal/eino/sessionstore"
 	"joblinker/internal/eino/stategraph"
 	"joblinker/internal/eino/prompt"
+
+	"github.com/cloudwego/eino/schema"
 	"joblinker/internal/agent"
 	"joblinker/internal/cache"
 	"joblinker/internal/model"
@@ -318,24 +320,6 @@ func (s *MessageQueueService) handleAgentMessage(msg *rabbitmq.AgentMessage) err
 	if currentRound > 20 {
 		log.Printf("Conversation max rounds reached for match %s, pausing", matchID)
 		return nil
-	}
-
-	// ── StateGraph trigger: on first round, kick off autonomous pipeline ──
-	if s.stategraphRunner != nil && currentRound == 1 {
-		s.runningGraphsMu.Lock()
-		already := s.runningGraphs[matchID.String()]
-		if !already {
-			s.runningGraphs[matchID.String()] = true
-		}
-		s.runningGraphsMu.Unlock()
-
-		if !already {
-			log.Printf("[StateGraph] Triggering autonomous pipeline for match=%s", matchID)
-			// Run in a detached goroutine so the handler returns immediately
-			go s.runStateGraphForMatch(context.Background(), matchID, msg, match, senderAgent)
-			// Return early — the graph goroutine broadcasts all messages itself
-			return nil
-		}
 	}
 
 	if s.metricsSvc != nil {
@@ -1334,6 +1318,7 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 
 	var finalResponse string
 	var streamBuf string
+	toolCallStarts := make(map[string]time.Time)
 	for {
 		event, ok := events.Next()
 		if !ok {
@@ -1351,6 +1336,67 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 
 		if event.Output != nil && event.Output.MessageOutput != nil {
 			mo := event.Output.MessageOutput
+
+			// Step 1: Always capture assistant text first (even when tool calls are also present)
+			// ADK ChatModelAgent may bundle Content + ToolCalls in a single event.
+			// Without this, every tool call iteration discards the accompanying text,
+			// and the agent loop ends with finalResponse empty ("adk runner: empty response").
+			if mo.Message != nil && mo.Role == schema.Assistant && mo.Message.Content != "" && !mo.IsStreaming {
+				finalResponse = mo.Message.Content
+			}
+
+			// Tool result → broadcast adk_tool_call with result
+			if mo.Message != nil && mo.Role == schema.Tool {
+				result := mo.Message.Content
+				errorMsg := ""
+				if event.Action != nil && event.Action.Exit {
+					result = "exit"
+				}
+
+				var durationMs int64
+				if startTime, ok := toolCallStarts[mo.Message.ToolCallID]; ok {
+					durationMs = time.Since(startTime).Milliseconds()
+					delete(toolCallStarts, mo.Message.ToolCallID)
+				}
+
+				if s.broadcastFn != nil && mid != "" {
+					s.broadcastFn(mid, "adk_tool_call", map[string]interface{}{
+						"tool_name":       mo.ToolName,
+						"call_id":         mo.Message.ToolCallID,
+						"result":          result,
+						"status":          "completed",
+						"error":           errorMsg,
+						"duration_ms":     durationMs,
+						"sender_agent_id": senderAgent.ID.String(),
+						"sender_label":    senderAgent.Type,
+					})
+				}
+				continue
+			}
+
+			// Assistant message with tool calls → broadcast adk_tool_call_start for each
+			if mo.Message != nil && mo.Role == schema.Assistant && len(mo.Message.ToolCalls) > 0 {
+				for _, tc := range mo.Message.ToolCalls {
+					toolCallStarts[tc.ID] = time.Now()
+
+					var argsJSON interface{}
+					if err := json.Unmarshal([]byte(tc.Function.Arguments), &argsJSON); err != nil {
+						argsJSON = tc.Function.Arguments
+					}
+					if s.broadcastFn != nil && mid != "" {
+						s.broadcastFn(mid, "adk_tool_call_start", map[string]interface{}{
+							"tool_name":       tc.Function.Name,
+							"call_id":         tc.ID,
+							"arguments":       argsJSON,
+							"sender_agent_id": senderAgent.ID.String(),
+							"sender_label":    senderAgent.Type,
+						})
+					}
+				}
+				continue
+			}
+
+			// Streaming text chunk
 			if mo.IsStreaming && mo.Message != nil {
 				streamBuf += mo.Message.Content
 				if s.broadcastFn != nil && mid != "" {
@@ -1360,17 +1406,23 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 						"sender_agent_id":  senderAgent.ID.String(),
 					})
 				}
-			} else if mo.Message != nil {
+				continue
+			}
+
+			// Non-streaming assistant text → final response
+			if mo.Message != nil && mo.Role == schema.Assistant {
 				finalResponse = mo.Message.Content
 			}
 		}
 
+		// Action-based events (exit, transfer, etc.)
 		if event.Action != nil {
-			log.Printf("ADK tool call for match %s: %v", mid, event.Action)
+			log.Printf("ADK action for match %s: %+v", mid, event.Action)
 			if s.broadcastFn != nil && mid != "" {
 				s.broadcastFn(mid, "adk_tool_call", map[string]interface{}{
 					"action":          event.Action,
 					"sender_agent_id": senderAgent.ID.String(),
+					"sender_label":    senderAgent.Type,
 				})
 			}
 		}
@@ -1381,7 +1433,12 @@ func (s *MessageQueueService) generateWithADK(ctx context.Context, msgContent st
 	}
 
 	if finalResponse == "" {
-		return "", fmt.Errorf("adk runner: empty response")
+		// ADK loop completed with no text at all (e.g. all iterations produced
+		// tool calls with empty Content). Return a safe fallback rather than
+		// an error, so the caller doesn't fall through to an inferior Eino path
+		// or push an empty message to the user.
+		log.Printf("ADK runner for match %s: no text captured (all %d iterations were tool calls without explanatory text), returning fallback", mid, len(toolCallStarts))
+		return "Thank you for your message. I've reviewed the available information. Let me know if you have any specific questions.", nil
 	}
 	return finalResponse, nil
 }

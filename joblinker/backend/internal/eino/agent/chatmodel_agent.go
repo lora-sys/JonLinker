@@ -24,7 +24,7 @@ func NewChatModelAgent(ctx context.Context, name string, description string, sys
 				Tools: tools,
 			},
 		},
-		MaxIterations: 20,
+		MaxIterations: 5,
 	}
 
 	a, err := adk.NewChatModelAgent(ctx, cfg)
