@@ -17,7 +17,6 @@ import (
 	"gorm.io/gorm"
 	"joblinker/internal/cache"
 	"joblinker/internal/config"
-	"joblinker/internal/handler"
 	"joblinker/internal/transport/rest"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
@@ -244,7 +243,7 @@ func main() {
 
 					// A2A Deep SSE endpoint with match context injection
 					if deepRunner != nil {
-						a2aDeepHandler := handler.NewA2ASSEHandler(deepRunner)
+					a2aDeepHandler := rest.NewA2ASSEHandler(deepRunner)
 						a2aDeepHandler.WithMatchContext(matchRepo, jobRepo)
 						r.POST("/api/a2a/deep/chat", a2aDeepHandler.Chat)
 						log.Printf("A2A Deep SSE endpoint registered at POST /api/a2a/deep/chat")
@@ -293,8 +292,8 @@ func main() {
 	interviewHandler := rest.NewInterviewHandler(interviewSvc)
 	offerHandler := rest.NewOfferHandler(offerSvc)
 	privacyHandler := rest.NewPrivacyHandler(privacySvc)
-	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
-	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
+	messageHandler := rest.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
+	a2aHandler := rest.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
 	resumeHandler := rest.NewResumeHandler(adapters.NewAIClient())
 
 	// Wire Eino Runner + ADK Runner + Broadcast to MessageQueueService
@@ -447,7 +446,7 @@ func main() {
 
 	// A2A SSE endpoint (ADK Runner streaming)
 	if adkRunner != nil {
-		a2aSSEHandler := handler.NewA2ASSEHandler(adkRunner)
+		a2aSSEHandler := rest.NewA2ASSEHandler(adkRunner)
 		a2aSSEHandler.WithMatchContext(matchRepo, jobRepo)
 		r.POST("/api/a2a/chat", a2aSSEHandler.Chat)
 		log.Printf("A2A SSE endpoint registered at POST /api/a2a/chat")
