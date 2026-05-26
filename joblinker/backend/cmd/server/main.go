@@ -182,7 +182,7 @@ func main() {
 	}
 
 	privacySvc := service.NewPrivacyService(userRepo, agentRepo, matchRepo, messageRepo, interviewRepo, offerRepo)
-	adminHandler := handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
+	adminHandler := rest.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	// Initialize Eino Agent Runner (for T029 integration)
 	aiClient := ai.NewClient()
@@ -296,7 +296,6 @@ func main() {
 	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
 	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
 	resumeHandler := rest.NewResumeHandler(adapters.NewAIClient())
-	adminHandler = handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	// Wire Eino Runner + ADK Runner + Broadcast to MessageQueueService
 	if mqSvc != nil {
