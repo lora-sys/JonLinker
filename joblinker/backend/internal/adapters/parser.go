@@ -85,28 +85,33 @@ func (p *ResumeParser) parseTextReader(r io.Reader) (*ParsedResume, error) {
 	return p.parseText(string(data)), nil
 }
 
-func (p *ResumeParser) parsePDF(filePath string) (*ParsedResume, error) {
+func (p *ResumeParser) parsePDF(filePath string) *ParsedResume {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return p.parseText("")
 	}
-	return p.parsePDFReader(string(data)), nil
+	return p.parsePDFBytes(data)
 }
 
 func (p *ResumeParser) parsePDFReader(data io.Reader) (*ParsedResume, error) {
-	raw, err := io.ReadAll(data)
+	var buf strings.Builder
+	_, err := io.Copy(&buf, data)
 	if err != nil {
 		return nil, err
 	}
-	return p.parsePDFReader(string(raw)), nil
+	return p.parsePDFString(buf.String()), nil
 }
 
-func (p *ResumeParser) parsePDFReader(s string) (*ParsedResume, error) {
+func (p *ResumeParser) parsePDFBytes(data []byte) *ParsedResume {
+	return p.parsePDFString(string(data))
+}
+
+func (p *ResumeParser) parsePDFString(s string) *ParsedResume {
 	text := extractPDFText(s)
 	if text == "" {
-		return nil, fmt.Errorf("could not extract text from PDF")
+		return p.parseText("")
 	}
-	return p.parseText(text), nil
+	return p.parseText(text)
 }
 
 func extractPDFText(s string) string {
