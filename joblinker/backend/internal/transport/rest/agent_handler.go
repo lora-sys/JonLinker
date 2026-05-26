@@ -1,32 +1,38 @@
-package handler
+package rest
 
 import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
 
+	"joblinker/internal/adapters"
 	"joblinker/internal/model"
 	"joblinker/internal/service"
-	"joblinker/pkg/parser"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
+// AgentHandler handles agent CRUD endpoints.
 type AgentHandler struct {
-	svc *service.AgentService
+	svc    *service.AgentService
+	parser *adapters.ResumeParser
 }
 
-func NewAgentHandler(svc *service.AgentService) *AgentHandler {
-	return &AgentHandler{svc: svc}
+// NewAgentHandler creates a new AgentHandler.
+// It uses the new adapters layer, replacing direct pkg/parser dependency.
+func NewAgentHandler(svc *service.AgentService, parser *adapters.ResumeParser) *AgentHandler {
+	return &AgentHandler{svc: svc, parser: parser}
 }
 
+// CreateAgentRequest is the JSON payload for creating an agent.
 type CreateAgentRequest struct {
 	Type       string `json:"type" binding:"required,oneof=seeker recruiter"`
 	ConfigJSON string `json:"config"`
-	ResumeURL  string `json:"resume_url"` // URL to resume file for parsing
+	ResumeURL  string `json:"resume_url"`
 }
 
+// Create handles POST /api/agents.
 func (h *AgentHandler) Create(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 	var req CreateAgentRequest
@@ -35,17 +41,14 @@ func (h *AgentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// If resume URL provided, parse it to extract skills
 	if req.ResumeURL != "" {
-		resumeParser := parser.NewResumeParser()
-		parsedResume, err := resumeParser.ParseFromURL(req.ResumeURL)
+		parsedResume, err := h.parser.ParseFromURL(req.ResumeURL)
 		if err == nil && parsedResume != nil {
-			// Add parsed resume data to config
 			config := map[string]interface{}{
 				"resume_parsed": true,
 				"skills":        parsedResume.Skills,
 				"experience":    parsedResume.Experience,
-				"education":    parsedResume.Education,
+				"education":     parsedResume.Education,
 			}
 			if req.ConfigJSON != "" {
 				var existing map[string]interface{}
@@ -68,6 +71,7 @@ func (h *AgentHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, agent)
 }
 
+// Get handles GET /api/agents/:id.
 func (h *AgentHandler) Get(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	agent, err := h.svc.GetAgent(id)
@@ -78,6 +82,7 @@ func (h *AgentHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, agent)
 }
 
+// List handles GET /api/agents.
 func (h *AgentHandler) List(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 	agents, err := h.svc.ListUserAgents(userID)
@@ -88,6 +93,7 @@ func (h *AgentHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, agents)
 }
 
+// Update handles PATCH /api/agents/:id.
 func (h *AgentHandler) Update(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	var updates map[string]interface{}
@@ -103,6 +109,7 @@ func (h *AgentHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, agent)
 }
 
+// Delete handles DELETE /api/agents/:id.
 func (h *AgentHandler) Delete(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	if err := h.svc.DeleteAgent(id); err != nil {
@@ -112,11 +119,13 @@ func (h *AgentHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusNoContent, nil)
 }
 
+// ParseResumeRequest is the JSON payload for parsing a resume.
 type ParseResumeRequest struct {
 	URL      string `json:"url"`
 	FilePath string `json:"file_path"`
 }
 
+// ParseResume handles POST /api/resume/parse.
 func (h *AgentHandler) ParseResume(c *gin.Context) {
 	var req ParseResumeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -124,14 +133,13 @@ func (h *AgentHandler) ParseResume(c *gin.Context) {
 		return
 	}
 
-	resumeParser := parser.NewResumeParser()
-	var parsed *parser.ParsedResume
+	var parsed *adapters.ParsedResume
 	var err error
 
 	if req.URL != "" {
-		parsed, err = resumeParser.ParseFromURL(req.URL)
+		parsed, err = h.parser.ParseFromURL(req.URL)
 	} else if req.FilePath != "" {
-		parsed, err = resumeParser.ParseFile(req.FilePath)
+		parsed, err = h.parser.ParseFile(req.FilePath)
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Either url or file_path is required"})
 		return

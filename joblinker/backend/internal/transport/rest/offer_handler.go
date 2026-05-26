@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"net/http"
@@ -10,14 +10,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// OfferHandler handles offer CRUD endpoints.
 type OfferHandler struct {
 	svc *service.OfferService
 }
 
+// NewOfferHandler creates a new OfferHandler.
 func NewOfferHandler(svc *service.OfferService) *OfferHandler {
 	return &OfferHandler{svc: svc}
 }
 
+// List handles GET /api/offers.
 func (h *OfferHandler) List(c *gin.Context) {
 	offers, total, err := h.svc.ListAll(100, 0)
 	if err != nil {
@@ -27,6 +30,7 @@ func (h *OfferHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"offers": offers, "total": total})
 }
 
+// Create handles POST /api/offers.
 func (h *OfferHandler) Create(c *gin.Context) {
 	var req struct {
 		MatchID         string `json:"match_id" binding:"required"`
@@ -50,6 +54,7 @@ func (h *OfferHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, offer)
 }
 
+// Get handles GET /api/offers/item/:id.
 func (h *OfferHandler) Get(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	offer, err := h.svc.GetOffer(id)
@@ -60,6 +65,40 @@ func (h *OfferHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, offer)
 }
 
+// GetByMatchID handles GET /api/offers/:matchId.
+func (h *OfferHandler) GetByMatchID(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	offer, err := h.svc.GetOfferByMatchID(matchID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Offer not found"})
+		return
+	}
+	c.JSON(http.StatusOK, offer)
+}
+
+// Accept handles POST /api/offers/:matchId/accept.
+func (h *OfferHandler) Accept(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	offer, err := h.svc.AcceptOffer(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept offer"})
+		return
+	}
+	c.JSON(http.StatusOK, offer)
+}
+
+// Decline handles POST /api/offers/:matchId/decline.
+func (h *OfferHandler) Decline(c *gin.Context) {
+	matchID := uuid.MustParse(c.Param("matchId"))
+	offer, err := h.svc.DeclineOffer(matchID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decline offer"})
+		return
+	}
+	c.JSON(http.StatusOK, offer)
+}
+
+// Respond handles POST /api/offers/item/:id/respond.
 func (h *OfferHandler) Respond(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	var req struct {
@@ -73,36 +112,6 @@ func (h *OfferHandler) Respond(c *gin.Context) {
 	offer, err := h.svc.RespondToOffer(id, req.Response, req.CounterAmount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to respond to offer"})
-		return
-	}
-	c.JSON(http.StatusOK, offer)
-}
-
-func (h *OfferHandler) GetByMatchID(c *gin.Context) {
-	matchID := uuid.MustParse(c.Param("matchId"))
-	offer, err := h.svc.GetOfferByMatchID(matchID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Offer not found"})
-		return
-	}
-	c.JSON(http.StatusOK, offer)
-}
-
-func (h *OfferHandler) Accept(c *gin.Context) {
-	matchID := uuid.MustParse(c.Param("matchId"))
-	offer, err := h.svc.AcceptOffer(matchID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to accept offer"})
-		return
-	}
-	c.JSON(http.StatusOK, offer)
-}
-
-func (h *OfferHandler) Decline(c *gin.Context) {
-	matchID := uuid.MustParse(c.Param("matchId"))
-	offer, err := h.svc.DeclineOffer(matchID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decline offer"})
 		return
 	}
 	c.JSON(http.StatusOK, offer)

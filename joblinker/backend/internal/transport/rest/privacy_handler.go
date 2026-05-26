@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"net/http"
@@ -9,14 +9,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// PrivacyHandler handles data privacy/GDPR endpoints.
 type PrivacyHandler struct {
 	svc *service.PrivacyService
 }
 
+// NewPrivacyHandler creates a new PrivacyHandler.
 func NewPrivacyHandler(svc *service.PrivacyService) *PrivacyHandler {
 	return &PrivacyHandler{svc: svc}
 }
 
+// Export handles POST /api/privacy/export.
 func (h *PrivacyHandler) Export(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 	data, err := h.svc.ExportUserData(userID)
@@ -27,6 +30,7 @@ func (h *PrivacyHandler) Export(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+// DeleteAccount handles DELETE /api/privacy/account.
 func (h *PrivacyHandler) DeleteAccount(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 	if err := h.svc.DeleteUserAccount(userID); err != nil {

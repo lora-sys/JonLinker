@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"net/http"
@@ -10,14 +10,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// InterviewHandler handles interview CRUD endpoints.
 type InterviewHandler struct {
 	svc *service.InterviewService
 }
 
+// NewInterviewHandler creates a new InterviewHandler.
 func NewInterviewHandler(svc *service.InterviewService) *InterviewHandler {
 	return &InterviewHandler{svc: svc}
 }
 
+// List handles GET /api/interviews.
 func (h *InterviewHandler) List(c *gin.Context) {
 	interviews, total, err := h.svc.ListAll(100, 0)
 	if err != nil {
@@ -27,6 +30,7 @@ func (h *InterviewHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"interviews": interviews, "total": total})
 }
 
+// Create handles POST /api/interviews.
 func (h *InterviewHandler) Create(c *gin.Context) {
 	var req struct {
 		MatchID     string `json:"match_id" binding:"required"`
@@ -47,6 +51,7 @@ func (h *InterviewHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, interview)
 }
 
+// Update handles PATCH /api/interviews/:id.
 func (h *InterviewHandler) Update(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	var updates map[string]interface{}
@@ -62,6 +67,7 @@ func (h *InterviewHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, interview)
 }
 
+// GetByMatchID handles GET /api/interviews/match/:matchId.
 func (h *InterviewHandler) GetByMatchID(c *gin.Context) {
 	matchID := uuid.MustParse(c.Param("matchId"))
 	interview, err := h.svc.GetInterviewByMatchID(matchID)
@@ -72,6 +78,7 @@ func (h *InterviewHandler) GetByMatchID(c *gin.Context) {
 	c.JSON(http.StatusOK, interview)
 }
 
+// Confirm handles POST /api/interviews/:matchId/confirm.
 func (h *InterviewHandler) Confirm(c *gin.Context) {
 	matchID := uuid.MustParse(c.Param("matchId"))
 	interview, err := h.svc.ConfirmInterview(matchID)
@@ -82,6 +89,7 @@ func (h *InterviewHandler) Confirm(c *gin.Context) {
 	c.JSON(http.StatusOK, interview)
 }
 
+// Cancel handles POST /api/interviews/:matchId/cancel.
 func (h *InterviewHandler) Cancel(c *gin.Context) {
 	matchID := uuid.MustParse(c.Param("matchId"))
 	interview, err := h.svc.CancelInterview(matchID)

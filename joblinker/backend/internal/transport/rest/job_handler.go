@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"encoding/json"
@@ -11,20 +11,34 @@ import (
 	"github.com/google/uuid"
 )
 
+// JobHandler handles job CRUD endpoints.
 type JobHandler struct {
 	jobRepo   *repository.JobRepository
 	agentRepo *repository.AgentRepository
 }
 
+// NewJobHandler creates a new JobHandler.
 func NewJobHandler(jobRepo *repository.JobRepository, agentRepo *repository.AgentRepository) *JobHandler {
 	return &JobHandler{jobRepo: jobRepo, agentRepo: agentRepo}
 }
 
+// CreateJobRequest is the JSON payload for creating a job.
 type CreateJobRequest struct {
 	StructuredJSON string `json:"structured" binding:"required"`
 	VectorID       string `json:"vector_id"`
 }
 
+// List handles GET /api/jobs.
+func (h *JobHandler) List(c *gin.Context) {
+	jobs, _, err := h.jobRepo.ListAll(100, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list jobs"})
+		return
+	}
+	c.JSON(http.StatusOK, jobs)
+}
+
+// Create handles POST /api/jobs.
 func (h *JobHandler) Create(c *gin.Context) {
 	userID := uuid.MustParse(c.GetString("userID"))
 	var req CreateJobRequest
@@ -57,6 +71,7 @@ func (h *JobHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, job)
 }
 
+// Get handles GET /api/jobs/:id.
 func (h *JobHandler) Get(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	job, err := h.jobRepo.GetByID(id)
@@ -67,15 +82,7 @@ func (h *JobHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, job)
 }
 
-func (h *JobHandler) List(c *gin.Context) {
-	jobs, _, err := h.jobRepo.ListAll(100, 0)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list jobs"})
-		return
-	}
-	c.JSON(http.StatusOK, jobs)
-}
-
+// Update handles PATCH /api/jobs/:id.
 func (h *JobHandler) Update(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	job, err := h.jobRepo.GetByID(id)
@@ -98,6 +105,7 @@ func (h *JobHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, job)
 }
 
+// Delete handles DELETE /api/jobs/:id.
 func (h *JobHandler) Delete(c *gin.Context) {
 	id := uuid.MustParse(c.Param("id"))
 	if err := h.jobRepo.Delete(id); err != nil {
