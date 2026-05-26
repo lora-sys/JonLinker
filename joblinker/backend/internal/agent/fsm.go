@@ -2,10 +2,13 @@ package agent
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+var ErrInvalidTransition = errors.New("invalid transition")
 
 type State string
 
@@ -39,6 +42,7 @@ const (
 )
 
 type FSM struct {
+	mu      sync.Mutex
 	agentID uuid.UUID
 	state   State
 	history []State
@@ -53,31 +57,32 @@ func NewFSM(agentID uuid.UUID) *FSM {
 }
 
 func (f *FSM) SetState(state State) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.state = state
 }
 
 func (f *FSM) CurrentState() State {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.state
 }
 
 func (f *FSM) CanHandle(event Event) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	transitions := getTransitionsForState(f.state)
 	_, exists := transitions[event]
 	return exists
 }
 
 func (f *FSM) Handle(event Event) error {
-	// Special case for Resume from Paused - return to previous state
-	if f.state == StatePaused && event == EventResume {
-		f.state = f.getPreviousState()
-		f.history = append(f.history, f.state)
-		return nil
-	}
-
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	transitions := getTransitionsForState(f.state)
 	nextState, exists := transitions[event]
 	if !exists {
-		return errors.New("invalid transition")
+		return ErrInvalidTransition
 	}
 
 	f.state = nextState
@@ -122,6 +127,12 @@ func getTransitionsForState(state State) map[Event]State {
 			EventOfferAccepted: StateHired,
 			EventOfferDeclined: StateRejected,
 			EventNegotiate:     StateNegotiating,
+		}
+	case StatePaused:
+		return map[Event]State{
+			EventResume:   StateSearching,
+			EventRejected: StateRejected,
+			EventTimeout:  StateIdle,
 		}
 	default:
 		return map[Event]State{}

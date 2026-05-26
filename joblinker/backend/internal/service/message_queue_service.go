@@ -998,7 +998,10 @@ func (s *MessageQueueService) createConfirmationRequest(matchID uuid.UUID, inten
 
 	payloadStr := "{}"
 	if payload != nil {
-		if b, err := json.Marshal(payload); err == nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			log.Printf("Warning: failed to marshal confirmation payload: %v", err)
+		} else {
 			payloadStr = string(b)
 		}
 	}
@@ -1015,6 +1018,25 @@ func (s *MessageQueueService) createConfirmationRequest(matchID uuid.UUID, inten
 	if err := s.matchRepo.CreateConfirmationRequest(cr); err != nil {
 		log.Printf("Failed to create confirmation request: %v", err)
 	}
+
+	// Bug #10 fix: schedule auto-expiry after 24h
+	reqID := cr.ID
+	matchIDStr := matchID
+	time.AfterFunc(24*time.Hour, func() {
+		req, err := s.matchRepo.GetConfirmationRequestByID(reqID)
+		if err != nil {
+			log.Printf("[Confirm expiry] failed to fetch request %s: %v", reqID, err)
+			return
+		}
+		if req.Status == model.ConfirmationStatusPending {
+			req.Status = model.ConfirmationStatusExpired
+			if err := s.matchRepo.UpdateConfirmationRequest(req); err != nil {
+				log.Printf("[Confirm expiry] failed to expire request %s: %v", reqID, err)
+			} else {
+				log.Printf("[Confirm expiry] auto-expired confirmation request %s (match=%s)", reqID, matchIDStr)
+			}
+		}
+	})
 }
 
 // HandleHumanConfirm processes a human confirmation response

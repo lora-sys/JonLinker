@@ -122,3 +122,11 @@ func (r *MatchRepository) GetPendingConfirmation(matchID uuid.UUID) (*model.Conf
 func (r *MatchRepository) UpdateConfirmationRequest(cr *model.ConfirmationRequest) error {
 	return r.db.Save(cr).Error
 }
+
+func (r *MatchRepository) GetConfirmationRequestByID(id uuid.UUID) (*model.ConfirmationRequest, error) {
+	var cr model.ConfirmationRequest
+	if err := r.db.First(&cr, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &cr, nil
+}

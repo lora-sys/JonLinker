@@ -131,6 +131,9 @@ func (n *SalaryNegotiator) CalculateAcceptanceProbability(offer int) float64 {
 	}
 
 	rangeSize := n.targetSalary - n.minSalary
+	if rangeSize <= 0 {
+		return 0.0
+	}
 	position := offer - n.minSalary
 	return float64(position) / float64(rangeSize)
 }
