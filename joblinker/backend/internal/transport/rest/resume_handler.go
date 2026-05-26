@@ -1,31 +1,38 @@
-package handler
+package rest
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"joblinker/pkg/ai"
+	"joblinker/internal/adapters"
 
 	"github.com/gin-gonic/gin"
 )
 
-type ResumeHandler struct{}
-
-func NewResumeHandler() *ResumeHandler {
-	return &ResumeHandler{}
+// ResumeHandler handles resume generation and parsing.
+// Uses the new AIClient adapter instead of the old pkg/ai.
+type ResumeHandler struct {
+	ai *adapters.AIClient
 }
 
+// NewResumeHandler creates a new ResumeHandler.
+func NewResumeHandler(ai *adapters.AIClient) *ResumeHandler {
+	return &ResumeHandler{ai: ai}
+}
+
+// GenerateResumeRequest is the JSON payload for resume generation.
 type GenerateResumeRequest struct {
 	UserInfo string `json:"user_info" binding:"required"`
 }
 
+// GenerateResumeResponse is the JSON response for resume generation.
 type GenerateResumeResponse struct {
 	Resume any    `json:"resume"`
 	Raw    string `json:"raw"`
 }
 
-// Generate creates an AI-generated resume from user info
+// Generate handles POST /api/resume/generate.
 func (h *ResumeHandler) Generate(c *gin.Context) {
 	var req GenerateResumeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -33,13 +40,6 @@ func (h *ResumeHandler) Generate(c *gin.Context) {
 		return
 	}
 
-	aiClient := ai.NewClient()
-	if aiClient == nil || aiClient.APIKey == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI service not configured"})
-		return
-	}
-
-	// Build prompt for resume generation
 	systemPrompt := `You are a professional resume writer. Generate a structured resume in JSON format from the user's information.
 
 Return ONLY valid JSON with this exact structure - no markdown, no explanation:
@@ -55,7 +55,7 @@ Return ONLY valid JSON with this exact structure - no markdown, no explanation:
   "achievements": ["Achievement 1", "Achievement 2"]
 }`
 
-	response, err := aiClient.Chat(systemPrompt, req.UserInfo)
+	response, err := h.ai.Chat(systemPrompt, req.UserInfo)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("AI generation failed: %v", err)})
 		return

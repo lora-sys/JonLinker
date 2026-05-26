@@ -295,7 +295,7 @@ func main() {
 	privacyHandler := handler.NewPrivacyHandler(privacySvc)
 	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
 	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
-	resumeHandler := handler.NewResumeHandler()
+	resumeHandler := rest.NewResumeHandler(adapters.NewAIClient())
 	adminHandler = handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	// Wire Eino Runner + ADK Runner + Broadcast to MessageQueueService
