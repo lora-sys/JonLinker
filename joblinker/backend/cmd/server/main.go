@@ -37,6 +37,11 @@ import (
 	"github.com/cloudwego/eino/adk/filesystem"
 	"github.com/cloudwego/eino/components/tool"
 	localbk "github.com/cloudwego/eino-ext/adk/backend/local"
+
+	"joblinker/internal/adapters"
+	"joblinker/internal/engine"
+	"joblinker/internal/engine/nodes"
+	"joblinker/internal/transport"
 )
 
 func getEnv(key, fallback string) string {
@@ -248,6 +253,35 @@ func main() {
 		}
 	}
 
+	// ── New Engine V2 (alongside existing components) ──
+	var newEngineHandler *transport.AgentHandler
+	{
+		newAI := adapters.NewAIClient()
+
+		var newRMQ *adapters.RabbitMQ
+		newRMQ, err = adapters.NewRabbitMQ(nil)
+		if err != nil {
+			log.Printf("New RabbitMQ not available: %v (engine v2 disabled)", err)
+			newRMQ = nil
+		}
+
+		if newRMQ != nil {
+			// Wrap repository implementations into core interfaces
+			jobRepoCore := adapters.NewCoreJobRepo(jobRepo)
+			agentRepoCore := adapters.NewCoreAgentRepo(agentRepo)
+			matchRepoCore := adapters.NewCoreMatchRepo(matchRepo)
+			offerRepoCore := adapters.NewCoreOfferRepo(offerRepo)
+			interviewRepoCore := adapters.NewCoreInterviewRepo(interviewRepo)
+
+			toolNode := nodes.NewToolNode(jobRepoCore, agentRepoCore, matchRepoCore, offerRepoCore, interviewRepoCore)
+			confirmNode := nodes.NewConfirmNode(interviewRepoCore, matchRepoCore)
+			runner := engine.NewRunner(newRMQ, newAI, toolNode, confirmNode)
+			newEngineHandler = transport.NewAgentHandler(runner, newRMQ, toolNode, newAI)
+
+			log.Printf("Engine V2 initialized with new RabbitMQ + AIClient + Graph Runner")
+		}
+	}
+
 	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
 	jobHandler := handler.NewJobHandler(jobRepo, agentRepo)
@@ -387,6 +421,27 @@ func main() {
 
 	// A2A Agent WebSocket (HMAC internal auth, no rate limit, XML protocol)
 	r.GET("/api/a2a/:matchId/ws", a2aHandler.HandleA2AWebSocket)
+
+	// Register new engine v2 routes
+	if newEngineHandler != nil {
+		newEngineHandler.RegisterRoutes(func(method, path string, handler http.HandlerFunc) {
+			switch method {
+			case "GET":
+				r.GET(path, gin.WrapH(handler))
+			case "POST":
+				r.POST(path, gin.WrapH(handler))
+			}
+		})
+
+		// Start engine v2 consumer
+		go func() {
+			ctx := context.Background()
+			if err := newEngineHandler.StartConsumer(ctx); err != nil {
+				log.Printf("Engine V2 consumer error: %v", err)
+			}
+		}()
+		log.Printf("Engine V2 routes registered and consumer started")
+	}
 
 	// A2A SSE endpoint (ADK Runner streaming)
 	if adkRunner != nil {
