@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"database/sql"
@@ -12,8 +12,8 @@ import (
 )
 
 type checkResult struct {
-	Status  string `json:"status"`
-	Detail  string `json:"detail,omitempty"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
 }
 
 type healthResponse struct {
@@ -21,14 +21,17 @@ type healthResponse struct {
 	Checks map[string]checkResult `json:"checks"`
 }
 
+// HealthHandler provides health check endpoints.
 type HealthHandler struct {
 	db *sql.DB
 }
 
+// NewHealthHandler creates a new HealthHandler.
 func NewHealthHandler(db *sql.DB) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 
+// Health handles GET /health.
 func (h *HealthHandler) Health(c *gin.Context) {
 	overall := "healthy"
 	checks := make(map[string]checkResult)
@@ -47,31 +50,32 @@ func (h *HealthHandler) Health(c *gin.Context) {
 
 	// Check RabbitMQ (best effort - try to connect to AMQP port)
 	rmqUser := os.Getenv("RABBITMQ_USER")
+	rmqPass := os.Getenv("RABBITMQ_PASS")
 	rmqHost := os.Getenv("RABBITMQ_HOST")
+	rmqPort := os.Getenv("RABBITMQ_PORT")
 	if rmqHost == "" {
 		rmqHost = "localhost"
 	}
-	if rmqUser != "" {
-		port := os.Getenv("RABBITMQ_PORT")
-		if port == "" {
-			port = "5672"
-		}
-		addr := net.JoinHostPort(rmqHost, port)
-		conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
-		if err != nil {
-			checks["rabbitmq"] = checkResult{Status: "down", Detail: fmt.Sprintf("Cannot reach RabbitMQ at %s: %v", addr, err)}
-			if overall == "healthy" {
-				overall = "degraded"
-			}
-		} else {
-			conn.Close()
-			checks["rabbitmq"] = checkResult{Status: "ok"}
+	if rmqPort == "" {
+		rmqPort = "5672"
+	}
+	addr := net.JoinHostPort(rmqHost, rmqPort)
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		checks["rabbitmq"] = checkResult{Status: "down", Detail: fmt.Sprintf("Cannot connect to %s: %v", addr, err)}
+		if overall == "healthy" {
+			overall = "degraded"
 		}
 	} else {
-		checks["rabbitmq"] = checkResult{Status: "not_configured"}
+		conn.Close()
+		if rmqUser != "" && rmqPass != "" {
+			checks["rabbitmq"] = checkResult{Status: "ok", Detail: fmt.Sprintf("Configured AMQP %s", addr)}
+		} else {
+			checks["rabbitmq"] = checkResult{Status: "ok", Detail: fmt.Sprintf("Connected to %s (no credentials)", addr)}
+		}
 	}
 
-	// Check AI API (best effort)
+	// Check AI API availability
 	aiURL := os.Getenv("AI_BASE_URL")
 	if aiURL != "" {
 		client := &http.Client{Timeout: 3 * time.Second}

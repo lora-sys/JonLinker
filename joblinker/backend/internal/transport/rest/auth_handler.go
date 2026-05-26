@@ -1,4 +1,4 @@
-package handler
+package rest
 
 import (
 	"log"
@@ -16,15 +16,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// AuthHandler handles authentication: register, login, refresh.
+// Uses the same repository/service layer as the old handler for now,
+// with a cleaner package structure that can be swapped later.
 type AuthHandler struct {
 	userRepo    *repository.UserRepository
 	securitySvc *service.SecurityService
 }
 
+// NewAuthHandler creates a new AuthHandler.
 func NewAuthHandler(userRepo *repository.UserRepository, securitySvc *service.SecurityService) *AuthHandler {
 	return &AuthHandler{userRepo: userRepo, securitySvc: securitySvc}
 }
 
+// RegisterRequest is the JSON payload for user registration.
+type RegisterRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=8"`
+	Role     string `json:"role" binding:"required,oneof=seeker recruiter"`
+}
+
+// UserResponse is the JSON response for user data.
 type UserResponse struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`
@@ -32,12 +44,7 @@ type UserResponse struct {
 	CreatedAt string `json:"created_at,omitempty"`
 }
 
-type RegisterRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
-	Role     string `json:"role" binding:"required,oneof=seeker recruiter"`
-}
-
+// Register handles POST /api/auth/register.
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -63,21 +70,32 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
-	h.securitySvc.LogEvent(user.ID, "register", map[string]interface{}{"email": user.Email}, c.ClientIP())
 	token := h.generateToken(user)
-	c.JSON(http.StatusCreated, gin.H{"user": UserResponse{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Role:      string(user.Role),
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}, "token": token})
+	// Log registration for security audit
+	go func() {
+		details := map[string]interface{}{"role": req.Role}
+		if err := h.securitySvc.LogEvent(user.ID, "user_registered", details, c.ClientIP()); err != nil {
+			log.Printf("Failed to log security event: %v", err)
+		}
+	}()
+	c.JSON(http.StatusCreated, gin.H{
+		"user": UserResponse{
+			ID:        user.ID.String(),
+			Email:     user.Email,
+			Role:      string(user.Role),
+			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		},
+		"token": token,
+	})
 }
 
+// LoginRequest is the JSON payload for login.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
 
+// Login handles POST /api/auth/login.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -86,23 +104,31 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	user, err := h.userRepo.GetByEmail(req.Email)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		// Log failed login attempt
+		go func() {
+			details := map[string]interface{}{"email": req.Email}
+			_ = h.securitySvc.LogEvent(uuid.Nil, "login_failed", details, c.ClientIP())
+		}()
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
 	}
-	h.securitySvc.LogEvent(user.ID, "login", nil, c.ClientIP())
 	token := h.generateToken(user)
-	c.JSON(http.StatusOK, gin.H{"user": UserResponse{
-		ID:        user.ID.String(),
-		Email:     user.Email,
-		Role:      string(user.Role),
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}, "token": token})
+	c.JSON(http.StatusOK, gin.H{
+		"user": UserResponse{
+			ID:        user.ID.String(),
+			Email:     user.Email,
+			Role:      string(user.Role),
+			CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		},
+		"token": token,
+	})
 }
 
+// Refresh handles POST /api/auth/refresh.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	userID, _ := uuid.Parse(c.GetString("userID"))
 	role := model.UserRole(c.GetString("role"))

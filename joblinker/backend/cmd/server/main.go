@@ -18,6 +18,7 @@ import (
 	"joblinker/internal/cache"
 	"joblinker/internal/config"
 	"joblinker/internal/handler"
+	"joblinker/internal/transport/rest"
 	"joblinker/internal/middleware"
 	"joblinker/internal/model"
 	"joblinker/internal/repository"
@@ -282,7 +283,10 @@ func main() {
 		}
 	}
 
-	authHandler := handler.NewAuthHandler(userRepo, securitySvc)
+	// ── New transport handlers (replacing old handler package) ──
+	sqlDB, _ := db.DB()
+	healthHandler := rest.NewHealthHandler(sqlDB)
+	authHandler := rest.NewAuthHandler(userRepo, securitySvc)
 	agentHandler := handler.NewAgentHandler(agentSvc)
 	jobHandler := handler.NewJobHandler(jobRepo, agentRepo)
 	matchHandler := handler.NewMatchHandler(matchSvc)
@@ -292,8 +296,7 @@ func main() {
 	messageHandler := handler.NewMessageHandler(messageRepo, matchRepo, agentRepo, rmq, mqSvc, sessionStore)
 	a2aHandler := handler.NewA2AHandler(matchRepo, agentRepo, messageRepo, rmq)
 	resumeHandler := handler.NewResumeHandler()
-	sqlDB, _ := db.DB()
-	healthHandler := handler.NewHealthHandler(sqlDB)
+	adminHandler = handler.NewAdminHandler(metricsRepo, auditRepo, observabilityErrorRepo)
 
 	// Wire Eino Runner + ADK Runner + Broadcast to MessageQueueService
 	if mqSvc != nil {
