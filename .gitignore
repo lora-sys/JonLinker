@@ -31,5 +31,5 @@ data
 
 # TypeScript build info
 *.tsbuildinfo
-
+.vscode
 .atomcode

@@ -30,6 +30,12 @@ import (
 
 type BroadcastFunc func(matchID string, eventType string, payload interface{})
 
+// AutoResponse represents an AI-generated response
+type AutoResponse struct {
+	Intent  string
+	Payload map[string]interface{}
+}
+
 type MessageQueueService struct {
 	rmq                *rabbitmq.RabbitMQ
 	messageRepo        *repository.MessageRepository
