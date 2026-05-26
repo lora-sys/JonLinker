@@ -1,4 +1,4 @@
-import type { Interview } from '@/types'
+import type { Interview } from '@/shared/types'
 
 import { fetchServer } from '@/lib/api-server'
 

@@ -3,40 +3,40 @@
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { use, useCallback, useEffect, useState } from 'react'
 
-import type { Interview, Offer } from '@/types'
+import type { Interview, Offer } from '@/shared/types'
 
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
-} from '@/components/ai-elements/conversation'
+} from '@/features/conversation/components/conversation'
 import {
   Message,
   MessageContent,
   MessageResponse,
-} from '@/components/ai-elements/message'
+} from '@/features/conversation/components/message'
 import {
   Tool,
   ToolContent,
   ToolHeader,
   ToolInput,
   ToolOutput,
-} from '@/components/ai-elements/tool'
+} from '@/features/conversation/components/tool'
 import {
   PromptInput,
   PromptInputProvider,
   PromptInputSubmit,
   PromptInputTextarea,
-} from '@/components/ai-elements/prompt-input'
-import { ConversationHeader } from '@/components/conversation/ConversationHeader'
-import { FlowPanel } from '@/components/conversation/FlowPanel'
-import { SummaryPanel } from '@/components/conversation/SummaryPanel'
-import { FSMStatusBar } from '@/components/FSMStatusBar'
-import { HumanConfirmModal } from '@/components/HumanConfirmModal'
-import { InterviewCard } from '@/components/interview/InterviewCard'
-import { OfferCard } from '@/components/offer/OfferCard'
-import { useAIChat } from '@/hooks/useAIChat'
+} from '@/features/conversation/components/prompt-input'
+import { ConversationHeader } from '@/features/conversation/components/ConversationHeader'
+import { FlowPanel } from '@/features/conversation/components/FlowPanel'
+import { SummaryPanel } from '@/features/conversation/components/SummaryPanel'
+import { FSMStatusBar } from '@/features/conversation/components/FSMStatusBar'
+import { HumanConfirmModal } from '@/features/confirmation/components/HumanConfirmModal'
+import { InterviewCard } from '@/features/confirmation/components/InterviewCard'
+import { OfferCard } from '@/features/confirmation/components/OfferCard'
+import { useAIChat } from '@/features/conversation/hooks/useAIChat'
 import { apiClient } from '@/lib/api_client'
 
 interface PageProps {

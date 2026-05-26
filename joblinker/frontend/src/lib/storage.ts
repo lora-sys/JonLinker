@@ -1,5 +1,5 @@
 // IndexedDB integration for local-first storage
-import type { Agent, Interview, Job, Match, Message, Offer, Resume } from '@/types'
+import type { Agent, Interview, Job, Match, Message, Offer, Resume } from '@/shared/types'
 
 const DB_NAME = 'joblinker'
 const DB_VERSION = 1

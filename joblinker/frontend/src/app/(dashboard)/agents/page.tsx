@@ -1,4 +1,4 @@
-import type { Agent } from '@/types'
+import type { Agent } from '@/shared/types'
 
 import { fetchServerWithResult } from '@/lib/api-server'
 

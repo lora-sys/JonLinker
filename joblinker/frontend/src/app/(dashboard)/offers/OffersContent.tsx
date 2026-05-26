@@ -4,14 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, Building2, Check, ChevronDown, DollarSign, FileText, Scale, TrendingUp } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
-import type { Compensation, Offer } from '@/types'
+import type { Compensation, Offer } from '@/shared/types'
 
-import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/components/ui'
-import Button from '@/components/ui/button'
-import Card from '@/components/ui/Card'
-import CompensationCard from '@/components/ui/CompensationCard'
-import CountdownDisplay from '@/components/ui/Countdown'
-import NegotiateSlider from '@/components/ui/NegotiateSlider'
+import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/shared/ui'
+import Button from '@/shared/ui/button'
+import Card from '@/shared/ui/Card'
+import CompensationCard from '@/shared/ui/CompensationCard'
+import CountdownDisplay from '@/shared/ui/Countdown'
+import NegotiateSlider from '@/shared/ui/NegotiateSlider'
 import { apiClient } from '@/lib/api_client'
 
 type OfferWithParsed = Omit<Offer, 'compensation'> & {

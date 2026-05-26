@@ -3,12 +3,12 @@
 import { Bell, Cpu, Shield, Trash2, User } from 'lucide-react'
 import { useState } from 'react'
 
-import type { User as UserType } from '@/types'
+import type { User as UserType } from '@/shared/types'
 
-import { LoadingSkeleton } from '@/components/ui'
-import Button from '@/components/ui/button'
-import Card from '@/components/ui/Card'
-import { useAuthStore } from '@/stores/auth'
+import { LoadingSkeleton } from '@/shared/ui'
+import Button from '@/shared/ui/button'
+import Card from '@/shared/ui/Card'
+import { useAuthStore } from '@/shared/stores/auth'
 
 function AccountSettingsSkeleton() {
   return (

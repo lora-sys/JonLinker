@@ -4,9 +4,9 @@ import { ArrowLeftRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useState } from 'react'
 
-import type { Match } from '@/types'
+import type { Match } from '@/shared/types'
 
-import { Card, EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
+import { Card, EmptyState, ErrorState, LoadingSkeleton } from '@/shared/ui'
 import { apiClient } from '@/lib/api_client'
 
 interface MatchWithScore extends Match {

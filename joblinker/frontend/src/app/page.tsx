@@ -5,7 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import { useIntersectionReveal } from '@/hooks/useIntersectionReveal'
+import { useIntersectionReveal } from '@/shared/hooks/useIntersectionReveal'
 
 function AgentNode({ type, label, position, delay = 0 }: { type: 'seeker' | 'recruiter', label: string, position: string, delay?: number }) {
   const [ref, isVisible] = useIntersectionReveal<HTMLDivElement>({ threshold: 0.1 })

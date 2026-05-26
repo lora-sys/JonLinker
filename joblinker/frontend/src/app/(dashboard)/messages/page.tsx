@@ -4,12 +4,12 @@ import { MessageCircle, RefreshCw, WifiOff } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { Conversation, Message } from '@/types'
+import type { Conversation, Message } from '@/shared/types'
 
-import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
-import Card from '@/components/ui/Card'
-import ConnectionStatus from '@/components/ui/ConnectionStatus'
-import UnreadBadge from '@/components/ui/UnreadBadge'
+import { EmptyState, ErrorState, LoadingSkeleton } from '@/shared/ui'
+import Card from '@/shared/ui/Card'
+import ConnectionStatus from '@/shared/ui/ConnectionStatus'
+import UnreadBadge from '@/shared/ui/UnreadBadge'
 import { apiClient } from '@/lib/api_client'
 
 // Helper to parse A2A XML message content (aligned with useAIChat.ts)

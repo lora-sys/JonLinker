@@ -1,4 +1,4 @@
-import type { Offer } from '@/types'
+import type { Offer } from '@/shared/types'
 
 import { fetchServer } from '@/lib/api-server'
 

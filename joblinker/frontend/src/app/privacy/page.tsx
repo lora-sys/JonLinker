@@ -4,9 +4,9 @@ import { Download, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-import { Modal } from '@/components/ui/Modal'
+import { Modal } from '@/shared/ui/Modal'
 import { apiClient } from '@/lib/api_client'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/shared/stores/auth'
 
 export default function PrivacyPage() {
   const router = useRouter()

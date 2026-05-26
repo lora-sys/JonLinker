@@ -5,15 +5,15 @@ import { Plus, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import type { Agent } from '@/types'
+import type { Agent } from '@/shared/types'
 
-import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
-import Avatar from '@/components/ui/Avatar'
-import Badge from '@/components/ui/badge'
-import Card from '@/components/ui/Card'
-import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
-import SkillTag from '@/components/ui/SkillTag'
-import StatusDot from '@/components/ui/StatusDot'
+import { EmptyState, ErrorState, LoadingSkeleton } from '@/shared/ui'
+import Avatar from '@/shared/ui/Avatar'
+import Badge from '@/shared/ui/badge'
+import Card from '@/shared/ui/Card'
+import { ErrorBoundary } from '@/shared/ui/ErrorBoundary'
+import SkillTag from '@/shared/ui/SkillTag'
+import StatusDot from '@/shared/ui/StatusDot'
 
 interface AgentWithSkills extends Agent {
   config?: {

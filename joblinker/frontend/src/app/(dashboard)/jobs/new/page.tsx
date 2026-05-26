@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
-import { BackgroundBeams } from '@/components/ui/background-beams'
-import JobForm from '@/components/ui/job-form'
-import { useRole } from '@/hooks/useRole'
-import { useAuthStore } from '@/stores/auth'
+import { BackgroundBeams } from '@/shared/ui/background-beams'
+import JobForm from '@/shared/ui/job-form'
+import { useRole } from '@/shared/hooks/useRole'
+import { useAuthStore } from '@/shared/stores/auth'
 
 export default function NewJobPage() {
   const router = useRouter()

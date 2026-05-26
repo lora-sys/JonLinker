@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useState } from 'react'
 
-import { BackgroundBeams } from '@/components/ui/BackgroundBeams'
-import { useAuthStore } from '@/stores/auth'
+import { BackgroundBeams } from '@/shared/ui/BackgroundBeams'
+import { useAuthStore } from '@/shared/stores/auth'
 
 function RegisterForm() {
   const router = useRouter()

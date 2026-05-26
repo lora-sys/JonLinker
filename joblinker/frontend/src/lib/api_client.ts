@@ -1,11 +1,11 @@
 // API Client - wraps GatewayClient for backwards compatibility
 // All API calls now route through the unified gateway
 
-import type { GatewayConfig } from '@/lib/gateway'
-import type { ApiError } from '@/types'
+import type { GatewayConfig } from '@/shared/api'
+import type { ApiError } from '@/shared/types'
 
 import { getAuthToken } from '@/lib/api-utils'
-import { GatewayClient, initGateway, ServiceRoutes } from '@/lib/gateway'
+import { GatewayClient, initGateway, ServiceRoutes } from '@/shared/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 

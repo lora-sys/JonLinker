@@ -60,4 +60,4 @@ export function buildMatchWSUrl(matchId: string, token: string, gatewayParams?: 
   return `${WS_PROTOCOL}//${wsHost}${API_WS_PATH}/${matchId}/ws?${params.toString()}`
 }
 
-export type { WSMessage } from '@/hooks/useWebSocket'
+export type { WSMessage } from '@/shared/hooks/useWebSocket'

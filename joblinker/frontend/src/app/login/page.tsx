@@ -6,8 +6,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-import { BackgroundBeams } from '@/components/ui/BackgroundBeams'
-import { useAuthStore } from '@/stores/auth'
+import { BackgroundBeams } from '@/shared/ui/BackgroundBeams'
+import { useAuthStore } from '@/shared/stores/auth'
 
 export default function LoginPage() {
   const router = useRouter()

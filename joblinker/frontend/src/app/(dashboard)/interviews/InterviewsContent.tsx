@@ -4,11 +4,11 @@ import { motion } from 'framer-motion'
 import { Building2, Calendar, CheckCircle2, Clock, Phone, Video, X } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
-import type { Interview } from '@/types'
+import type { Interview } from '@/shared/types'
 
-import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/components/ui'
-import Button from '@/components/ui/button'
-import Card from '@/components/ui/Card'
+import { EmptyState, ErrorState, LoadingSkeleton, RevealSection } from '@/shared/ui'
+import Button from '@/shared/ui/button'
+import Card from '@/shared/ui/Card'
 import { apiClient } from '@/lib/api_client'
 
 const typeIcons: Record<string, React.ReactNode> = {

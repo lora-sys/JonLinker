@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/shared/stores/auth'
 
 const COOKIE_NAME = 'joblinker-auth'
 

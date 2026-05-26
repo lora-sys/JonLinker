@@ -4,13 +4,13 @@ import { Briefcase, Plus, Search, SortAsc } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useMemo, useState } from 'react'
 
-import type { Job } from '@/types'
+import type { Job } from '@/shared/types'
 
-import { JobCard } from '@/components/feature/JobCard'
-import { Card, EmptyState, ErrorState, LoadingSkeleton } from '@/components/ui'
-import { useRole } from '@/hooks/useRole'
+import { JobCard } from '@/features/match/components/JobCard'
+import { Card, EmptyState, ErrorState, LoadingSkeleton } from '@/shared/ui'
+import { useRole } from '@/shared/hooks/useRole'
 import { apiClient } from '@/lib/api_client'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/shared/stores/auth'
 
 interface JobFiltersProps {
   jobs: Job[]
