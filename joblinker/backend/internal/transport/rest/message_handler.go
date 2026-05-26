@@ -435,6 +435,31 @@ func (h *MessageHandler) HandleWebSocket(c *gin.Context) {
 		conn.Close()
 	}()
 
+	// Bug #7: Reconnection catch-up — replay missed messages since given timestamp
+	if sinceStr := c.Query("since"); sinceStr != "" && matchID != "" && matchID != "ws" {
+		sinceTime, parseErr := time.Parse(time.RFC3339, sinceStr)
+		if parseErr == nil {
+			missed, queryErr := h.messageRepo.ListByMatchIDSince(uuid.MustParse(matchID), sinceTime)
+			if queryErr == nil {
+				for _, m := range missed {
+					var replayMsg A2AMessage
+					if xml.Unmarshal([]byte(m.ContentXML), &replayMsg) == nil {
+						if writeErr := conn.WriteJSON(WSMessage{
+							Type:    "message_replay",
+							Payload: replayMsg,
+						}); writeErr != nil {
+							log.Printf("WS replay write error: %v", writeErr)
+							break
+						}
+					}
+				}
+				log.Printf("WS replayed %d missed messages for match %s since %s", len(missed), matchID, sinceStr)
+			}
+		} else {
+			log.Printf("WS invalid since timestamp %q: %v", sinceStr, parseErr)
+		}
+	}
+
 	// Initialize WebSocket frame serializer for Protobuf support
 	wsSerializer := proto.NewWebSocketFrameSerializer()
 	var sequenceNum uint64 = 0

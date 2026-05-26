@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"joblinker/internal/model"
 
 	"github.com/google/uuid"
@@ -39,6 +41,15 @@ func (r *MessageRepository) DeleteByMatchID(matchID uuid.UUID) error {
 func (r *MessageRepository) ListByMatchID(matchID uuid.UUID) ([]*model.Message, error) {
 	var messages []*model.Message
 	if err := r.db.Where("match_id = ?", matchID).Order("created_at ASC").Find(&messages).Error; err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
+// ListByMatchIDSince returns messages for a match created after the given timestamp.
+func (r *MessageRepository) ListByMatchIDSince(matchID uuid.UUID, since time.Time) ([]*model.Message, error) {
+	var messages []*model.Message
+	if err := r.db.Where("match_id = ? AND created_at > ?", matchID, since).Order("created_at ASC").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 	return messages, nil
