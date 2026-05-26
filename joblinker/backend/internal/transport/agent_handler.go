@@ -77,6 +77,12 @@ func (h *AgentHandler) HandleSendMessage(w http.ResponseWriter, r *http.Request)
 		Timestamp:  time.Now(),
 	}
 
+	if h.rmq == nil {
+		log.Printf("RabbitMQ not configured")
+		http.Error(w, "message queue not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	if err := h.rmq.PublishAgentMessage(r.Context(), msg); err != nil {
 		log.Printf("Failed to publish message: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -172,7 +178,7 @@ func (h *AgentHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 // Healthz handles GET /healthz.
 func (h *AgentHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 	status := "ok"
-	if !h.rmq.IsConnected() {
+	if h.rmq == nil || !h.rmq.IsConnected() {
 		status = "degraded"
 	}
 
