@@ -1,38 +1,185 @@
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+# CLAUDE.md
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+## Project Identity
 
-### When to use graph tools FIRST
+JobLinker
 
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
+AI Recruiting Agent
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+Goal:
 
-### Key Tools
+Reduce human involvement in recruiting through autonomous AI agents.
 
-| Tool | Use when |
-|------|----------|
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
+---
 
-### Workflow
+# Development Roadmap
 
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+## Phase 1
+
+Job Search Agent
+
+User Input
+→ Search Jobs
+→ Ranked Results
+
+Tools:
+
+* query_jobs
+
+Done When:
+
+* Agent can search jobs
+* Agent returns ranked jobs
+* Agent explains recommendations
+* 95% success rate
+
+---
+
+## Phase 2
+
+Auto Apply Agent
+
+User Input
+→ Search Jobs
+→ Apply Jobs
+
+Tools:
+
+* query_jobs
+* apply_job
+
+Done When:
+
+* Agent writes applications
+* Agent submits applications
+* User does not manually write content
+
+---
+
+## Phase 3
+
+Recruiter Chat
+
+User
+↔ Agent
+↔ Recruiter
+
+Capabilities:
+
+* Multi-turn conversation
+* Context tracking
+* Job discussion
+
+Done When:
+
+* 20-turn conversations succeed
+* Context remains consistent
+
+---
+
+## Phase 4
+
+A2A Recruiter
+
+Candidate Agent
+↔ Recruiter Agent
+
+Done When:
+
+* Agents communicate autonomously
+* No human required during conversation
+* Conversation state is trackable
+
+---
+
+## Phase 5
+
+Negotiation
+
+Candidate Agent
+↔ Recruiter Agent
+
+Capabilities:
+
+* Salary negotiation
+* Start date negotiation
+* Offer generation
+
+Done When:
+
+* Offer generated automatically
+* Human only confirms final result
+
+---
+
+## Phase 6
+
+Memory
+
+Capabilities:
+
+* Preference extraction
+* Preference recall
+* Long-term user profile
+
+Done When:
+
+* Previous preferences affect future decisions
+
+---
+
+## Phase 7
+
+Autonomous Recruiting
+
+Search
+→ Apply
+→ Chat
+→ Negotiate
+→ Offer
+→ Human Confirmation
+
+Done When:
+
+* End-to-end recruiting workflow is autonomous
+
+---
+
+# Forbidden During Early Phases
+
+Until Phase 4:
+
+DO NOT BUILD
+
+* RabbitMQ
+* Kafka
+* Workflow Engine
+* DAG Engine
+* Multi-Agent Framework
+* Plugin Marketplace
+* MCP Infrastructure
+* Vector Memory
+
+unless explicitly required by roadmap.
+
+---
+
+# Engineering Philosophy
+
+Simple > Clever
+
+Working > Scalable
+
+Delivered > Designed
+
+Validated > Imagined
+
+# Must
+
+use rtk  example rtk git status , git commit -m   
+every phase test must use playwright cli  skills to open browser
+and test the agent's capabilities in a real browser environment.
+frontend test ui element  and backend test api response and agent's decision making process.
+every phase run check issues  git checkout main -> new checkout branch-> commit changes -> push to origin -> create PR
+# Must Not
+forbid hardcode and call ai api mock data
