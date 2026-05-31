@@ -1,38 +1,116 @@
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+# AGENT.md
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+## Mission
 
-### When to use graph tools FIRST
+JobLinker exists to build an autonomous AI recruiting system.
 
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
+The final vision is:
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+Candidate Agent
+→ Search Jobs
+→ Apply Jobs
+→ Communicate
+→ Negotiate
+→ Receive Offer
+→ Human Confirmation
 
-### Key Tools
+Human involvement should continuously decrease as the system evolves.
 
-| Tool | Use when |
-|------|----------|
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
+---
 
-### Workflow
+## Core Principle
 
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+DO NOT BUILD THE FINAL SYSTEM FIRST.
+
+Every feature must belong to a specific phase.
+
+If a feature is not required by the current phase,
+DO NOT IMPLEMENT IT.
+
+---
+
+## Product Vision
+
+We are NOT building:
+
+* Agent Framework
+* Workflow Engine
+* MCP Platform
+* Multi-Agent Operating System
+* Generic AI Infrastructure
+
+We ARE building:
+
+AI Recruiter
+
+An autonomous recruiting agent that helps candidates find jobs, apply, communicate, negotiate and receive offers.
+
+---
+
+## Development Rules
+
+### Rule 1
+
+Current phase completion is more important than future architecture.
+
+### Rule 2
+
+Every feature must map to a user value.
+
+Bad:
+
+* RabbitMQ
+* Gateway
+* Vector DB
+
+Good:
+
+* Find Jobs
+* Apply Jobs
+* Recruiter Chat
+* Offer Negotiation
+
+### Rule 3
+
+No future-proof engineering.
+
+Build only what is needed now.
+
+### Rule 4
+
+No new infrastructure unless current phase requires it.
+
+Examples:
+
+DO NOT introduce:
+
+* RabbitMQ
+* Kafka
+* Event Bus
+* Workflow Engine
+* Distributed System
+
+until required by a phase.
+
+### Rule 5
+
+Every phase must have a demo.
+
+If a feature cannot be demonstrated to a user,
+it is not complete.
+
+---
+
+## Success Metric
+
+The success of JobLinker is measured by:
+
+How much recruiting work can be delegated to AI.
+
+Not by:
+
+* Number of services
+* Number of agents
+* Number of databases
+* Number of abstractions
+* Number of architecture diagrams
