@@ -47,11 +47,24 @@ Tools:
 
 * query_jobs
 * apply_job
+* parse_resume_pdf
+
+Components:
+
+* SearchIsland (client) — 搜索 + 结果展示 + 申请卡片
+* ResumeChatIsland (client) — PDF 上传 + 聊天补全资料
+
+Endpoints:
+
+* POST /api/search — 搜索职位
+* SSE /api/chat/resume — 简历 Agent 聊天流
+* POST /api/apply — 生成申请（求职信 + 定制简历）
 
 Done When:
 
-* Agent writes applications
-* Agent submits applications
+* Resume Agent 解析 PDF + 聊天补全 CandidateProfile
+* Search Agent 根据 Job + Profile 生成 Application
+* 前端同时展示两个岛屿，申请展示为明信片式 UI
 * User does not manually write content
 
 ---
