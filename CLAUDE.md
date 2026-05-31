@@ -195,6 +195,7 @@ and test the agent's capabilities in a real browser environment.
 frontend test ui element  and backend test api response and agent's decision making process.
 every phase run check issues  git checkout main -> new checkout branch-> commit changes -> push to origin -> create PR
 remember to commit run eslint ,build ,type check  fontend and backend code before push to origin
+Base environment : run scripts/start.sh
 
 # Must Not
 forbid hardcode and call ai api mock data
