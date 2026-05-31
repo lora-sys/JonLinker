@@ -33,3 +33,22 @@ type UserIntent struct {
 	SalaryMin  int    `json:"salary_min"`
 	Experience string `json:"experience"`
 }
+
+type Application struct {
+	JobTitle    string   `json:"job_title"`
+	Company     string   `json:"company"`
+	CoverLetter string   `json:"cover_letter"`
+	ResumeMD    string   `json:"resume_md"`
+	Highlights  []string `json:"highlights"`
+	GeneratedAt string   `json:"generated_at"`
+}
+
+type ApplyRequest struct {
+	JobURL    string `json:"job_url"`
+	SessionID string `json:"session_id"`
+}
+
+type UploadResponse struct {
+	SessionID string `json:"session_id"`
+	Text      string `json:"text"`
+}
