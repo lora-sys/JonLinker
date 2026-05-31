@@ -29,6 +29,10 @@ joblinker/backend/seed-data
 # Runtime data
 data
 
+# Environment
+.env
+.env.local
+
 # TypeScript build info
 *.tsbuildinfo
 .vscode
