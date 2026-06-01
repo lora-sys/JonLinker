@@ -1,6 +1,6 @@
 module github.com/lora-sys/JonLinker
 
-go 1.26.3
+go 1.26
 
 require (
 	github.com/cloudwego/eino v0.9.2

@@ -19,19 +19,14 @@ type RankedJob struct {
 }
 
 type SearchRequest struct {
-	Query string `json:"query"`
+	Query     string `json:"query"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type SearchResponse struct {
-	Jobs   []RankedJob `json:"jobs"`
-	Intent UserIntent  `json:"intent"`
-}
-
-type UserIntent struct {
-	Keyword    string `json:"keyword"`
-	City       string `json:"city"`
-	SalaryMin  int    `json:"salary_min"`
-	Experience string `json:"experience"`
+	Message     string       `json:"message,omitempty"`
+	Jobs        []RankedJob  `json:"jobs,omitempty"`
+	Application *Application `json:"application,omitempty"`
 }
 
 type Application struct {

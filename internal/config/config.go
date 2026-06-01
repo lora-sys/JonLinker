@@ -15,6 +15,7 @@ type Config struct {
 	FirecrawlKey  string
 	ServerPort    string
 	FrontendURL   string
+	SessionFile   string
 }
 
 func Load() *Config {
@@ -26,6 +27,7 @@ func Load() *Config {
 		FirecrawlKey:  os.Getenv("FIRECRAWL_API_KEY"),
 		ServerPort:    envDefault("SERVER_PORT", "8080"),
 		FrontendURL:   envDefault("FRONTEND_URL", "http://localhost:3000"),
+		SessionFile:   os.Getenv("SESSION_FILE"),
 	}
 }
 

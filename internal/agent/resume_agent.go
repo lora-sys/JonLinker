@@ -5,26 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/lora-sys/JonLinker/internal/resume"
-	"github.com/lora-sys/JonLinker/internal/session"
 )
 
 type ResumeAgent struct {
 	chatModel *openai.ChatModel
-	store     *session.Store
-	parsed    string
+	store     compose.CheckPointStore
 	history   []*schema.Message
 	mu        sync.Mutex
 }
 
-func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText string, store *session.Store) (*ResumeAgent, error) {
+func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText string, store compose.CheckPointStore) (*ResumeAgent, error) {
 	cm, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
 		BaseURL:     baseURL,
 		APIKey:      apiKey,
@@ -66,7 +66,6 @@ func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText stri
 	return &ResumeAgent{
 		chatModel: cm,
 		store:     store,
-		parsed:    parsedText,
 		history:   []*schema.Message{{Role: schema.System, Content: sysMsg}},
 	}, nil
 }
@@ -115,7 +114,11 @@ func (a *ResumeAgent) ChatStream(ctx context.Context, sessionID, userMsg string,
 		Profile  resume.CandidateProfile `json:"profile,omitempty"`
 	}
 	if err := json.Unmarshal([]byte(jsonPart), &state); err == nil && state.Complete && state.Profile.Name != "" {
-		a.store.Set(ctx, sessionID+":profile", state.Profile)
+		if b, err := json.Marshal(state.Profile); err == nil {
+			if err := a.store.Set(ctx, sessionID+":profile", b); err != nil {
+				log.Printf("checkpoint save failed: %v", err)
+			}
+		}
 	}
 
 	return reply, nil
