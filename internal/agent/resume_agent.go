@@ -8,31 +8,26 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/lora-sys/JonLinker/internal/llm"
+	"github.com/lora-sys/JonLinker/internal/memory"
 	"github.com/lora-sys/JonLinker/internal/resume"
 )
 
 type ResumeAgent struct {
 	chatModel *openai.ChatModel
 	store     compose.CheckPointStore
-	history   []*schema.Message
+	memStore  memory.MemoryStore
+	systemMsg *schema.Message
 	mu        sync.Mutex
 }
 
-func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText string, store compose.CheckPointStore) (*ResumeAgent, error) {
-	cm, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		BaseURL:     baseURL,
-		APIKey:      apiKey,
-		Model:       model,
-		Timeout:     120 * time.Second,
-		MaxTokens:   intPtr(4096),
-		Temperature: float32Ptr(0.3),
-	})
+func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText string, store compose.CheckPointStore, memStore memory.MemoryStore) (*ResumeAgent, error) {
+	cm, err := llm.NewChatModel(ctx, baseURL, apiKey, model, 4096, 0.3)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +50,7 @@ func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText stri
 - 兴趣爱好 (hobbies)
 
 规则：
+0. 回答要简洁，一句话即可，不要使用Markdown格式，不要使用表情符号。
 1. 从简历文本中提取已有信息，不要重复询问
 2. 对缺失的信息，逐个询问用户
 3. 每次问1-2个问题
@@ -66,7 +62,8 @@ func NewResumeAgent(ctx context.Context, baseURL, apiKey, model, parsedText stri
 	return &ResumeAgent{
 		chatModel: cm,
 		store:     store,
-		history:   []*schema.Message{{Role: schema.System, Content: sysMsg}},
+		memStore:  memStore,
+		systemMsg: &schema.Message{Role: schema.System, Content: sysMsg},
 	}, nil
 }
 
@@ -74,9 +71,15 @@ func (a *ResumeAgent) ChatStream(ctx context.Context, sessionID, userMsg string,
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.history = append(a.history, &schema.Message{Role: schema.User, Content: userMsg})
+	history, err := a.memStore.Read(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("read memory: %w", err)
+	}
 
-	sr, err := a.chatModel.Stream(ctx, a.history)
+	fullHistory := append([]*schema.Message{a.systemMsg}, history...)
+	fullHistory = append(fullHistory, &schema.Message{Role: schema.User, Content: userMsg})
+
+	sr, err := a.chatModel.Stream(ctx, fullHistory)
 	if err != nil {
 		return "", fmt.Errorf("stream: %w", err)
 	}
@@ -98,7 +101,14 @@ func (a *ResumeAgent) ChatStream(ctx context.Context, sessionID, userMsg string,
 	}
 
 	reply := full.String()
-	a.history = append(a.history, &schema.Message{Role: schema.Assistant, Content: reply})
+
+	history = append(history,
+		&schema.Message{Role: schema.User, Content: userMsg},
+		&schema.Message{Role: schema.Assistant, Content: reply},
+	)
+	if err := a.memStore.Write(ctx, sessionID, history); err != nil {
+		return "", fmt.Errorf("write memory: %w", err)
+	}
 
 	jsonPart := reply
 	if idx := strings.Index(jsonPart, "{"); idx >= 0 {
@@ -113,7 +123,7 @@ func (a *ResumeAgent) ChatStream(ctx context.Context, sessionID, userMsg string,
 		Message  string                  `json:"message,omitempty"`
 		Profile  resume.CandidateProfile `json:"profile,omitempty"`
 	}
-	if err := json.Unmarshal([]byte(jsonPart), &state); err == nil && state.Complete && state.Profile.Name != "" {
+	if err := json.Unmarshal([]byte(jsonPart), &state); err == nil && state.Profile.Name != "" {
 		if b, err := json.Marshal(state.Profile); err == nil {
 			if err := a.store.Set(ctx, sessionID+":profile", b); err != nil {
 				log.Printf("checkpoint save failed: %v", err)

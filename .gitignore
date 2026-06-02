@@ -12,13 +12,13 @@ joblinker/frontend/tests/
 .playwright-cli
 joblinker/specs
 .specify
-
+main
 # Playwright CLI artifacts
 *.yaml
 seeker.json
 recruiter.json
 *.png
-
+server
 # Go build artifacts
 joblinker/backend/joblinker
 joblinker/backend/server

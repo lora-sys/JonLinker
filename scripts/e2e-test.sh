@@ -2,8 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+BACKEND_PORT="${BACKEND_PORT:-8080}"
+FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 BACKEND_PID=""
 FRONTEND_PID=""
+
+# Load .env
+if [ -f "$ROOT_DIR/.env" ]; then
+  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+fi
 
 cleanup() {
   echo "Cleaning up..."
@@ -16,36 +23,29 @@ trap cleanup EXIT
 
 echo "=== JobLinker E2E Test (Phase 2) ==="
 
-echo "Starting Go backend..."
-(cd "$ROOT_DIR" && go run ./cmd/server/main.go) &
+echo "Building and starting Go backend..."
+(cd "$ROOT_DIR" && go build -o /tmp/joblinker-server ./cmd/server/ && /tmp/joblinker-server) &
 BACKEND_PID=$!
 
 echo "Starting Next.js frontend..."
 (cd "$ROOT_DIR/frontend" && npm run dev) &
 FRONTEND_PID=$!
 
-echo "Waiting for servers to be ready..."
+echo "Waiting for servers..."
 for i in $(seq 1 30); do
-  if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ 2>/dev/null | grep -q "404\|405\|200"; then
-    echo "Backend ready"
-    break
-  fi
-  if [ "$i" -eq 30 ]; then echo "Backend failed to start"; exit 1; fi
+  if curl -sf http://localhost:$BACKEND_PORT/health > /dev/null 2>&1; then echo "Backend ready"; break; fi
+  [ "$i" -eq 30 ] && echo "Backend failed to start" && exit 1
   sleep 1
 done
 
 for i in $(seq 1 60); do
-  if curl -s -o /dev/null http://localhost:3000 2>/dev/null; then
-    echo "Frontend ready"
-    break
-  fi
-  if [ "$i" -eq 60 ]; then echo "Frontend failed to start"; exit 1; fi
+  if curl -sf http://localhost:$FRONTEND_PORT > /dev/null 2>&1; then echo "Frontend ready"; break; fi
+  [ "$i" -eq 60 ] && echo "Frontend failed to start" && exit 1
   sleep 1
 done
 
 echo "Opening browser..."
-playwright-cli open http://localhost:3000
-
+playwright-cli open http://localhost:$FRONTEND_PORT
 sleep 2
 
 echo "Taking initial screenshot..."
@@ -55,8 +55,8 @@ echo "Verifying page layout..."
 SNAPSHOT=$(playwright-cli --raw snapshot)
 echo "$SNAPSHOT" | head -30
 
-echo "Phase 1 test: searching jobs..."
-playwright-cli fill input[placeholder*="描述"] "找北京的前端岗位" --submit
+echo "Phase 2 test: chat search for jobs..."
+playwright-cli fill input[placeholder*="输入职位"] "找北京的前端岗位" --submit
 
 echo "Waiting for search results..."
 sleep 8
@@ -73,5 +73,6 @@ playwright-cli --raw snapshot | grep -q "生成申请" && echo "Apply button fou
 
 echo "Phase 2 test: verify resume upload button exists..."
 playwright-cli --raw snapshot | grep -q "上传 PDF 简历" && echo "Upload button found ✓" || echo "Upload button not found"
+playwright-cli --raw snapshot | grep -q "简历助手" && echo "Resume chat panel found ✓" || echo "Resume chat panel not found"
 
 echo "=== E2E Test Complete ==="

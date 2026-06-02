@@ -7,6 +7,8 @@ import (
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+
+	"github.com/lora-sys/JonLinker/internal/session"
 )
 
 type SearchTool struct {
@@ -29,8 +31,8 @@ func (t *SearchTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 			},
 			"session_id": {
 				Type:     schema.String,
-				Desc:     "会话ID，从系统提示中获取",
-				Required: true,
+				Desc:     "会话ID（可选，系统自动填充）",
+				Required: false,
 			},
 		}),
 	}, nil
@@ -47,11 +49,19 @@ func (t *SearchTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 		return "", fmt.Errorf("parse args: %w", err)
 	}
 
-	app, err := t.dApply.Generate(ctx, args.JobURL, args.SessionID)
+	sessionID := session.SessionIDFromContext(ctx)
+	if sessionID == "" {
+		sessionID = args.SessionID
+	}
+
+	app, err := t.dApply.Generate(ctx, args.JobURL, sessionID)
 	if err != nil {
 		return fmt.Sprintf("申请生成失败: %v", err), nil
 	}
 
-	data, _ := json.Marshal(app)
+	data, err := json.Marshal(app)
+	if err != nil {
+		return "", fmt.Errorf("marshal result: %w", err)
+	}
 	return string(data), nil
 }

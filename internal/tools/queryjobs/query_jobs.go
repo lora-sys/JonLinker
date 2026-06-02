@@ -7,17 +7,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/lora-sys/JonLinker/internal/http"
 	"github.com/lora-sys/JonLinker/internal/job"
 )
 
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+var jobRe = regexp.MustCompile(`^\|\s*###\s+\[(.+?)\]\((.+?)\)(?:<br>(.+?)(?:<br>(.+?))?)?\s*\|`)
 
 type Tool struct {
 	apiKey string
@@ -61,20 +62,26 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ..
 		return fmt.Sprintf("搜索职位出错: %v", err), nil
 	}
 
-	data, _ := json.Marshal(jobs)
+	data, err := json.Marshal(jobs)
+	if err != nil {
+		return "", fmt.Errorf("marshal result: %w", err)
+	}
 	return string(data), nil
 }
 
 func (t *Tool) searchIndeed(ctx context.Context, keyword, city string) ([]job.Job, error) {
-	searchURL := fmt.Sprintf("https://cn.indeed.com/jobs?q=%s", urlEncodeChinese(keyword))
+	searchURL := fmt.Sprintf("https://cn.indeed.com/jobs?q=%s", url.QueryEscape(keyword))
 	if city != "" {
-		searchURL += "&l=" + urlEncodeChinese(city)
+		searchURL += "&l=" + url.QueryEscape(city)
 	}
 
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"url":     searchURL,
 		"formats": []string{"markdown"},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal body: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.firecrawl.dev/v1/scrape", bytes.NewReader(body))
 	if err != nil {
@@ -83,13 +90,16 @@ func (t *Tool) searchIndeed(ctx context.Context, keyword, city string) ([]job.Jo
 	req.Header.Set("Authorization", "Bearer "+t.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpc.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("firecrawl request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
 
 	var fcResp struct {
 		Success bool `json:"success"`
@@ -111,7 +121,6 @@ func parseIndeedJobs(md string) []job.Job {
 	var jobs []job.Job
 	lines := strings.Split(md, "\n")
 
-	jobRe := regexp.MustCompile(`^\|\s*###\s+\[(.+?)\]\((.+?)\)(?:<br>(.+?)(?:<br>(.+?))?)?\s*\|`)
 	var current *job.Job
 	collectDesc := false
 
@@ -131,7 +140,9 @@ func parseIndeedJobs(md string) []job.Job {
 				Source: "Indeed",
 			}
 			relURL := match[2]
-			if !strings.HasPrefix(relURL, "http") {
+			if strings.HasPrefix(relURL, "//") {
+				current.URL = "https:" + relURL
+			} else if !strings.HasPrefix(relURL, "http") {
 				current.URL = "https://cn.indeed.com" + relURL
 			} else {
 				current.URL = relURL
@@ -169,14 +180,4 @@ func parseIndeedJobs(md string) []job.Job {
 	return jobs
 }
 
-func urlEncodeChinese(s string) string {
-	var buf bytes.Buffer
-	for _, b := range []byte(s) {
-		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.' || b == '~' {
-			buf.WriteByte(b)
-		} else {
-			buf.WriteString(fmt.Sprintf("%%%02X", b))
-		}
-	}
-	return buf.String()
-}
+

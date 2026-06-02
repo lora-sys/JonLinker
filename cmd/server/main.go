@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -12,10 +14,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cloudwego/eino/schema"
+
 	"github.com/lora-sys/JonLinker/internal/agent"
 	"github.com/lora-sys/JonLinker/internal/checkpoint"
 	"github.com/lora-sys/JonLinker/internal/config"
 	"github.com/lora-sys/JonLinker/internal/job"
+	"github.com/lora-sys/JonLinker/internal/llm"
+	"github.com/lora-sys/JonLinker/internal/memory"
+	"github.com/lora-sys/JonLinker/internal/resume"
+	"github.com/lora-sys/JonLinker/internal/middleware"
+	"github.com/lora-sys/JonLinker/internal/sse"
 	"github.com/lora-sys/JonLinker/internal/tools/applyjob"
 	"github.com/lora-sys/JonLinker/internal/tools/parseresume"
 )
@@ -28,6 +37,7 @@ type resumeAgentEntry struct {
 type server struct {
 	cfg           *config.Config
 	searchAgent   *agent.Agent
+	memStore      memory.MemoryStore
 	checkpoint    *checkpoint.Store
 	directApply   *applyjob.DirectApply
 	resumeParser  *parseresume.Tool
@@ -43,7 +53,8 @@ func main() {
 	cpStore := checkpoint.NewPersistentStore(cfg.SessionFile)
 	dApply := applyjob.NewDirectApply(cpStore, cfg.FirecrawlKey, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
 
-	srchAgent, err := agent.New(ctx, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.FirecrawlKey, dApply)
+	agentMem := memory.NewStore(cfg)
+	srchAgent, err := agent.New(ctx, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.FirecrawlKey, dApply, agentMem, cpStore)
 	if err != nil {
 		log.Fatalf("init search agent: %v", err)
 	}
@@ -52,6 +63,7 @@ func main() {
 	srv := &server{
 		cfg:          cfg,
 		searchAgent:  srchAgent,
+		memStore:     agentMem,
 		checkpoint:   cpStore,
 		directApply:  dApply,
 		resumeParser: rParser,
@@ -61,20 +73,19 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		log.Printf("health encode: %v", err)
+	}
 	})
-	mux.HandleFunc("POST /api/search", srv.handleSearch)
-	mux.HandleFunc("POST /api/search/stream", srv.handleSearchStream)
-	mux.HandleFunc("POST /api/chat", srv.handleAIChat)
 	mux.HandleFunc("POST /api/resume/upload", srv.handleUpload)
-	mux.HandleFunc("POST /api/chat/resume", srv.handleChat)
+	mux.HandleFunc("POST /api/chat/unified", srv.handleUnifiedChat)
 	mux.HandleFunc("POST /api/apply", srv.handleApply)
 
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
 	srv.cleanupCancel = cleanupCancel
 	go srv.cleanupLoop(cleanupCtx)
 
-	handler := corsMiddleware(mux, cfg.FrontendURL)
+	handler := middleware.CORS(cfg.FrontendURL)(mux)
 
 	log.Printf("server starting on :%s", cfg.ServerPort)
 	if err := http.ListenAndServe(":"+cfg.ServerPort, handler); err != nil {
@@ -82,199 +93,29 @@ func main() {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+
+
+type chatMessage struct {
+	ID      string `json:"id"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
+	// AI SDK v6 sends parts instead of content
+	Parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"parts"`
 }
 
-func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	var req job.SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+func (m chatMessage) text() string {
+	if m.Content != "" {
+		return m.Content
 	}
-
-	msg, err := s.searchAgent.Search(r.Context(), req.Query, req.SessionID)
-	if err != nil {
-		log.Printf("agent error: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	content := msg.Content
-	resp := parseAgentResponse(content)
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *server) handleSearchStream(w http.ResponseWriter, r *http.Request) {
-	var req job.SearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	msg, err := s.searchAgent.SearchStream(r.Context(), req.Query, req.SessionID, func(thinking string) {
-		_, _ = w.Write([]byte("data: ===THINKING===\n"))
-		_, _ = w.Write([]byte("data: " + strings.ReplaceAll(thinking, "\n", "\\n") + "\n\n"))
-		flusher.Flush()
-	})
-	if err != nil {
-		log.Printf("agent error: %v", err)
-		writeSSE(w, flusher, map[string]string{"type": "error", "errorText": err.Error()})
-		writeSSE(w, flusher, map[string]string{"type": "finish", "finishReason": "error"})
-		return
-	}
-
-	resp := parseAgentResponse(msg.Content)
-
-	if resp.Message != "" {
-		runes := []rune(resp.Message)
-		chunkSize := 3
-		for i := 0; i < len(runes); i += chunkSize {
-			select {
-			case <-r.Context().Done():
-				return
-			default:
-			}
-			end := i + chunkSize
-			if end > len(runes) {
-				end = len(runes)
-			}
-			_, _ = w.Write([]byte("data: " + string(runes[i:end]) + "\n\n"))
-			flusher.Flush()
-			time.Sleep(15 * time.Millisecond)
+	for _, p := range m.Parts {
+		if p.Type == "text" {
+			return p.Text
 		}
 	}
-
-	if resp.Jobs != nil || resp.Application != nil {
-		jsonData, _ := json.Marshal(resp)
-		_, _ = w.Write([]byte("data: ===JSON===\n"))
-		_, _ = w.Write([]byte("data: " + string(jsonData) + "\n\n"))
-		flusher.Flush()
-	}
-
-	_, _ = w.Write([]byte("data: [DONE]\n\n"))
-	flusher.Flush()
-}
-
-func (s *server) handleAIChat(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Messages  []struct {
-			ID      string `json:"id"`
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"messages"`
-		ID        string `json:"id"`
-		SessionID string `json:"session_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	if len(req.Messages) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no messages"})
-		return
-	}
-
-	// Last user message is the query
-	last := req.Messages[len(req.Messages)-1]
-	if last.Role != "user" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "last message must be from user"})
-		return
-	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	// Send start event
-	msgID := "msg_" + strconv.Itoa(int(time.Now().UnixNano()))
-	writeSSE(w, flusher, map[string]string{"type": "start"})
-	writeSSE(w, flusher, map[string]string{"type": "text-start", "id": msgID})
-
-	// Process through agent
-	msg, err := s.searchAgent.Search(r.Context(), last.Content, req.SessionID)
-	if err != nil {
-		writeSSE(w, flusher, map[string]string{"type": "error", "errorText": err.Error()})
-		writeSSE(w, flusher, map[string]string{"type": "finish", "finishReason": "error"})
-		return
-	}
-
-	resp := parseAgentResponse(msg.Content)
-
-	// Stream text in chunks
-	if resp.Message != "" {
-		runes := []rune(resp.Message)
-		chunkSize := 3
-		for i := 0; i < len(runes); i += chunkSize {
-			select {
-			case <-r.Context().Done():
-				return
-			default:
-			}
-			end := i + chunkSize
-			if end > len(runes) {
-				end = len(runes)
-			}
-			writeSSE(w, flusher, map[string]any{
-				"type":  "text-delta",
-				"id":    msgID,
-				"delta": string(runes[i:end]),
-			})
-			time.Sleep(15 * time.Millisecond)
-		}
-	} else {
-		writeSSE(w, flusher, map[string]any{
-			"type":  "text-delta",
-			"id":    msgID,
-			"delta": "",
-		})
-	}
-
-	writeSSE(w, flusher, map[string]string{"type": "text-end", "id": msgID})
-
-	// Send structured data as custom data events (type starts with "data-")
-	// The `data` field of the event is what onData receives in the frontend.
-	if len(resp.Jobs) > 0 {
-		writeSSE(w, flusher, map[string]any{
-			"type": "data-jobs",
-			"id":   msgID,
-			"data": resp.Jobs,
-		})
-	}
-	if resp.Application != nil {
-		writeSSE(w, flusher, map[string]any{
-			"type": "data-application",
-			"id":   msgID,
-			"data": resp.Application,
-		})
-	}
-
-	writeSSE(w, flusher, map[string]string{"type": "finish", "finishReason": "stop"})
-}
-
-func writeSSE(w http.ResponseWriter, flusher http.Flusher, v any) {
-	b, _ := json.Marshal(v)
-	_, _ = w.Write([]byte("data: " + string(b) + "\n\n"))
-	flusher.Flush()
+	return ""
 }
 
 func parseAgentResponse(content string) job.SearchResponse {
@@ -295,7 +136,7 @@ func parseAgentResponse(content string) job.SearchResponse {
 		}
 		start += searchFrom
 
-		blockStart := start + 9
+		blockStart := start + 10
 		end := strings.Index(content[blockStart:], "===END===")
 		if end < 0 {
 			break
@@ -307,7 +148,7 @@ func parseAgentResponse(content string) job.SearchResponse {
 			break
 		}
 
-		searchFrom = end + 8
+		searchFrom = end + 9
 	}
 
 	// If marker extraction failed, try greedy JSON extraction (agent sometimes omits markers)
@@ -322,6 +163,8 @@ func parseAgentResponse(content string) job.SearchResponse {
 			if end := strings.LastIndex(content[start:], "}"); end >= 0 {
 				raw := content[start : start+end+1]
 				if err := json.Unmarshal([]byte(raw), &resp); err == nil {
+					// Strip extracted JSON from text to prevent raw JSON leaking into chat output
+					content = strings.Replace(content, raw, "", 1)
 					break
 				}
 			}
@@ -339,7 +182,7 @@ func parseAgentResponse(content string) job.SearchResponse {
 		if end < 0 {
 			break
 		}
-		text = text[:start] + text[start+end+8:]
+		text = text[:start] + text[start+end+9:]
 	}
 	text = strings.TrimSpace(text)
 	if text != "" {
@@ -359,37 +202,37 @@ func parseAgentResponse(content string) job.SearchResponse {
 
 func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file too large or invalid"})
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "file too large or invalid"})
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing file"})
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "missing file"})
 		return
 	}
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "read file failed"})
+		sse.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "read file failed"})
 		return
 	}
 
 	text, err := s.resumeParser.ParseFile(r.Context(), header.Filename, data)
 	if err != nil {
 		log.Printf("parse resume: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "parse resume failed: " + err.Error()})
+		sse.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "parse resume failed: " + err.Error()})
 		return
 	}
 
 	sessionID := genSessionID()
 
 	ragent, err := agent.NewResumeAgent(r.Context(),
-		s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, text, s.checkpoint)
+		s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, text, s.checkpoint, s.memStore)
 	if err != nil {
 		log.Printf("init resume agent: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "init agent failed"})
+		sse.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "init agent failed"})
 		return
 	}
 
@@ -397,34 +240,63 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	s.resumeAgents[sessionID] = &resumeAgentEntry{agent: ragent, time: time.Now()}
 	s.mu.Unlock()
 
-	writeJSON(w, http.StatusOK, job.UploadResponse{
+	// Immediately extract a preliminary profile so /api/apply works without prior chat
+	if cm, err := llm.NewChatModel(r.Context(), s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, 1024, 0.3); err == nil {
+		extractPrompt := fmt.Sprintf(`Extract candidate profile from resume text as JSON. Use empty strings/arrays for missing fields.
+
+%s
+
+{"name":"","title":"","skills":[],"experience":[],"education":[],"phone":"","email":"","summary":"","hobbies":[]}`, text)
+		if result, genErr := cm.Generate(r.Context(), []*schema.Message{{Role: schema.User, Content: extractPrompt}}); genErr == nil {
+			content := result.Content
+			if idx := strings.Index(content, "{"); idx >= 0 {
+				content = content[idx:]
+			}
+			if idx := strings.LastIndex(content, "}"); idx >= 0 {
+				content = content[:idx+1]
+			}
+			var profile resume.CandidateProfile
+			if err := json.Unmarshal([]byte(content), &profile); err == nil && profile.Name != "" {
+				if b, err := json.Marshal(profile); err == nil {
+					if err := s.checkpoint.Set(r.Context(), sessionID+":profile", b); err != nil {
+						log.Printf("save initial profile: %v", err)
+					}
+				}
+			}
+		}
+	}
+
+	sse.WriteJSON(w, http.StatusOK, job.UploadResponse{
 		SessionID: sessionID,
 		Text:      text[:min(len(text), 500)],
 	})
 }
 
-func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SessionID string `json:"session_id"`
-		Message   string `json:"message"`
+		Messages  []chatMessage `json:"messages"`
+		ID        string        `json:"id"`
+		SessionID string        `json:"session_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	s.mu.Lock()
-	entry, ok := s.resumeAgents[req.SessionID]
-	s.mu.Unlock()
-	if !ok {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session not found"})
+	if len(req.Messages) == 0 {
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no messages"})
 		return
 	}
 
-	var err error
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role != "user" {
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "last message must be from user"})
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
+		sse.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "streaming not supported"})
 		return
 	}
 
@@ -432,56 +304,172 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	_, err = entry.agent.ChatStream(r.Context(), req.SessionID, req.Message, func(token string) {
-		select {
-		case <-r.Context().Done():
-			return
-		default:
-		}
-		if token == "" {
-			return
-		}
-		_, _ = w.Write([]byte("data: " + strings.ReplaceAll(token, "\n", "\\n") + "\n\n"))
-		flusher.Flush()
-	})
-	if err != nil {
-		log.Printf("resume chat: %v", err)
+	userMsg := last.text()
+
+	profileData, hasProfile, _ := s.checkpoint.Get(r.Context(), req.SessionID+":profile")
+
+	s.mu.Lock()
+	_, hasResumeAgent := s.resumeAgents[req.SessionID]
+	s.mu.Unlock()
+
+	kind := agent.Route(hasResumeAgent, profileData, userMsg)
+
+	// Ensure profile exists for search agent if no resume agent
+	if kind == agent.AgentSearch && !hasProfile {
+		kind = agent.AgentResume
 	}
-	_, _ = w.Write([]byte("data: [DONE]\n\n"))
+
+	msgID := "msg_" + strconv.Itoa(int(msgCounter.Add(1)))
+	_ = sse.WriteEvent(w, map[string]string{"type": "start"})
+	flusher.Flush()
+	_ = sse.WriteEvent(w, map[string]string{"type": "text-start", "id": msgID})
+	flusher.Flush()
+
+	switch kind {
+	case agent.AgentResume:
+		s.mu.Lock()
+		entry, ok := s.resumeAgents[req.SessionID]
+		s.mu.Unlock()
+		if !ok {
+			_ = sse.WriteEvent(w, map[string]any{
+				"type":  "text-delta",
+				"id":    msgID,
+				"delta": "请先上传简历后再开始完善资料。",
+			})
+			flusher.Flush()
+			_ = sse.WriteEvent(w, map[string]string{"type": "text-end", "id": msgID})
+			_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "stop"})
+			flusher.Flush()
+			return
+		}
+		responseText, err := entry.agent.ChatStream(r.Context(), req.SessionID, userMsg, func(token string) {
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+			if token == "" {
+				return
+			}
+			_ = sse.WriteEvent(w, map[string]any{
+				"type":  "text-delta",
+				"id":    msgID,
+				"delta": token,
+			})
+			flusher.Flush()
+		})
+		if err != nil {
+			log.Printf("resume chat: %v", err)
+			_ = sse.WriteEvent(w, map[string]string{"type": "error", "errorText": err.Error()})
+			flusher.Flush()
+			_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "error"})
+			flusher.Flush()
+			return
+		}
+
+		_ = sse.WriteEvent(w, map[string]string{"type": "text-end", "id": msgID})
+		flusher.Flush()
+
+		jsonPart := responseText
+		if idx := strings.Index(jsonPart, "{"); idx >= 0 {
+			jsonPart = jsonPart[idx:]
+		}
+		if idx := strings.LastIndex(jsonPart, "}"); idx >= 0 {
+			jsonPart = jsonPart[:idx+1]
+		}
+
+		var resumeState struct {
+			Complete bool                    `json:"complete"`
+			Message  string                  `json:"message,omitempty"`
+			Profile  resume.CandidateProfile `json:"profile,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(jsonPart), &resumeState); err == nil {
+			_ = sse.WriteEvent(w, map[string]any{
+				"type": "data-resume",
+				"id":   msgID,
+				"data": resumeState,
+			})
+			flusher.Flush()
+		}
+
+	case agent.AgentSearch:
+		var resp job.SearchResponse
+		msg, err := s.searchAgent.SearchStream(r.Context(), userMsg, req.SessionID, func(token string) {
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+			if token == "" {
+				return
+			}
+			_ = sse.WriteEvent(w, map[string]any{
+				"type":  "text-delta",
+				"id":    msgID,
+				"delta": token,
+			})
+			flusher.Flush()
+		})
+		if err != nil {
+			_ = sse.WriteEvent(w, map[string]string{"type": "error", "errorText": err.Error()})
+			flusher.Flush()
+			_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "error"})
+			flusher.Flush()
+			return
+		}
+
+		resp = parseAgentResponse(msg.Content)
+
+		_ = sse.WriteEvent(w, map[string]string{"type": "text-end", "id": msgID})
+		flusher.Flush()
+
+		if len(resp.Jobs) > 0 {
+			_ = sse.WriteEvent(w, map[string]any{
+				"type": "data-jobs",
+				"id":   msgID,
+				"data": resp.Jobs,
+			})
+			flusher.Flush()
+		}
+		if resp.Application != nil {
+			_ = sse.WriteEvent(w, map[string]any{
+				"type": "data-application",
+				"id":   msgID,
+				"data": resp.Application,
+			})
+			flusher.Flush()
+		}
+	}
+
+	_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "stop"})
 	flusher.Flush()
 }
 
 func (s *server) handleApply(w http.ResponseWriter, r *http.Request) {
 	var req job.ApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
 	app, err := s.directApply.Generate(r.Context(), req.JobURL, req.SessionID)
 	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, applyjob.ErrProfileNotFound) {
+			status = http.StatusBadRequest
+		}
 		log.Printf("apply error: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		sse.WriteJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, app)
+	sse.WriteJSON(w, http.StatusOK, app)
 }
 
-func corsMiddleware(next http.Handler, frontendURL string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", frontendURL)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
+
 
 var sessionCounter atomic.Int64
+var msgCounter atomic.Int64
 
 func genSessionID() string {
 	n := sessionCounter.Add(1)
@@ -506,5 +494,7 @@ func (s *server) cleanupLoop(ctx context.Context) {
 		}
 	}
 }
+
+
 
 

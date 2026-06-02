@@ -1,10 +1,13 @@
+"use client";
+
 import type { RankedJob } from "@/lib/types";
 
 export function JobCard({
-  job, sessionId, applying, onApply,
+  job, sessionId, profileReady, applying, onApply,
 }: {
   job: RankedJob;
   sessionId: string | null;
+  profileReady: boolean;
   applying: string | null;
   onApply: (job: RankedJob) => void;
 }) {
@@ -24,8 +27,8 @@ export function JobCard({
       <p className="text-xs text-muted-foreground mb-2">{job.summary}</p>
       {job.highlights?.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
-          {job.highlights.map((h, k) => (
-            <span key={k} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{h}</span>
+            {job.highlights.map((h) => (
+            <span key={h} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{h}</span>
           ))}
         </div>
       )}
@@ -37,10 +40,10 @@ export function JobCard({
         <button
           className="ml-auto px-3 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
           onClick={() => onApply(job)}
-          disabled={applying === job.url || !sessionId}
-          title={!sessionId ? "请先上传简历" : "生成申请"}
+          disabled={applying === job.url || !sessionId || !profileReady}
+          title={!sessionId ? "请先上传简历" : !profileReady ? "请先完善个人资料" : "生成申请"}
         >
-          {applying === job.url ? "生成中..." : !sessionId ? "需先上传简历" : "生成申请"}
+          {applying === job.url ? "生成中..." : !sessionId ? "需先上传简历" : !profileReady ? "需先完成资料" : "生成申请"}
         </button>
       </div>
     </div>
