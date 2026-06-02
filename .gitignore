@@ -28,7 +28,7 @@ joblinker/backend/seed-data
 
 # Runtime data
 data
-
+output
 # Environment
 .env
 .env.local
