@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/cloudwego/eino/compose"
@@ -61,6 +62,29 @@ func (s *Store) load() {
 		return
 	}
 	s.data = data
+}
+
+func (s *Store) HasPrefix(_ context.Context, prefix string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for k := range s.data {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) Keys(_ context.Context, prefix string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var keys []string
+	for k := range s.data {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 func (s *Store) persist() error {

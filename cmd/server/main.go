@@ -35,15 +35,16 @@ type resumeAgentEntry struct {
 }
 
 type server struct {
-	cfg           *config.Config
-	searchAgent   *agent.Agent
-	memStore      memory.MemoryStore
-	checkpoint    *checkpoint.Store
-	directApply   *applyjob.DirectApply
-	resumeParser  *parseresume.Tool
-	resumeAgents  map[string]*resumeAgentEntry
-	mu            sync.Mutex
-	cleanupCancel context.CancelFunc
+	cfg            *config.Config
+	searchAgent    *agent.Agent
+	recruiterAgent *agent.RecruiterAgent
+	memStore       memory.MemoryStore
+	checkpoint     *checkpoint.Store
+	directApply    *applyjob.DirectApply
+	resumeParser   *parseresume.Tool
+	resumeAgents   map[string]*resumeAgentEntry
+	mu             sync.Mutex
+	cleanupCancel  context.CancelFunc
 }
 
 func main() {
@@ -58,16 +59,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("init search agent: %v", err)
 	}
+	recAgent, err := agent.NewRecruiterAgent(ctx, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cpStore, agentMem)
+	if err != nil {
+		log.Fatalf("init recruiter agent: %v", err)
+	}
 	rParser := parseresume.NewTool(cfg.FirecrawlKey)
 
 	srv := &server{
-		cfg:          cfg,
-		searchAgent:  srchAgent,
-		memStore:     agentMem,
-		checkpoint:   cpStore,
-		directApply:  dApply,
-		resumeParser: rParser,
-		resumeAgents: make(map[string]*resumeAgentEntry),
+		cfg:            cfg,
+		searchAgent:    srchAgent,
+		recruiterAgent: recAgent,
+		memStore:       agentMem,
+		checkpoint:     cpStore,
+		directApply:    dApply,
+		resumeParser:   rParser,
+		resumeAgents:   make(map[string]*resumeAgentEntry),
 	}
 
 	mux := http.NewServeMux()
@@ -306,18 +312,20 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 
 	userMsg := last.text()
 
-	profileData, hasProfile, _ := s.checkpoint.Get(r.Context(), req.SessionID+":profile")
+	profileData, _, _ := s.checkpoint.Get(r.Context(), req.SessionID+":profile")
 
 	s.mu.Lock()
 	_, hasResumeAgent := s.resumeAgents[req.SessionID]
 	s.mu.Unlock()
 
-	kind := agent.Route(hasResumeAgent, profileData, userMsg)
-
-	// Ensure profile exists for search agent if no resume agent
-	if kind == agent.AgentSearch && !hasProfile {
-		kind = agent.AgentResume
+	lastAgentData, _, _ := s.checkpoint.Get(r.Context(), req.SessionID+":last_agent")
+	lastAgent := "search"
+	if len(lastAgentData) > 0 {
+		lastAgent = string(lastAgentData)
 	}
+	hasApplication := s.checkpoint.HasPrefix(r.Context(), req.SessionID+":application_")
+
+	kind := agent.Route(hasResumeAgent, profileData, userMsg, lastAgent, hasApplication)
 
 	msgID := "msg_" + strconv.Itoa(int(msgCounter.Add(1)))
 	_ = sse.WriteEvent(w, map[string]string{"type": "start"})
@@ -325,8 +333,16 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 	_ = sse.WriteEvent(w, map[string]string{"type": "text-start", "id": msgID})
 	flusher.Flush()
 
+	var agentName string
+	defer func() {
+		if agentName != "" {
+			_ = s.checkpoint.Set(r.Context(), req.SessionID+":last_agent", []byte(agentName))
+		}
+	}()
+
 	switch kind {
 	case agent.AgentResume:
+		agentName = "resume"
 		s.mu.Lock()
 		entry, ok := s.resumeAgents[req.SessionID]
 		s.mu.Unlock()
@@ -393,6 +409,7 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case agent.AgentSearch:
+		agentName = "search"
 		var resp job.SearchResponse
 		msg, err := s.searchAgent.SearchStream(r.Context(), userMsg, req.SessionID, func(token string) {
 			select {
@@ -439,6 +456,36 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 			})
 			flusher.Flush()
 		}
+
+	case agent.AgentRecruiter:
+		agentName = "recruiter"
+		_, err := s.recruiterAgent.ChatStream(r.Context(), userMsg, req.SessionID, func(token string) {
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+			if token == "" {
+				return
+			}
+			_ = sse.WriteEvent(w, map[string]any{
+				"type":  "text-delta",
+				"id":    msgID,
+				"delta": token,
+			})
+			flusher.Flush()
+		})
+		if err != nil {
+			log.Printf("recruiter chat: %v", err)
+			_ = sse.WriteEvent(w, map[string]string{"type": "error", "errorText": err.Error()})
+			flusher.Flush()
+			_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "error"})
+			flusher.Flush()
+			return
+		}
+
+		_ = sse.WriteEvent(w, map[string]string{"type": "text-end", "id": msgID})
+		flusher.Flush()
 	}
 
 	_ = sse.WriteEvent(w, map[string]string{"type": "finish", "finishReason": "stop"})

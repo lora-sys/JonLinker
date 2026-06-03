@@ -12,9 +12,10 @@ type AgentKind int
 const (
 	AgentResume AgentKind = iota
 	AgentSearch
+	AgentRecruiter
 )
 
-func Route(hasResumeAgent bool, profileJSON []byte, message string) AgentKind {
+func Route(hasResumeAgent bool, profileJSON []byte, message string, lastAgent string, hasApplication bool) AgentKind {
 	if len(profileJSON) > 0 {
 		var profile resume.CandidateProfile
 		if err := json.Unmarshal(profileJSON, &profile); err != nil {
@@ -40,5 +41,28 @@ func Route(hasResumeAgent bool, profileJSON []byte, message string) AgentKind {
 		}
 	}
 
-	return AgentSearch
+	interviewKeywords := []string{"面试", "练习", "recruiter", "interview", "practice", "聊"}
+	for _, kw := range interviewKeywords {
+		if strings.Contains(lower, kw) {
+			if hasApplication {
+				return AgentRecruiter
+			}
+		}
+	}
+
+	searchKeywords := []string{"搜索", "查找", "找", "search", "find", "job", "职位", "工作", "机会"}
+	for _, kw := range searchKeywords {
+		if strings.Contains(lower, kw) {
+			return AgentSearch
+		}
+	}
+
+	switch lastAgent {
+	case "resume":
+		return AgentResume
+	case "recruiter":
+		return AgentRecruiter
+	default:
+		return AgentSearch
+	}
 }
