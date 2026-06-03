@@ -9,7 +9,7 @@ JobLinker 是一个 AI 招聘助手系统，通过多阶段自主 Agent 帮助�
 _Avoid_: Job Agent, Main Agent
 
 **Resume Agent**:
-简历聊天的 Eino ReAct Agent。通过多轮对话 + PDF 解析补全候选人个人资料。
+简历聊天的 Eino ChatModel Agent。通过多轮对话 + PDF 解析补全候选人个人资料。
 _Avoid_: Chat Agent, Profile Agent
 
 **CandidateProfile**:
@@ -21,7 +21,7 @@ _Avoid_: Resume, CV, 简历
 _Avoid_: Apply request, 投递
 
 **SearchIsland**:
-前端搜索职位的客户端岛屿组件。
+前端搜索职位的客户端岛屿组件。聊天式界面，支持搜索和申请一体化对话。
 _Avoid_: Search page, Search form
 
 **ResumeChatIsland**:
@@ -37,7 +37,7 @@ _Avoid_: WebSocket, polling
 _Avoid_: Apply request, 投递
 
 **CheckpointStore**:
-Eino 内置的状态持久化机制，用于在 Resume Agent 和 Search Agent 之间共享 CandidateProfile。
+Eino `compose.CheckPointStore` 接口，用于在 Resume Agent 和 Search Agent 之间共享 CandidateProfile。
 _Avoid_: Database, session store
 
 **CoverLetter**:
@@ -52,7 +52,7 @@ _Avoid_: SPA, CSR-only
 
 - **Search Agent** 拥有 `query_jobs` 工具
 - **Search Agent** 拥有 `apply_job` 工具（从 CheckpointStore 读 CandidateProfile + 接收 Job，生成 Application）
-- **Resume Agent** 拥有 `parse_resume_pdf` 工具（通过 Firecrawl /v1/parse 解析 PDF）
+- **Resume Agent** 拥有 `parse_resume_pdf` 工具（通过 Firecrawl CLI 解析 PDF）
 - **Resume Agent** 通过 SSE Streaming 与 ResumeChatIsland 对话
 - **Resume Agent** 将 CandidateProfile 写入 CheckpointStore
 - **Search Agent** 从 CheckpointStore 读取 CandidateProfile

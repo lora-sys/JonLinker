@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,17 +16,33 @@ type Config struct {
 	FirecrawlKey  string
 	ServerPort    string
 	FrontendURL   string
+	SessionFile   string
+	RedisURL      string
+	MemoryBackend string
 }
 
 func Load() *Config {
 	loadEnvFile()
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	firecrawlKey := os.Getenv("FIRECRAWL_API_KEY")
+	if apiKey == "" {
+		log.Fatal("OPENAI_API_KEY is required")
+	}
+	if firecrawlKey == "" {
+		log.Fatal("FIRECRAWL_API_KEY is required")
+	}
+
 	return &Config{
 		OpenAIBaseURL: normalizeBaseURL(os.Getenv("OPENAI_BASE_URL")),
-		OpenAIAPIKey:  os.Getenv("OPENAI_API_KEY"),
+		OpenAIAPIKey:  apiKey,
 		OpenAIModel:   os.Getenv("OPENAI_MODEL"),
-		FirecrawlKey:  os.Getenv("FIRECRAWL_API_KEY"),
+		FirecrawlKey:  firecrawlKey,
 		ServerPort:    envDefault("SERVER_PORT", "8080"),
 		FrontendURL:   envDefault("FRONTEND_URL", "http://localhost:3000"),
+		SessionFile:   os.Getenv("SESSION_FILE"),
+		RedisURL:      os.Getenv("REDIS_URL"),
+		MemoryBackend: envDefault("MEMORY_BACKEND", "inmem"),
 	}
 }
 
@@ -37,6 +54,9 @@ func envDefault(key, fallback string) string {
 }
 
 func normalizeBaseURL(url string) string {
+	if url == "" {
+		return ""
+	}
 	url = strings.TrimRight(url, "/")
 	if !strings.HasSuffix(url, "/v1") {
 		url += "/v1"

@@ -1,208 +1,106 @@
 # JobLinker
 
-AI Recruiting Agent
-
-JobLinker is an autonomous recruiting system designed to progressively reduce human involvement in job searching, applying, communication, negotiation and offer management.
-
----
-
-# Vision
-
-Candidate Agent
-
-Search Jobs
-→ Apply Jobs
-→ Communicate
-→ Negotiate
-→ Offer
-→ Human Confirmation
-
-The long-term goal is a fully autonomous recruiting workflow.
+AI Recruiting Agent — autonomous job search and application system.
 
 ---
 
 # Current Status
 
-Current Development Phase:
+✅ Phase 1 — Job Search Agent (complete)
+✅ Phase 2 — Auto Apply Agent (complete)
 
-✅ Phase 1 — Job Search Agent
+---
 
-In Progress
+# Architecture
+
+```
+frontend/              # Next.js 16 (App Router)
+├── src/app/
+│   ├── page.tsx       # Server component shell (no "use client")
+│   └── layout.tsx     # Root layout
+├── src/components/
+│   ├── AppShell.tsx         # Client island: session state + grid
+│   ├── SearchIsland.tsx     # Client: useChat + job cards + apply
+│   ├── ResumeChatIsland.tsx # Client: PDF upload + resume chat
+│   ├── ApplicationCard.tsx  # Client: cover letter + resume tabs
+│   └── JobCard.tsx          # Presentational job card
+├── src/lib/
+│   ├── types.ts      # Job, RankedJob, Application types
+│   └── chat.ts       # useSSEChat hook + helpers
+└── src/components/ai-elements/   # Chat UI primitives (Streamdown, etc.)
+
+cmd/server/main.go     # Go HTTP server
+internal/
+├── agent/             # Search agent (Eino ReAct) + Resume agent
+├── tools/
+│   ├── applyjob/      # Generate cover letter + tailored resume
+│   ├── queryjobs/     # Firecrawl job search (Indeed China)
+│   └── parseresume/   # PDF resume parsing via Firecrawl
+├── checkpoint/        # Candidate profile store
+├── job/               # Shared types (SearchResponse, etc.)
+└── config/            # Environment configuration
+```
+
+---
+
+# Frontend Architecture
+
+Follows **Next.js App Router** pattern:
+- `page.tsx` is a **server component** (no `"use client"`) — static shell
+- Interactive islands are **client components** with `"use client"`
+- Chat uses **AI SDK v6** with `useChat` + `DefaultChatTransport`
+- Resume chat uses raw SSE → custom `useSSEChat` hook
+- Structured data (jobs, applications) sent via AI SDK `data-*` events
+
+---
+
+# API Endpoints
+
+| Method | Path | Protocol | Description |
+|--------|------|----------|-------------|
+| POST | `/api/chat` | AI SDK v6 SSE | Search agent (streaming) |
+| POST | `/api/chat/resume` | Raw SSE | Resume agent chat |
+| POST | `/api/apply` | JSON REST | Generate application |
+| POST | `/api/resume/upload` | FormData | Upload + parse PDF |
+| GET  | `/health` | JSON REST | Health check |
+
+---
+
+# Setup
+
+```bash
+# Backend
+cp .env.example .env   # Configure OPENAI_API_KEY, FIRECRAWL_API_KEY, etc.
+go build ./cmd/server/
+./server
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
 
 ---
 
 # Roadmap
 
-## Phase 1 — Job Search Agent
+## Phase 1 — Job Search Agent ✅
+Query, rank, and explain job recommendations.
 
-Goal:
-
-Help users discover relevant jobs.
-
-Capabilities:
-
-* Query jobs
-* Rank jobs
-* Explain recommendations
-
-Output:
-
-Top matching jobs
-
----
-
-## Phase 2 — Auto Apply Agent
-
-Goal:
-
-Allow AI to apply for jobs automatically.
-
-Capabilities:
-
-* Generate applications
-* Submit applications
-
-Output:
-
-Applied jobs
-
----
+## Phase 2 — Auto Apply Agent ✅
+Parse resumes, generate cover letters and tailored resumes.
 
 ## Phase 3 — Recruiter Chat
-
-Goal:
-
-Allow AI to communicate with recruiters.
-
-Capabilities:
-
-* Multi-turn conversations
-* Context awareness
-
-Output:
-
-Recruiter communication
-
----
+Multi-turn conversations with recruiters.
 
 ## Phase 4 — A2A Recruiter
-
-Goal:
-
-Agent-to-Agent recruiting communication.
-
-Capabilities:
-
-* Candidate Agent
-* Recruiter Agent
-
-Output:
-
-Autonomous recruiting discussions
-
----
+Agent-to-agent recruiting communication.
 
 ## Phase 5 — Negotiation
-
-Goal:
-
 Autonomous offer negotiation.
 
-Capabilities:
-
-* Salary discussion
-* Start date discussion
-* Offer generation
-
-Output:
-
-Negotiated offer
-
----
-
 ## Phase 6 — Memory
-
-Goal:
-
 Long-term candidate understanding.
 
-Capabilities:
-
-* Preference extraction
-* Memory recall
-
-Output:
-
-Personalized recruiting
-
----
-
 ## Phase 7 — Autonomous Recruiting
-
-Goal:
-
-Fully autonomous recruiting workflow.
-
-Output:
-
-Offer ready for human confirmation
-
----
-
-# Core Philosophy
-
-We are not building infrastructure.
-
-We are building recruiting outcomes.
-
-Every feature must create measurable recruiting value.
-
-If a feature does not help:
-
-* Find jobs
-* Apply jobs
-* Communicate
-* Negotiate
-* Generate offers
-
-it should not be implemented.
-
----
-
-# Success Metric
-
-Success is not:
-
-* More services
-* More agents
-* More architecture
-
-Success is:
-
-More recruiting work completed autonomously by AI.
-
----
-
-# Current Scope
-
-Phase 1 Only
-
-Included:
-
-* Candidate Agent
-* query_jobs
-* Job Ranking
-* Recommendation Explanation
-
-Excluded:
-
-* Recruiter Agent
-* Negotiation
-* Memory
-* RabbitMQ
-* WebSocket
-* Vector Database
-* Workflow Engine
-* MCP Integration
-
-These will be introduced only when their corresponding phase begins.
+End-to-end autonomous workflow.

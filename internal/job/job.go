@@ -19,17 +19,31 @@ type RankedJob struct {
 }
 
 type SearchRequest struct {
-	Query string `json:"query"`
+	Query     string `json:"query"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type SearchResponse struct {
-	Jobs   []RankedJob `json:"jobs"`
-	Intent UserIntent  `json:"intent"`
+	Message     string       `json:"message,omitempty"`
+	Jobs        []RankedJob  `json:"jobs,omitempty"`
+	Application *Application `json:"application,omitempty"`
 }
 
-type UserIntent struct {
-	Keyword    string `json:"keyword"`
-	City       string `json:"city"`
-	SalaryMin  int    `json:"salary_min"`
-	Experience string `json:"experience"`
+type Application struct {
+	JobTitle    string   `json:"job_title"`
+	Company     string   `json:"company"`
+	CoverLetter string   `json:"cover_letter"`
+	ResumeMD    string   `json:"resume_md"`
+	Highlights  []string `json:"highlights"`
+	GeneratedAt string   `json:"generated_at"`
+}
+
+type ApplyRequest struct {
+	JobURL    string `json:"job_url"`
+	SessionID string `json:"session_id"`
+}
+
+type UploadResponse struct {
+	SessionID string `json:"session_id"`
+	Text      string `json:"text"`
 }

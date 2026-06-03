@@ -2,200 +2,231 @@
 
 ## Project Identity
 
-JobLinker
+JobLinker — AI Recruiting Agent
 
-AI Recruiting Agent
-
-Goal:
-
-Reduce human involvement in recruiting through autonomous AI agents.
+Goal: Reduce human involvement in recruiting through autonomous AI agents.
 
 ---
 
 # Development Roadmap
 
-## Phase 1
+## Phase 1 — Job Search Agent ✅
 
-Job Search Agent
+User Input → Search Jobs → Ranked Results
 
-User Input
-→ Search Jobs
-→ Ranked Results
-
-Tools:
-
-* query_jobs
+Tools: `queryjobs`
 
 Done When:
-
-* Agent can search jobs
-* Agent returns ranked jobs
-* Agent explains recommendations
-* 95% success rate
+- Agent can search jobs ✓
+- Agent returns ranked jobs ✓
+- Agent explains recommendations ✓
 
 ---
 
-## Phase 2
+## Phase 2 — Auto Apply Agent ✅
 
-Auto Apply Agent
+User Input → Search Jobs → Apply Jobs
 
-User Input
-→ Search Jobs
-→ Apply Jobs
-
-Tools:
-
-* query_jobs
-* apply_job
-* parse_resume_pdf
+Tools: `queryjobs`, `applyjob`, `parseresume`
 
 Components:
-
-* SearchIsland (client) — 搜索 + 结果展示 + 申请卡片
-* ResumeChatIsland (client) — PDF 上传 + 聊天补全资料
+- `AppShell.tsx` — client wrapper, holds `sessionId`
+- `SearchIsland.tsx` — `useChat` + job cards + apply flow
+- `ResumeChatIsland.tsx` — PDF upload + chat-to-complete-profile
+- `ApplicationCard.tsx` — cover letter / resume tabs
+- `JobCard.tsx` — presentational job card
 
 Endpoints:
+- `POST /api/chat` — AI SDK v6 SSE: search agent (streaming)
+- `POST /api/chat/resume` — raw SSE: resume agent chat
+- `POST /api/apply` — JSON: generate application
+- `POST /api/resume/upload` — FormData: PDF upload + parse
+- `GET /health` — health check
 
-* POST /api/search — 搜索职位
-* SSE /api/chat/resume — 简历 Agent 聊天流
-* POST /api/apply — 生成申请（求职信 + 定制简历）
-
-Done When:
-
-* Resume Agent 解析 PDF + 聊天补全 CandidateProfile
-* Search Agent 根据 Job + Profile 生成 Application
-* 前端同时展示两个岛屿，申请展示为明信片式 UI
-* User does not manually write content
-
----
-
-## Phase 3
-
-Recruiter Chat
-
-User
-↔ Agent
-↔ Recruiter
-
-Capabilities:
-
-* Multi-turn conversation
-* Context tracking
-* Job discussion
+Protocol:
+- AI SDK v6 stream: `start` → `text-start` → `text-delta`* → `text-end` → `data-*` → `finish`
+- Data events: `data-jobs` (array), `data-application` (object)
 
 Done When:
-
-* 20-turn conversations succeed
-* Context remains consistent
-
----
-
-## Phase 4
-
-A2A Recruiter
-
-Candidate Agent
-↔ Recruiter Agent
-
-Done When:
-
-* Agents communicate autonomously
-* No human required during conversation
-* Conversation state is trackable
+- Resume Agent parses PDF + chat completes CandidateProfile ✓
+- Search Agent searches + ranks jobs ✓
+- Apply generates cover letter + tailored resume ✓
+- All builds pass: `go build ./...`, `npx tsc --noEmit`, `npx next build` ✓
 
 ---
 
-## Phase 5
+## Phase 3 — Recruiter Chat
+a2a protocol 
+# A2A Protocol for agent communication and discovery
+https://www.a2a-registry.org/about/a2a
+https://a2a-protocol.org/latest/specification/#8-agent-discovery-the-agent-card
+https://modelcontextprotocol.io/introduction
+https://www.a2a-registry.org/resources
+https://github.com/a2aproject/A2A
+https://a2a-protocol.org/latest/topics/agent-discovery/
+https://a2a-protocol.org/latest/topics/what-is-a2a/
+https://adk.dev/a2a/intro/
+Define capabilities in a machine-readable schema agent card
+Negotiate context window sizes and pricing before exchanging data
+Verify identity using cryptographic signatures DID/VC methods
+User ↔ Agent ↔ Recruiter
 
-Negotiation
-
-Candidate Agent
-↔ Recruiter Agent
-
-Capabilities:
-
-* Salary negotiation
-* Start date negotiation
-* Offer generation
-
-Done When:
-
-* Offer generated automatically
-* Human only confirms final result
-
----
-
-## Phase 6
-
-Memory
-
-Capabilities:
-
-* Preference extraction
-* Preference recall
-* Long-term user profile
-
-Done When:
-
-* Previous preferences affect future decisions
+Capabilities: Multi-turn conversation, context tracking, job discussion
 
 ---
 
-## Phase 7
+## Phase 4 — A2A Recruiter
 
-Autonomous Recruiting
-
-Search
-→ Apply
-→ Chat
-→ Negotiate
-→ Offer
-→ Human Confirmation
-
-Done When:
-
-* End-to-end recruiting workflow is autonomous
+Candidate Agent ↔ Recruiter Agent
 
 ---
 
-# Forbidden During Early Phases
+## Phase 5 — Negotiation
 
-Until Phase 4:
-
-DO NOT BUILD
-
-* RabbitMQ
-* Kafka
-* Workflow Engine
-* DAG Engine
-* Multi-Agent Framework
-* Plugin Marketplace
-* MCP Infrastructure
-* Vector Memory
-
-unless explicitly required by roadmap.
+Salary negotiation, start date negotiation, offer generation
 
 ---
 
-# Engineering Philosophy
+## Phase 6 — Memory
 
-Simple > Clever
+Preference extraction, preference recall, long-term user profile
 
-Working > Scalable
+---
 
-Delivered > Designed
+## Phase 7 — Autonomous Recruiting
 
-Validated > Imagined
+Search → Apply → Chat → Negotiate → Offer → Human Confirmation
 
-# Must
+---
 
-use rtk  example rtk git status , git commit -m   
-every phase test must use playwright cli  skills to open browser
-and test the agent's capabilities in a real browser environment.
-frontend test ui element  and backend test api response and agent's decision making process.
-every phase run check issues  git checkout main -> new checkout branch-> commit changes -> push to origin -> create PR
-remember to commit run eslint ,build ,type check  fontend and backend code before push to origin
-Base environment : run scripts/start.sh
+# Architecture
 
-# Must Not
-forbid hardcode and call ai api mock data
+## Frontend (Next.js 16 App Router)
+
+- `page.tsx` — **server component** (no `"use client"`)
+- Client islands in `src/components/`: `AppShell`, `SearchIsland`, `ResumeChatIsland`, `ApplicationCard`, `JobCard`
+- Types in `src/lib/types.ts`, hooks in `src/lib/chat.ts`
+- Chat uses `@ai-sdk/react` v3 `useChat` with `DefaultChatTransport`
+- AI SDK v6 `UIMessage.parts` (not `content`) for rendering
+
+## Backend (Go)
+
+- `cmd/server/main.go` — routes, SSE streaming, CORS
+- `internal/agent/` — `Agent` (Eino ReAct agent) + `ResumeAgent`
+- `internal/tools/applyjob/` — Firecrawl scrape + LLM generate application
+- `internal/tools/queryjobs/` — Indeed China job search
+- `internal/tools/parseresume/` — PDF parsing via Firecrawl
+- `internal/checkpoint/` — in-memory + file persistence CandidateProfile store
+- `internal/job/` — `SearchResponse` with `Message`, `Jobs`, `Application`
+
+---
+
+# Build & Test
+
+```bash
+# Backend
+cd /home/lora/repos/joblinker
+go build ./...
+go vet ./...
+go test ./...
+
+# Frontend
+cd frontend
+npx tsc --noEmit
+npx next build
+npm run dev
+
+# Run full stack
+./scripts/start.sh
+```
+
+# Every phase: `git checkout main` → new branch → commit → push → PR
+
+# Wheel Ban — Use Libraries, Don't Build Them
+
+## Golden Rule
+
+If a library or SDK already solves a problem, use it. Don't build a custom version.
+
+## Backend
+
+| Instead of building… | Use Eino / Go stdlib |
+|---|---|
+| Custom agent framework | `github.com/cloudwego/eino` ReAct agent |
+| Custom memory/persistence | `eino MemoryStore` interface + `compose.CheckPointStore` |
+| Custom SSE streaming | `io.Writer` + `json.NewEncoder` (keep it minimal) |
+| Custom tool system | Eino `tool.Tool` interface |
+
+## Frontend
+
+| Instead of building… | Use Vercel AI SDK / shadcn |
+|---|---|
+| Custom `useChat` hook | `@ai-sdk/react` `useChat()` with `DefaultChatTransport` |
+| Custom message parts state | AI SDK v6 `UIMessage.parts` — read don't duplicate |
+| Custom chat UI (Conversation, Message, PromptInput) | `ai-elements` from `elements.ai-sdk.dev` |
+| Custom markdown renderer | `streamdown` + `@streamdown/*` plugins |
+| Custom SSE reader | AI SDK `DefaultChatTransport` / `TextStreamChatTransport` |
+| Custom job card state (`structured.jobs`) | `message.parts` `data-jobs` via `useMemo` |
+
+## Enforcement
+
+1. Every new file under `src/components/` or `internal/` must answer: "does a library already do this?"
+2. Two 🔴 audit categories:
+   - **🔴 State duplication**: data that exists in `UIMessage.parts` must NOT be copied into separate `useState`
+   - **🔴 SDK bypass**: `setMessages()` direct manipulation should be avoided — use `sendMessage()` / `append()` instead
+3. If a library exists but you choose not to use it, document the reason in a comment
+
+# Forbidden
+- No RabbitMQ, Kafka, Workflow Engine, DAG Engine, MCP Infrastructure, Vector Memory until Phase 4
+- No hardcoded mock data — always call real APIs
+- No `-o` flag with `go build` (use `go build ./cmd/server/` then `mv server output/`)
+
+# Immutable Lessons
+
+**这些教训不可违反，记录原因是当时犯过错误。**
+
+## 1. 系统提示词禁止包含 LLM 可伪造的 JSON 模板
+
+❌ **错误做法**:
+```
+- 生成申请后附加JSON：
+  ===JSON===
+  {"application":{"job_title":"...","company":"...","cover_letter":"...","resume_md":"..."}}
+  ===END===
+```
+
+✅ **正确做法**: 由工具返回真实数据，后端统一提取 JSON。提示词只说明"工具会自动处理"。
+
+**原因**: LLM 看到完整的 JSON 格式会跳过工具调用，直接伪造假数据输出。这是 Phase 2 三天才找到的 root cause。
+
+## 2. 不依赖 LLM 提取 `session_id` 等机器生成 ID
+
+❌ **错误做法**: 把 `session_id` 放在系统提示词里让 LLM 读取并传给工具参数。
+
+✅ **正确做法**: 通过 Go `context.Context` 传递 session_id，工具从 `ctx` 中读取。
+
+**原因**: LLM 对 `s170405c1` 这种简短机器 ID 的提取和传递不可靠 → 传空/传错 → 工具拿到 `:profile`（空 session_id）→ 永远找不到 profile。Context 方式 100% 可靠。
+
+## 3. context key type 必须跨包可访问
+
+❌ **错误做法**: 在 `agent` 包内定义 `type sessionIDKey struct{}`（unexported），其他包无法读取。
+
+✅ **正确做法**: 共享 key 放在 `internal/session/context.go`，导出 `SessionIDFromContext()` / `WithSessionID()`。
+
+**原因**: Eino 工具在 `applyjob` 包中执行，无法访问 `agent` 包的私有 key → context 有值但工具拿不到。
+
+## 4. `useChat` + `useRef` 不随 prop 更新
+
+❌ **错误做法**: `const chat = useRef(new Chat(...))` — transport 在首次渲染后不变，`sessionId` 变化无效。
+
+✅ **正确做法**: `useChat({ id: sessionId ?? "no-session" })` — `id` 变化时 Chat 实例重建。
+
+**原因**: sessionId 从 `null` → 上传后的值，但 Chat 实例的 transport 仍是初始化时的 `undefined` → 简历 chat 发到错误的 `/api/chat` 端点（搜索 agent），而不是 `/api/chat/resume`。
+
+## 5. 禁止提示词中包含"让 LLM 自己做"的指令
+
+❌ **错误做法**: 提示词说"生成申请后附加JSON"，暗示 LLM 自己构造数据。
+
+✅ **正确做法**: 工具返回值是唯一数据来源。提示词只描述流程，不描述输出格式细节。
+
+**原因**: LLM 是"过分配合"的 — 你给它一个模板，它就填模板，而不是调用工具。所有结构化数据必须来自工具/API 返回值。
