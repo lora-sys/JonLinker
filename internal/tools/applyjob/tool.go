@@ -56,7 +56,7 @@ func (t *SearchTool) InvokableRun(ctx context.Context, argumentsInJSON string, _
 
 	app, err := t.dApply.Generate(ctx, args.JobURL, sessionID)
 	if err != nil {
-		return fmt.Sprintf("申请生成失败: %v", err), nil
+		return "", fmt.Errorf("申请生成失败: %w", err)
 	}
 
 	data, err := json.Marshal(app)

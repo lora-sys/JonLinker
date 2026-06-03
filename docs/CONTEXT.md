@@ -20,13 +20,9 @@ _Avoid_: Resume, CV, 简历
 针对特定职位的申请包，包含定制求职信 + 针对性简历，由 Search Agent 的 `apply_job` 工具生成。
 _Avoid_: Apply request, 投递
 
-**SearchIsland**:
-前端搜索职位的客户端岛屿组件。聊天式界面，支持搜索和申请一体化对话。
-_Avoid_: Search page, Search form
-
-**ResumeChatIsland**:
-前端简历聊天的客户端岛屿组件。
-_Avoid_: Chat page, Profile form
+**UnifiedChatIsland**:
+前端统一的聊天客户端岛屿组件，整合搜索职位、申请和简历补全对话。
+_Avoid_: Search page, Chat page, Search form, Profile form
 
 **SSE Streaming**:
 Go 后端通过 Server-Sent Events 向前端推送 Agent 对话流的通信方式。
@@ -53,7 +49,7 @@ _Avoid_: SPA, CSR-only
 - **Search Agent** 拥有 `query_jobs` 工具
 - **Search Agent** 拥有 `apply_job` 工具（从 CheckpointStore 读 CandidateProfile + 接收 Job，生成 Application）
 - **Resume Agent** 拥有 `parse_resume_pdf` 工具（通过 Firecrawl CLI 解析 PDF）
-- **Resume Agent** 通过 SSE Streaming 与 ResumeChatIsland 对话
+- **Resume Agent** 通过 SSE Streaming 与 UnifiedChatIsland 对话
 - **Resume Agent** 将 CandidateProfile 写入 CheckpointStore
 - **Search Agent** 从 CheckpointStore 读取 CandidateProfile
 - 一个 **CandidateProfile** 可为多个 **Application** 提供基础数据

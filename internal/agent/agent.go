@@ -121,6 +121,7 @@ func (a *Agent) Search(ctx context.Context, query, sessionID string) (*schema.Me
 	ctx = session.WithSessionID(ctx, sessionID)
 
 	mu := a.locks.Get(sessionID)
+	defer a.locks.Remove(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -152,6 +153,7 @@ func (a *Agent) SearchStream(ctx context.Context, query, sessionID string, onTok
 	ctx = session.WithSessionID(ctx, sessionID)
 
 	mu := a.locks.Get(sessionID)
+	defer a.locks.Remove(sessionID)
 	mu.Lock()
 	defer mu.Unlock()
 

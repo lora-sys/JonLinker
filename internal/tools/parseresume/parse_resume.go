@@ -8,6 +8,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+
+	"github.com/lora-sys/JonLinker/internal/http"
 )
 
 type Tool struct {
@@ -43,14 +45,14 @@ func (t *Tool) parseViaAPI(ctx context.Context, filename string, data []byte) (s
 		return "", fmt.Errorf("close multipart writer: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.firecrawl.dev/v1/scrape", body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.firecrawl.dev/v1/upload", body)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+t.apiKey)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpc.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("firecrawl API request: %w", err)
 	}

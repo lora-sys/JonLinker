@@ -341,6 +341,40 @@ export const MessageResponse = memo(
 
 MessageResponse.displayName = "MessageResponse";
 
+import { Spinner } from "@/components/ui/spinner";
+
+export type MessageReasoningProps = {
+  text: string;
+  state?: "streaming" | "done";
+  isStreaming?: boolean;
+};
+
+export const MessageReasoning = memo(
+  ({ text, state, isStreaming }: MessageReasoningProps) => {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+      <div className="rounded-lg border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-1.5 font-medium mb-1"
+        >
+          {isStreaming && state === "streaming"
+            ? <Spinner className="size-3" />
+            : <span>{expanded ? "▼" : "▶"}</span>
+          }
+          AI 推理过程
+        </button>
+        {expanded && (
+          <div className="whitespace-pre-wrap text-muted-foreground/80">
+            {text}
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
 export type MessageToolbarProps = ComponentProps<"div">;
 
 export const MessageToolbar = ({

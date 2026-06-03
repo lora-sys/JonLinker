@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
 	"github.com/lora-sys/JonLinker/internal/http"
 	"github.com/lora-sys/JonLinker/internal/job"
+	"github.com/lora-sys/JonLinker/internal/llm"
 	"github.com/lora-sys/JonLinker/internal/resume"
 )
 
@@ -32,21 +35,21 @@ func extractTitle(raw string) string {
 }
 
 type DirectApply struct {
-	store   compose.CheckPointStore
-	fcKey   string
-	baseURL string
-	apiKey  string
-	model   string
+	store     compose.CheckPointStore
+	fcKey     string
+	chatModel *openai.ChatModel
 }
 
-func NewDirectApply(store compose.CheckPointStore, fcKey, baseURL, apiKey, model string) *DirectApply {
-	return &DirectApply{
-		store:   store,
-		fcKey:   fcKey,
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		model:   model,
+func NewDirectApply(store compose.CheckPointStore, fcKey, baseURL, apiKey, model string) (*DirectApply, error) {
+	cm, err := llm.NewChatModel(context.Background(), baseURL, apiKey, model, 4096, 0.3)
+	if err != nil {
+		return nil, fmt.Errorf("init chat model: %w", err)
 	}
+	return &DirectApply{
+		store:     store,
+		fcKey:     fcKey,
+		chatModel: cm,
+	}, nil
 }
 
 func (d *DirectApply) Generate(ctx context.Context, jobURL, sessionID string) (*job.Application, error) {
@@ -107,62 +110,12 @@ func (d *DirectApply) Generate(ctx context.Context, jobURL, sessionID string) (*
 {"cover_letter":"...", "resume_md":"...", "highlights":["...","..."]}`,
 		string(jobRaw), profileJSON)
 
-	llmReq := map[string]any{
-		"model": d.model,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
-		"temperature": 0.3,
-		"max_tokens":  4096,
-	}
-	llmBody, err := json.Marshal(llmReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal llm request: %w", err)
-	}
-
-	llmReq2, err := http.NewRequestWithContext(ctx, "POST", d.baseURL+"/chat/completions",
-		strings.NewReader(string(llmBody)))
-	if err != nil {
-		return nil, fmt.Errorf("create llm request: %w", err)
-	}
-	llmReq2.Header.Set("Content-Type", "application/json")
-	llmReq2.Header.Set("Authorization", "Bearer "+d.apiKey)
-	llmResp, err := httpc.HTTPClient.Do(llmReq2)
+	result, err := d.chatModel.Generate(ctx, []*schema.Message{{Role: schema.User, Content: prompt}})
 	if err != nil {
 		return nil, fmt.Errorf("llm call: %w", err)
 	}
-	defer llmResp.Body.Close()
 
-	llmRaw, err := io.ReadAll(llmResp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read llm response: %w", err)
-	}
-	if llmResp.StatusCode != 200 {
-		return nil, fmt.Errorf("llm failed (%d): %s", llmResp.StatusCode, string(llmRaw))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(llmRaw, &result); err != nil {
-		return nil, fmt.Errorf("parse llm response: %w", err)
-	}
-	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in llm response")
-	}
-
-	content := result.Choices[0].Message.Content
-
-	if idx := strings.Index(content, "{"); idx >= 0 {
-		content = content[idx:]
-	}
-	if idx := strings.LastIndex(content, "}"); idx >= 0 {
-		content = content[:idx+1]
-	}
+	content := llm.ExtractJSONBlock(result.Content)
 
 	var gen struct {
 		CoverLetter string   `json:"cover_letter"`

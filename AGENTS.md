@@ -31,9 +31,8 @@ We are NOT building: Agent Framework, Workflow Engine, MCP Platform, Multi-Agent
 ### Frontend (Next.js 16 App Router)
 - `page.tsx` — **server component** (no `"use client"`)
 - `AppShell.tsx` — client wrapper: `sessionId` state + 2-column grid
-- `SearchIsland.tsx` — `useChat` from `@ai-sdk/react` v3, `DefaultChatTransport`
-- `ResumeChatIsland.tsx` — custom `useSSEChat` hook for resume agent
-- Types in `lib/types.ts`, helpers in `lib/chat.ts`
+- `UnifiedChatIsland.tsx` — `useChat` from `@ai-sdk/react` v3, `DefaultChatTransport`
+- Types in `lib/types.ts`, helpers in `lib/ai-utils.ts`
 - AI SDK v6 protocol: `start` → `text-start` → `text-delta*` → `text-end` → `data-*` → `finish`
 
 ### Backend (Go)

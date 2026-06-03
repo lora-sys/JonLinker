@@ -110,13 +110,7 @@ func (a *ResumeAgent) ChatStream(ctx context.Context, sessionID, userMsg string,
 		return "", fmt.Errorf("write memory: %w", err)
 	}
 
-	jsonPart := reply
-	if idx := strings.Index(jsonPart, "{"); idx >= 0 {
-		jsonPart = jsonPart[idx:]
-	}
-	if idx := strings.LastIndex(jsonPart, "}"); idx >= 0 {
-		jsonPart = jsonPart[:idx+1]
-	}
+	jsonPart := llm.ExtractJSONBlock(reply)
 
 	var state struct {
 		Complete bool                    `json:"complete"`

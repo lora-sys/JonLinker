@@ -31,8 +31,7 @@ Tools: `queryjobs`, `applyjob`, `parseresume`
 
 Components:
 - `AppShell.tsx` — client wrapper, holds `sessionId`
-- `SearchIsland.tsx` — `useChat` + job cards + apply flow
-- `ResumeChatIsland.tsx` — PDF upload + chat-to-complete-profile
+- `UnifiedChatIsland.tsx` — unified `useChat` + job cards + apply flow + PDF upload
 - `ApplicationCard.tsx` — cover letter / resume tabs
 - `JobCard.tsx` — presentational job card
 
@@ -104,8 +103,8 @@ Search → Apply → Chat → Negotiate → Offer → Human Confirmation
 ## Frontend (Next.js 16 App Router)
 
 - `page.tsx` — **server component** (no `"use client"`)
-- Client islands in `src/components/`: `AppShell`, `SearchIsland`, `ResumeChatIsland`, `ApplicationCard`, `JobCard`
-- Types in `src/lib/types.ts`, hooks in `src/lib/chat.ts`
+- Client islands in `src/components/`: `AppShell`, `UnifiedChatIsland`, `ApplicationCard`, `JobCard`
+- Types in `src/lib/types.ts`, helpers in `src/lib/ai-utils.ts`
 - Chat uses `@ai-sdk/react` v3 `useChat` with `DefaultChatTransport`
 - AI SDK v6 `UIMessage.parts` (not `content`) for rendering
 

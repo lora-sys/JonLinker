@@ -59,7 +59,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ..
 
 	jobs, err := t.searchIndeed(ctx, args.Keyword, args.City)
 	if err != nil {
-		return fmt.Sprintf("搜索职位出错: %v", err), nil
+		return "", fmt.Errorf("搜索职位出错: %w", err)
 	}
 
 	data, err := json.Marshal(jobs)

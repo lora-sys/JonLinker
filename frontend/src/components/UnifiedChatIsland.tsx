@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, isDataUIPart } from "ai";
+import type { UIMessage } from "ai";
 import {
   Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-  Message, MessageContent, MessageResponse,
+  Message, MessageContent, MessageResponse, MessageReasoning,
 } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -25,11 +26,12 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { XIcon } from "lucide-react";
-import { getTextFromParts } from "@/lib/ai-utils";
+import { getTextFromParts, getToolCallName, getToolStateLabel, TOOL_DISPLAY_MAP } from "@/lib/ai-utils";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import type { RankedJob, Application } from "@/lib/types";
+import type { RankedJob, Application, ChatDataTypes } from "@/lib/types";
 import { JobCard } from "@/components/JobCard";
 import { ApplicationCard } from "@/components/ApplicationCard";
+import { ToolCallCard } from "@/components/ai-elements/tool-call";
 
 function ResumeAttachment() {
   const attachments = usePromptInputAttachments();
@@ -53,16 +55,18 @@ export function UnifiedChatIsland() {
   const [application, setApplication] = useState<Application | undefined>();
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const pendingUploadRef = useRef<string | null>(null);
+  const lastApplyJobRef = useRef<RankedJob | null>(null);
+  const lastUploadRef = useRef<{ text: string; file: File } | null>(null);
 
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: "/api/chat/unified",
-      body: sessionId ? { session_id: sessionId } : undefined,
     }),
-    [sessionId],
+    [],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, status, error, stop, regenerate } = useChat<UIMessage<unknown, ChatDataTypes>>({
     id: sessionId ?? "no-session",
     transport,
     experimental_throttle: 50,
@@ -75,8 +79,8 @@ export function UnifiedChatIsland() {
       const msg = messages[i];
       if (msg.role === 'assistant') {
         for (const part of msg.parts) {
-          if (part.type === 'data-jobs' && Array.isArray((part as any).data)) {
-            return (part as any).data as RankedJob[];
+          if (isDataUIPart(part) && part.type === 'data-jobs') {
+            return part.data as unknown as RankedJob[];
           }
         }
         break;
@@ -88,8 +92,8 @@ export function UnifiedChatIsland() {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       for (const part of msg.parts) {
-        if (part.type === 'data-application' && (part as any).data) {
-          return (part as any).data as Application;
+        if (isDataUIPart(part) && part.type === 'data-application') {
+          return part.data as unknown as Application;
         }
       }
     }
@@ -99,38 +103,21 @@ export function UnifiedChatIsland() {
   useEffect(() => {
     for (const msg of messages) {
       for (const part of msg.parts) {
-        if (part.type === "data-resume") {
-          if ((part as any).data?.complete) {
-            setProfileReady(true);
-            return;
-          }
+        if (isDataUIPart(part) && part.type === 'data-resume' && (part.data as any).complete) {
+          setProfileReady(true);
+          return;
         }
       }
     }
   }, [messages]);
 
-  async function uploadResume(file: File): Promise<string | null> {
-    setUploading(true);
-    setUploadError(null);
-    setApplication(undefined);
-    setApplyError(null);
-    try {
-      const fd = new FormData();
-      fd.set("file", file);
-      const res = await fetch("/api/resume/upload", { method: "POST", body: fd });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "上传失败，请重试");
-      }
-      const data = await res.json();
-      return data.session_id || null;
-    } catch (e) {
-      setUploadError(e instanceof Error ? e.message : "上传失败，请重试");
-      return null;
-    } finally {
-      setUploading(false);
+  useEffect(() => {
+    if (sessionId && pendingUploadRef.current) {
+      const text = pendingUploadRef.current;
+      pendingUploadRef.current = null;
+      sendMessage({ text }, { body: { session_id: sessionId } });
     }
-  }
+  }, [sessionId, sendMessage]);
 
   const handleSubmit = useCallback(async (msg: PromptInputMessage) => {
     const hasText = Boolean(msg.text?.trim());
@@ -141,29 +128,46 @@ export function UnifiedChatIsland() {
     // First upload: attach PDF → upload to backend → get sessionId
     if (!sessionId && hasFiles) {
       const pdf = msg.files[0];
-      const resp = await fetch(pdf.url);
-      const blob = await resp.blob();
-      const file = new File([blob], pdf.filename || "resume.pdf", { type: pdf.mediaType || "application/pdf" });
-      const sid = await uploadResume(file);
-      if (!sid) return;
-      setSessionId(sid);
-      setProfileReady(true);
-      // Send the text message after session is ready
-      if (msg.text?.trim()) {
-        sendMessage({ text: msg.text.trim() });
+      setUploading(true);
+      setUploadError(null);
+      try {
+        const resp = await fetch(pdf.url);
+        const blob = await resp.blob();
+        const file = new File([blob], pdf.filename || "resume.pdf", { type: pdf.mediaType || "application/pdf" });
+        const fd = new FormData();
+        fd.set("file", file);
+        lastUploadRef.current = { text: msg.text || "", file };
+        const res = await fetch("/api/resume/upload", { method: "POST", body: fd });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "上传失败，请重试");
+        }
+        const data = await res.json();
+        const sid = data.session_id;
+        if (!sid) throw new Error("获取会话ID失败");
+
+        setSessionId(sid);
+        setProfileReady(true);
+        setUploading(false);
+        pendingUploadRef.current = msg.text?.trim() || "你好，我上传了简历，请帮我完善资料。";
+      } catch (e) {
+        setUploading(false);
+        setUploadError(e instanceof Error ? e.message : "上传失败，请重试");
       }
       return;
     }
 
     if (hasText) {
-      sendMessage({ text: msg.text.trim() });
+      const options = sessionId ? { body: { session_id: sessionId } as const } : undefined;
+      sendMessage({ text: msg.text.trim() }, options);
     }
-  }, [sessionId, sendMessage, uploadResume]);
+  }, [sessionId, sendMessage]);
 
   async function handleApply(job: RankedJob) {
     if (!sessionId) return;
     setApplyError(null);
     setApplying(job.url);
+    lastApplyJobRef.current = job;
     try {
       const res = await fetch("/api/apply", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -177,6 +181,42 @@ export function UnifiedChatIsland() {
     } finally { setApplying(null); }
   }
 
+  const handleReset = useCallback(() => {
+    setSessionId(null);
+    setProfileReady(false);
+    setUploading(false);
+    setApplication(undefined);
+    setUploadError(null);
+    setApplyError(null);
+    if (setMessages) setMessages([]);
+  }, [setMessages]);
+
+  const retryUpload = useCallback(async () => {
+    if (!lastUploadRef.current) return;
+    const { text, file } = lastUploadRef.current;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await fetch("/api/resume/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "上传失败，请重试");
+      }
+      const data = await res.json();
+      const sid = data.session_id;
+      if (!sid) throw new Error("获取会话ID失败");
+      setSessionId(sid);
+      setProfileReady(true);
+      setUploading(false);
+      pendingUploadRef.current = text.trim() || "你好，我上传了简历，请帮我完善资料。";
+    } catch (e) {
+      setUploading(false);
+      setUploadError(e instanceof Error ? e.message : "上传失败，请重试");
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-card rounded-xl border overflow-hidden">
       <div className="px-4 py-3 border-b flex items-center justify-between">
@@ -186,6 +226,14 @@ export function UnifiedChatIsland() {
         </div>
         {profileReady && (
           <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">资料已就绪</span>
+        )}
+        {sessionId && (
+          <button
+            onClick={handleReset}
+            className="text-xs text-muted-foreground hover:text-foreground px-2 py-0.5 rounded-md hover:bg-accent transition-colors"
+          >
+            新对话
+          </button>
         )}
         {!sessionId && !profileReady && (
           <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">请先上传简历</span>
@@ -203,6 +251,19 @@ export function UnifiedChatIsland() {
             messages.map((m, i) => (
               <Message key={m.id} from={m.role}>
                 <MessageContent>
+                  {m.role === 'assistant' && m.parts.filter(p => p.type.startsWith('tool-')).length > 0 && (
+                    <div className="flex flex-col gap-1.5 mb-2">
+                      {m.parts.filter(p => p.type.startsWith('tool-')).map((part, pi) => (
+                        <ToolCallCard
+                          key={pi}
+                          toolName={getToolCallName(part)}
+                          state={(part as any).state || 'input-streaming'}
+                          isStreaming={streaming && i === messages.length - 1}
+                          errorText={(part as any).errorText}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {getTextFromParts(m.parts) && (
                     <MessageResponse
                       mode={streaming && i === messages.length - 1 ? "streaming" : "static"}
@@ -213,8 +274,15 @@ export function UnifiedChatIsland() {
                       {getTextFromParts(m.parts)}
                     </MessageResponse>
                   )}
+                  {i === messages.length - 1 && streaming && !getTextFromParts(m.parts) && m.role === 'assistant' && (
+                    <div className="flex flex-col gap-2 py-2">
+                      <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
+                      <div className="h-4 w-1/2 bg-muted rounded animate-pulse" />
+                      <div className="h-4 w-5/6 bg-muted rounded animate-pulse" />
+                    </div>
+                  )}
                   {error && i === messages.length - 1 && (
-                    <ErrorBanner message={error.message || "请求失败"} />
+                    <ErrorBanner message={error.message || "请求失败"} onRetry={regenerate} />
                   )}
                   {i === messages.length - 1 && jobs && (
                     <div className="space-y-3 mt-2">
@@ -228,7 +296,7 @@ export function UnifiedChatIsland() {
                     </div>
                   )}
                   {i === messages.length - 1 && applyError && (
-                    <ErrorBanner message={applyError} />
+                    <ErrorBanner message={applyError} onRetry={() => { setApplyError(null); if (lastApplyJobRef.current) handleApply(lastApplyJobRef.current); }} />
                   )}
                   {i === messages.length - 1 && (appFromMessages ?? application) && (
                     <ApplicationCard app={appFromMessages ?? application!} />
@@ -272,13 +340,13 @@ export function UnifiedChatIsland() {
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
           </PromptInputTools>
-          <PromptInputSubmit disabled={uploading} status={status} />
+          <PromptInputSubmit disabled={uploading} status={status} onStop={stop} />
         </PromptInputFooter>
       </PromptInput>
 
       {uploadError && (
         <div className="px-3 pb-3">
-          <ErrorBanner message={uploadError} />
+          <ErrorBanner message={uploadError} onRetry={retryUpload} />
         </div>
       )}
     </div>

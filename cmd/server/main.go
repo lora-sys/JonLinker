@@ -51,7 +51,10 @@ func main() {
 	ctx := context.Background()
 
 	cpStore := checkpoint.NewPersistentStore(cfg.SessionFile)
-	dApply := applyjob.NewDirectApply(cpStore, cfg.FirecrawlKey, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	dApply, err := applyjob.NewDirectApply(cpStore, cfg.FirecrawlKey, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	if err != nil {
+		log.Fatalf("init direct apply: %v", err)
+	}
 
 	agentMem := memory.NewStore(cfg)
 	srchAgent, err := agent.New(ctx, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.FirecrawlKey, dApply, agentMem, cpStore)
@@ -201,6 +204,9 @@ func parseAgentResponse(content string) job.SearchResponse {
 }
 
 func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "file too large or invalid"})
 		return
@@ -219,7 +225,7 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	text, err := s.resumeParser.ParseFile(r.Context(), header.Filename, data)
+	text, err := s.resumeParser.ParseFile(ctx, header.Filename, data)
 	if err != nil {
 		log.Printf("parse resume: %v", err)
 		sse.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "parse resume failed: " + err.Error()})
@@ -228,7 +234,7 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := genSessionID()
 
-	ragent, err := agent.NewResumeAgent(r.Context(),
+	ragent, err := agent.NewResumeAgent(ctx,
 		s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, text, s.checkpoint, s.memStore)
 	if err != nil {
 		log.Printf("init resume agent: %v", err)
@@ -241,24 +247,18 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	// Immediately extract a preliminary profile so /api/apply works without prior chat
-	if cm, err := llm.NewChatModel(r.Context(), s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, 1024, 0.3); err == nil {
+	if cm, err := llm.NewChatModel(ctx, s.cfg.OpenAIBaseURL, s.cfg.OpenAIAPIKey, s.cfg.OpenAIModel, 1024, 0.3); err == nil {
 		extractPrompt := fmt.Sprintf(`Extract candidate profile from resume text as JSON. Use empty strings/arrays for missing fields.
 
 %s
 
 {"name":"","title":"","skills":[],"experience":[],"education":[],"phone":"","email":"","summary":"","hobbies":[]}`, text)
-		if result, genErr := cm.Generate(r.Context(), []*schema.Message{{Role: schema.User, Content: extractPrompt}}); genErr == nil {
-			content := result.Content
-			if idx := strings.Index(content, "{"); idx >= 0 {
-				content = content[idx:]
-			}
-			if idx := strings.LastIndex(content, "}"); idx >= 0 {
-				content = content[:idx+1]
-			}
+		if result, genErr := cm.Generate(ctx, []*schema.Message{{Role: schema.User, Content: extractPrompt}}); genErr == nil {
+			content := llm.ExtractJSONBlock(result.Content)
 			var profile resume.CandidateProfile
 			if err := json.Unmarshal([]byte(content), &profile); err == nil && profile.Name != "" {
 				if b, err := json.Marshal(profile); err == nil {
-					if err := s.checkpoint.Set(r.Context(), sessionID+":profile", b); err != nil {
+					if err := s.checkpoint.Set(ctx, sessionID+":profile", b); err != nil {
 						log.Printf("save initial profile: %v", err)
 					}
 				}
@@ -273,6 +273,9 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
 	var req struct {
 		Messages  []chatMessage `json:"messages"`
 		ID        string        `json:"id"`
@@ -306,15 +309,15 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 
 	userMsg := last.text()
 
-	profileData, hasProfile, _ := s.checkpoint.Get(r.Context(), req.SessionID+":profile")
+	profileData, hasProfile, _ := s.checkpoint.Get(ctx, req.SessionID+":profile")
 
 	s.mu.Lock()
-	_, hasResumeAgent := s.resumeAgents[req.SessionID]
+	entry, hasResumeAgent := s.resumeAgents[req.SessionID]
 	s.mu.Unlock()
 
 	kind := agent.Route(hasResumeAgent, profileData, userMsg)
 
-	// Ensure profile exists for search agent if no resume agent
+	// Ensure profile exists for search agent
 	if kind == agent.AgentSearch && !hasProfile {
 		kind = agent.AgentResume
 	}
@@ -327,10 +330,7 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 
 	switch kind {
 	case agent.AgentResume:
-		s.mu.Lock()
-		entry, ok := s.resumeAgents[req.SessionID]
-		s.mu.Unlock()
-		if !ok {
+		if entry == nil {
 			_ = sse.WriteEvent(w, map[string]any{
 				"type":  "text-delta",
 				"id":    msgID,
@@ -342,9 +342,9 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 			return
 		}
-		responseText, err := entry.agent.ChatStream(r.Context(), req.SessionID, userMsg, func(token string) {
+		responseText, err := entry.agent.ChatStream(ctx, req.SessionID, userMsg, func(token string) {
 			select {
-			case <-r.Context().Done():
+			case <-ctx.Done():
 				return
 			default:
 			}
@@ -370,13 +370,7 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 		_ = sse.WriteEvent(w, map[string]string{"type": "text-end", "id": msgID})
 		flusher.Flush()
 
-		jsonPart := responseText
-		if idx := strings.Index(jsonPart, "{"); idx >= 0 {
-			jsonPart = jsonPart[idx:]
-		}
-		if idx := strings.LastIndex(jsonPart, "}"); idx >= 0 {
-			jsonPart = jsonPart[:idx+1]
-		}
+		jsonPart := llm.ExtractJSONBlock(responseText)
 
 		var resumeState struct {
 			Complete bool                    `json:"complete"`
@@ -394,9 +388,9 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 
 	case agent.AgentSearch:
 		var resp job.SearchResponse
-		msg, err := s.searchAgent.SearchStream(r.Context(), userMsg, req.SessionID, func(token string) {
+		msg, err := s.searchAgent.SearchStream(ctx, userMsg, req.SessionID, func(token string) {
 			select {
-			case <-r.Context().Done():
+			case <-ctx.Done():
 				return
 			default:
 			}
@@ -446,13 +440,16 @@ func (s *server) handleUnifiedChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleApply(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+
 	var req job.ApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		sse.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	app, err := s.directApply.Generate(r.Context(), req.JobURL, req.SessionID)
+	app, err := s.directApply.Generate(ctx, req.JobURL, req.SessionID)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, applyjob.ErrProfileNotFound) {
@@ -488,6 +485,9 @@ func (s *server) cleanupLoop(ctx context.Context) {
 			for id, entry := range s.resumeAgents {
 				if time.Since(entry.time) > 30*time.Minute {
 					delete(s.resumeAgents, id)
+					if err := s.checkpoint.DeletePrefix(ctx, id); err != nil {
+						log.Printf("cleanup checkpoint: %v", err)
+					}
 				}
 			}
 			s.mu.Unlock()

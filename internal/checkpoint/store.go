@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/cloudwego/eino/compose"
@@ -61,6 +62,20 @@ func (s *Store) load() {
 		return
 	}
 	s.data = data
+}
+
+func (s *Store) DeletePrefix(_ context.Context, prefix string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.data {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.data, k)
+		}
+	}
+	if s.filePath != "" {
+		return s.persist()
+	}
+	return nil
 }
 
 func (s *Store) persist() error {

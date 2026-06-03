@@ -18,11 +18,6 @@ type RankedJob struct {
 	Highlights []string `json:"highlights"`
 }
 
-type SearchRequest struct {
-	Query     string `json:"query"`
-	SessionID string `json:"session_id,omitempty"`
-}
-
 type SearchResponse struct {
 	Message     string       `json:"message,omitempty"`
 	Jobs        []RankedJob  `json:"jobs,omitempty"`
