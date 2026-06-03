@@ -44,6 +44,22 @@ _Avoid_: Database, session store
 由 `apply_job` 工具为特定职位生成的定制求职信（Markdown 格式）。
 _Avoid_: 自我介绍, 申请信
 
+**Recruiter Agent**:
+模拟招聘官的 Eino ReAct Agent。读取 CandidateProfile + Application，进行多轮面试对话，记录面试反馈。
+_Avoid_: Interview Agent, HR Agent
+
+**InterviewNote**:
+由 `record_interview_note` 工具写入 CheckpointStore 的结构化面试记录，包含问答摘要和综合评价。
+_Avoid_: Feedback, 面评
+
+**LastAgentMarker**:
+CheckpointStore 中 `sessionID+":last_agent"` key，记录当前 session 最后活跃的 Agent 类型。Router 在模糊关键词时回退到此值。
+_Avoid_: Agent state, mode flag
+
+**AgentMemoryNamespace**:
+MemoryStore 中按 Agent 类型隔离的对话历史 key 模式：Search Agent 用 `sessionID`，Recruiter Agent 用 `sessionID+":recruiter"`。
+_Avoid_: Shared history, global context
+
 **Islands Architecture**:
 前端架构模式，交互性组件作为客户端岛屿嵌入服务端渲染页面。
 _Avoid_: SPA, CSR-only
@@ -56,8 +72,13 @@ _Avoid_: SPA, CSR-only
 - **Resume Agent** 通过 SSE Streaming 与 ResumeChatIsland 对话
 - **Resume Agent** 将 CandidateProfile 写入 CheckpointStore
 - **Search Agent** 从 CheckpointStore 读取 CandidateProfile
+- **Recruiter Agent** 拥有 `get_candidate_profile` 工具（从 CheckpointStore 读 CandidateProfile）
+- **Recruiter Agent** 拥有 `record_interview_note` 工具（将 InterviewNote 写入 CheckpointStore）
+- **Recruiter Agent** 通过 SSE Streaming 与 UnifiedChatIsland 对话（复用现有端点）
+- **Recruiter Agent** 与 **Search Agent** 并行存在于同一 session 中，由 router 动态切换
 - 一个 **CandidateProfile** 可为多个 **Application** 提供基础数据
 - 一个 **Application** 对应一个 **Job**
+- 一个 **Recruiter Agent** 会话可讨论多个 **Application**
 
 ## Example dialogue
 
