@@ -8,7 +8,7 @@ import {
   Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-  Message, MessageContent, MessageResponse, MessageReasoning,
+  Message, MessageContent, MessageResponse,
 } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -26,12 +26,17 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { XIcon } from "lucide-react";
-import { getTextFromParts, getToolCallName, getToolStateLabel, TOOL_DISPLAY_MAP } from "@/lib/ai-utils";
+import { getTextFromParts } from "@/lib/ai-utils";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import type { RankedJob, Application, ChatDataTypes } from "@/lib/types";
 import { JobCard } from "@/components/JobCard";
 import { ApplicationCard } from "@/components/ApplicationCard";
-import { ToolCallCard } from "@/components/ai-elements/tool-call";
+import {
+  Tool, ToolHeader, ToolContent, ToolInput, ToolOutput,
+} from "@/components/ai-elements/tool";
+import {
+  Reasoning, ReasoningTrigger, ReasoningContent,
+} from "@/components/ai-elements/reasoning";
 
 function ResumeAttachment() {
   const attachments = usePromptInputAttachments();
@@ -251,19 +256,30 @@ export function UnifiedChatIsland() {
             messages.map((m, i) => (
               <Message key={m.id} from={m.role}>
                 <MessageContent>
-                  {m.role === 'assistant' && m.parts.filter(p => p.type.startsWith('tool-')).length > 0 && (
+                  {m.role === 'assistant' && m.parts.filter(p => p.type === 'tool-invocation' || p.type.startsWith('tool-')).length > 0 && (
                     <div className="flex flex-col gap-1.5 mb-2">
-                      {m.parts.filter(p => p.type.startsWith('tool-')).map((part, pi) => (
-                        <ToolCallCard
-                          key={pi}
-                          toolName={getToolCallName(part)}
-                          state={(part as any).state || 'input-streaming'}
-                          isStreaming={streaming && i === messages.length - 1}
-                          errorText={(part as any).errorText}
-                        />
+                      {m.parts.filter(p => p.type === 'tool-invocation' || p.type.startsWith('tool-')).map((part, pi) => (
+                        <Tool key={pi}>
+                          <ToolHeader type={part.type as any} state={(part as any).state || 'input-streaming'} toolName={(part as any).toolName} />
+                          <ToolContent>
+                            {(part as any).input && <ToolInput input={(part as any).input} />}
+                            {(part as any).output && <ToolOutput output={(part as any).output} errorText={(part as any).errorText} />}
+                          </ToolContent>
+                        </Tool>
                       ))}
                     </div>
                   )}
+                  {m.role === 'assistant' && (() => {
+                    const reasoningParts = m.parts.filter(p => p.type === 'reasoning');
+                    if (reasoningParts.length === 0) return null;
+                    const reasoningText = reasoningParts.map(p => (p as any).text).join("\n\n");
+                    return (
+                      <Reasoning isStreaming={streaming && i === messages.length - 1}>
+                        <ReasoningTrigger />
+                        <ReasoningContent>{reasoningText}</ReasoningContent>
+                      </Reasoning>
+                    );
+                  })()}
                   {getTextFromParts(m.parts) && (
                     <MessageResponse
                       mode={streaming && i === messages.length - 1 ? "streaming" : "static"}

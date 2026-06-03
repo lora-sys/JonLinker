@@ -1,231 +1,176 @@
 # CLAUDE.md
 
-## Project Identity
-
-JobLinker — AI Recruiting Agent
-
-Goal: Reduce human involvement in recruiting through autonomous AI agents.
+Goal: Reduce human involvement in recruiting via autonomous AI agents.
 
 ---
-
-# Development Roadmap
 
 ## Phase 1 — Job Search Agent ✅
-
-User Input → Search Jobs → Ranked Results
-
-Tools: `queryjobs`
-
-Done When:
-- Agent can search jobs ✓
-- Agent returns ranked jobs ✓
-- Agent explains recommendations ✓
-
----
+`queryjobs` — search + rank + explain jobs
 
 ## Phase 2 — Auto Apply Agent ✅
+`queryjobs` + `applyjob` + `parseresume`
 
-User Input → Search Jobs → Apply Jobs
-
-Tools: `queryjobs`, `applyjob`, `parseresume`
-
-Components:
-- `AppShell.tsx` — client wrapper, holds `sessionId`
-- `UnifiedChatIsland.tsx` — unified `useChat` + job cards + apply flow + PDF upload
-- `ApplicationCard.tsx` — cover letter / resume tabs
-- `JobCard.tsx` — presentational job card
+Components: `AppShell` | `UnifiedChatIsland` | `ApplicationCard` | `JobCard`
 
 Endpoints:
-- `POST /api/chat` — AI SDK v6 SSE: search agent (streaming)
-- `POST /api/chat/resume` — raw SSE: resume agent chat
-- `POST /api/apply` — JSON: generate application
-- `POST /api/resume/upload` — FormData: PDF upload + parse
-- `GET /health` — health check
+- `POST /api/chat` — AI SDK v6 SSE search agent
+- `POST /api/apply` — JSON generate application
+- `POST /api/resume/upload` — FormData PDF upload
+- `GET /health`
 
-Protocol:
-- AI SDK v6 stream: `start` → `text-start` → `text-delta`* → `text-end` → `data-*` → `finish`
-- Data events: `data-jobs` (array), `data-application` (object)
-
-Done When:
-- Resume Agent parses PDF + chat completes CandidateProfile ✓
-- Search Agent searches + ranks jobs ✓
-- Apply generates cover letter + tailored resume ✓
-- All builds pass: `go build ./...`, `npx tsc --noEmit`, `npx next build` ✓
-
----
+Protocol: `start` → `text-start` → `text-delta*` → `text-end` → `data-*` → `finish`
+Data events: `data-jobs` (array), `data-application` (object)
 
 ## Phase 3 — Recruiter Chat
-a2a protocol 
-# A2A Protocol for agent communication and discovery
 https://www.a2a-registry.org/about/a2a
 https://a2a-protocol.org/latest/specification/#8-agent-discovery-the-agent-card
 https://modelcontextprotocol.io/introduction
-https://www.a2a-registry.org/resources
 https://github.com/a2aproject/A2A
-https://a2a-protocol.org/latest/topics/agent-discovery/
-https://a2a-protocol.org/latest/topics/what-is-a2a/
 https://adk.dev/a2a/intro/
-Define capabilities in a machine-readable schema agent card
-Negotiate context window sizes and pricing before exchanging data
-Verify identity using cryptographic signatures DID/VC methods
-User ↔ Agent ↔ Recruiter
+Agent Card → capability negotiation → A2A communication
 
-Capabilities: Multi-turn conversation, context tracking, job discussion
+## Phase 4-7
+A2A Recruiter → Negotiation → Memory → Autonomous (Search→Apply→Chat→Negotiate→Offer→Confirm)
 
 ---
 
-## Phase 4 — A2A Recruiter
+## Architecture
 
-Candidate Agent ↔ Recruiter Agent
+### Frontend (Next.js 16 App Router)
+- `page.tsx` — server component
+- Client islands: `AppShell`, `UnifiedChatIsland`, `ApplicationCard`, `JobCard`
+- Types: `src/lib/types.ts`, helpers: `src/lib/ai-utils.ts`
+- Chat: `@ai-sdk/react` `useChat` + `DefaultChatTransport`
+- Messages: AI SDK v6 `UIMessage.parts`
 
----
-
-## Phase 5 — Negotiation
-
-Salary negotiation, start date negotiation, offer generation
-
----
-
-## Phase 6 — Memory
-
-Preference extraction, preference recall, long-term user profile
-
----
-
-## Phase 7 — Autonomous Recruiting
-
-Search → Apply → Chat → Negotiate → Offer → Human Confirmation
+### Backend (Go)
+`cmd/server/main.go` — routes, SSE, CORS
+`internal/agent/` — Eino ReAct Agent + ResumeAgent
+`internal/tools/applyjob/` — Firecrawl + LLM generate application
+`internal/tools/queryjobs/` — Indeed China search
+`internal/tools/parseresume/` — Firecrawl PDF parse
+`internal/checkpoint/` — CandidateProfile store
 
 ---
 
-# Architecture
-
-## Frontend (Next.js 16 App Router)
-
-- `page.tsx` — **server component** (no `"use client"`)
-- Client islands in `src/components/`: `AppShell`, `UnifiedChatIsland`, `ApplicationCard`, `JobCard`
-- Types in `src/lib/types.ts`, helpers in `src/lib/ai-utils.ts`
-- Chat uses `@ai-sdk/react` v3 `useChat` with `DefaultChatTransport`
-- AI SDK v6 `UIMessage.parts` (not `content`) for rendering
-
-## Backend (Go)
-
-- `cmd/server/main.go` — routes, SSE streaming, CORS
-- `internal/agent/` — `Agent` (Eino ReAct agent) + `ResumeAgent`
-- `internal/tools/applyjob/` — Firecrawl scrape + LLM generate application
-- `internal/tools/queryjobs/` — Indeed China job search
-- `internal/tools/parseresume/` — PDF parsing via Firecrawl
-- `internal/checkpoint/` — in-memory + file persistence CandidateProfile store
-- `internal/job/` — `SearchResponse` with `Message`, `Jobs`, `Application`
-
----
-
-# Build & Test
-
+## Build
 ```bash
-# Backend
-cd /home/lora/repos/joblinker
-go build ./...
-go vet ./...
-go test ./...
-
-# Frontend
-cd frontend
-npx tsc --noEmit
-npx next build
-npm run dev
-
-# Run full stack
-./scripts/start.sh
+cd /home/lora/repos/joblinker && go build ./... && go vet ./... && go test ./...
+cd frontend && npx tsc --noEmit && npx next build
 ```
 
-# Every phase: `git checkout main` → new branch → commit → push → PR
+---
 
-# Wheel Ban — Use Libraries, Don't Build Them
+## Wheel Ban — Use Libraries, Don't Build
 
-## Golden Rule
+Golden Rule: If lib exists, use it. No custom versions.
 
-If a library or SDK already solves a problem, use it. Don't build a custom version.
-
-## Backend
-
-| Instead of building… | Use Eino / Go stdlib |
+### Backend
+| Don't build | Use |
 |---|---|
-| Custom agent framework | `github.com/cloudwego/eino` ReAct agent |
-| Custom memory/persistence | `eino MemoryStore` interface + `compose.CheckPointStore` |
-| Custom SSE streaming | `io.Writer` + `json.NewEncoder` (keep it minimal) |
-| Custom tool system | Eino `tool.Tool` interface |
+| Agent framework | `github.com/cloudwego/eino` ReAct |
+| Memory/persistence | `eino MemoryStore` + `compose.CheckPointStore` |
+| SSE streaming | `io.Writer` + `json.NewEncoder` |
+| Tool system | Eino `tool.Tool` |
 
-## Frontend
-
-| Instead of building… | Use Vercel AI SDK / shadcn |
+### Frontend
+| Don't build | Use |
 |---|---|
-| Custom `useChat` hook | `@ai-sdk/react` `useChat()` with `DefaultChatTransport` |
-| Custom message parts state | AI SDK v6 `UIMessage.parts` — read don't duplicate |
-| Custom chat UI (Conversation, Message, PromptInput) | `ai-elements` from `elements.ai-sdk.dev` |
-| Custom markdown renderer | `streamdown` + `@streamdown/*` plugins |
-| Custom SSE reader | AI SDK `DefaultChatTransport` / `TextStreamChatTransport` |
-| Custom job card state (`structured.jobs`) | `message.parts` `data-jobs` via `useMemo` |
+| Custom `useChat` | `@ai-sdk/react` `useChat()` + `DefaultChatTransport` |
+| Chat UI (Conversation/Message/Input) | **`ai-elements` from `elements.ai-sdk.dev`** — 禁止手写 |
+| Tool call card | `ai-elements` `<Tool>` `<ToolHeader>` `<ToolContent>` `<ToolInput>` `<ToolOutput>` |
+| Reasoning panel | `ai-elements` `<Reasoning>` `<ReasoningTrigger>` `<ReasoningContent>` |
+| Markdown renderer | `streamdown` + `@streamdown/*` |
+| SSE reader | AI SDK `DefaultChatTransport` |
+| Job card state | `message.parts` `data-jobs` via `useMemo` |
 
-## Enforcement
+**AI Elements 铁律**: 所有 `src/components/ai-elements/` 下文件必须来自 `npx ai-elements@latest add`。禁止手写。需要新组件用 CLI 安装。
 
-1. Every new file under `src/components/` or `internal/` must answer: "does a library already do this?"
-2. Two 🔴 audit categories:
-   - **🔴 State duplication**: data that exists in `UIMessage.parts` must NOT be copied into separate `useState`
-   - **🔴 SDK bypass**: `setMessages()` direct manipulation should be avoided — use `sendMessage()` / `append()` instead
-3. If a library exists but you choose not to use it, document the reason in a comment
+### Enforcement
+1. Every new file under `src/components/` or `internal/`: "does lib already do this?"
+2. 🔴 State duplication: data in `UIMessage.parts` must NOT copy to separate `useState`
+3. 🔴 SDK bypass: avoid `setMessages()` — use `sendMessage()` / `append()` instead
 
-# Forbidden
-- No RabbitMQ, Kafka, Workflow Engine, DAG Engine, MCP Infrastructure, Vector Memory until Phase 4
-- No hardcoded mock data — always call real APIs
-- No `-o` flag with `go build` (use `go build ./cmd/server/` then `mv server output/`)
+### Forbidden
+- ❌ RabbitMQ, Kafka, Workflow Engine, DAG Engine, MCP, Vector Memory (until Phase 4)
+- ❌ Hardcoded mock data — always call real APIs
+- ❌ `-o` flag with `go build`
+- 🔴 **Custom chat UI components** — must use `ai-elements` CLI
+- 🔴 **`as any` on `UIMessage.parts`** — use `isDataUIPart`, `isTextUIPart`, `isReasoningUIPart` type guards
+- 🔴 **`setTimeout` for React state sync** — use `useRef` + `useEffect`
+- 🔴 **Error-as-success string** — Go tool errors must `return "", fmt.Errorf(...)`
+
+---
 
 # Immutable Lessons
 
-**这些教训不可违反，记录原因是当时犯过错误。**
+**不可违反。每条都是真金白银踩出来的坑。**
 
 ## 1. 系统提示词禁止包含 LLM 可伪造的 JSON 模板
+❌ 提示词给 JSON 模板 → LLM 跳过工具调用伪造假数据。
+✅ 工具返回值是唯一数据来源。提示词只描述流程不描述格式。
+Root cause: Phase 2 花三天才找到。
 
-❌ **错误做法**:
-```
-- 生成申请后附加JSON：
-  ===JSON===
-  {"application":{"job_title":"...","company":"...","cover_letter":"...","resume_md":"..."}}
-  ===END===
-```
+## 2. 不依赖 LLM 提取 `session_id`
+❌ 把 `session_id` 放提示词让 LLM 传给工具。
+✅ Go `context.Context` 传递，工具从 `ctx` 读。
+原因: LLM 对短机器 ID 提取不可靠 → 传空 → 找不到 profile。
 
-✅ **正确做法**: 由工具返回真实数据，后端统一提取 JSON。提示词只说明"工具会自动处理"。
-
-**原因**: LLM 看到完整的 JSON 格式会跳过工具调用，直接伪造假数据输出。这是 Phase 2 三天才找到的 root cause。
-
-## 2. 不依赖 LLM 提取 `session_id` 等机器生成 ID
-
-❌ **错误做法**: 把 `session_id` 放在系统提示词里让 LLM 读取并传给工具参数。
-
-✅ **正确做法**: 通过 Go `context.Context` 传递 session_id，工具从 `ctx` 中读取。
-
-**原因**: LLM 对 `s170405c1` 这种简短机器 ID 的提取和传递不可靠 → 传空/传错 → 工具拿到 `:profile`（空 session_id）→ 永远找不到 profile。Context 方式 100% 可靠。
-
-## 3. context key type 必须跨包可访问
-
-❌ **错误做法**: 在 `agent` 包内定义 `type sessionIDKey struct{}`（unexported），其他包无法读取。
-
-✅ **正确做法**: 共享 key 放在 `internal/session/context.go`，导出 `SessionIDFromContext()` / `WithSessionID()`。
-
-**原因**: Eino 工具在 `applyjob` 包中执行，无法访问 `agent` 包的私有 key → context 有值但工具拿不到。
+## 3. Context key type 必须跨包导出
+❌ `agent` 包内定义 unexported `type sessionIDKey struct{}`。
+✅ 放 `internal/session/context.go`，导出 `SessionIDFromContext()` / `WithSessionID()`。
+原因: Eino 工具在其他包执行，无法访问私有 key。
 
 ## 4. `useChat` + `useRef` 不随 prop 更新
+❌ `useRef(new Chat(...))` — transport 首次渲染后不变。
+✅ `useChat({ id: sessionId ?? "no-session" })` — `id` 变化重建实例。
+原因: sessionId 变但 transport 仍是老的 → 请求发错端点。
 
-❌ **错误做法**: `const chat = useRef(new Chat(...))` — transport 在首次渲染后不变，`sessionId` 变化无效。
+## 5. 禁止提示词"让 LLM 自己做"
+❌ "生成申请后附加JSON" → LLM 自己构造数据不调工具。
+✅ 提示词只描述流程。所有结构化数据必须来自工具/API 返回值。
 
-✅ **正确做法**: `useChat({ id: sessionId ?? "no-session" })` — `id` 变化时 Chat 实例重建。
+## 6. 工具调用必须对用户可见
+❌ Agent 调 `query_jobs` / `apply_job`，UI 卡死 30 秒无反馈。
+✅ 渲染 `UIMessage.parts` 中 `tool-*` 为 `<Tool>` 组件显示状态。
+原因: 无可见性 = 用户以为系统卡死。Agent 产品 vs 聊天机器人的本质区别。
 
-**原因**: sessionId 从 `null` → 上传后的值，但 Chat 实例的 transport 仍是初始化时的 `undefined` → 简历 chat 发到错误的 `/api/chat` 端点（搜索 agent），而不是 `/api/chat/resume`。
+## 7. 禁止 `(part as any)`
+❌ `(part as any).data` — 后端改 data 格式零编译保护。
+✅
+```typescript
+if (isDataUIPart(part) && part.type === 'data-jobs') {
+  return part.data; // RankedJob[]
+}
+function isToolPart(part: UIMessagePart): part is Extract<UIMessagePart, { type: `tool-${string}` }> {
+  return part.type.startsWith('tool-');
+}
+```
+原因: Phase 2 有 6 处 `as any`，后端改格式全部静默断掉。
 
-## 5. 禁止提示词中包含"让 LLM 自己做"的指令
+## 8. 禁止 `setTimeout` 同步 React 状态
+❌ `await new Promise(r => setTimeout(r, 50))` 等状态更新 — 竞态条件。
+✅
+```typescript
+const pendingRef = useRef<string | null>(null);
+setSessionId(sid); pendingRef.current = text;
+useEffect(() => {
+  if (sessionId && pendingRef.current) {
+    sendMessage({ text: pendingRef.current }, { body: { session_id: sessionId } });
+    pendingRef.current = null;
+  }
+}, [sessionId, sendMessage]);
+```
 
-❌ **错误做法**: 提示词说"生成申请后附加JSON"，暗示 LLM 自己构造数据。
+## 9. Go Error 必须作为 error 返回
+❌ `return fmt.Sprintf("失败: %v", err), nil` — LLM 把错误当有效数据解析。
+✅ `return "", fmt.Errorf("失败: %w", err)` — Eino ReAct 知道工具调用失败。
 
-✅ **正确做法**: 工具返回值是唯一数据来源。提示词只描述流程，不描述输出格式细节。
+## 10. HTTP handler 必须设 context deadline
+❌ 直接用 `r.Context()` — LLM/Firecrawl 挂死 handler 也挂死。
+✅ `ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)`。
 
-**原因**: LLM 是"过分配合"的 — 你给它一个模板，它就填模板，而不是调用工具。所有结构化数据必须来自工具/API 返回值。
+## 11. Session 资源必须清理
+❌ `locks.Get(sessionID)` 永远不 Remove；checkpoint.Set() 永远不 Delete。
+✅ 加 `defer locks.Remove(sessionID)`；cleanupLoop 清理检查点。
+原因: 每次 upload 产生新 session，永久占 map 内存。长期运行 OOM。
