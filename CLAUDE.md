@@ -56,22 +56,45 @@ Done When:
 ---
 
 ## Phase 3 — Recruiter Chat
-a2a protocol 
-# A2A Protocol for agent communication and discovery
-https://www.a2a-registry.org/about/a2a
-https://a2a-protocol.org/latest/specification/#8-agent-discovery-the-agent-card
-https://modelcontextprotocol.io/introduction
-https://www.a2a-registry.org/resources
-https://github.com/a2aproject/A2A
-https://a2a-protocol.org/latest/topics/agent-discovery/
-https://a2a-protocol.org/latest/topics/what-is-a2a/
-https://adk.dev/a2a/intro/
-Define capabilities in a machine-readable schema agent card
-Negotiate context window sizes and pricing before exchanging data
-Verify identity using cryptographic signatures DID/VC methods
-User ↔ Agent ↔ Recruiter
 
-Capabilities: Multi-turn conversation, context tracking, job discussion
+User ↔ Agent (plays Recruiter)
+
+### Architecture
+- **Agent**: Eino ReAct Agent (`RecruiterAgent`), parallel with Search/Resume
+- **Memory**: separate namespace (`sessionID+":recruiter"` in MemoryStore)
+- **Entry**: UnifiedChatIsland (`/api/chat/unified`), no new UI
+- **Routing**: parallel 3-way (Search/Resume/Recruiter), `last_agent` marker in CheckpointStore + keyword detection
+- **Frontend**: pure text + tool visibility via AI Elements Tool/ToolHeader/ToolContent; no new `data-*` events
+
+### Tools
+- `get_candidate_profile` — reads CandidateProfile from CheckpointStore
+- `record_interview_note` — writes InterviewNote to CheckpointStore (`sessionID+":interview_"+jobURL`)
+
+### System Prompt
+扮演招聘官 Agent，面试已申请职位的候选人。读取 CandidateProfile + Application，多轮问答，结束后调用 record_interview_note。
+
+### Routing Logic
+```
+hasApplication := checkpoint.HasPrefix(sessionID+":application_")
+keyword := detectInterviewKeyword(msg)
+
+switch {
+case keyword == "search" || (!hasApplication && lastAgent != "recruiter"):
+    return AgentSearch
+case keyword == "recruiter" || lastAgent == "recruiter":
+    // resume profile check first (existing logic)
+    return AgentRecruiter
+default:
+    return lastAgent
+}
+```
+
+### Done When
+- Recruiter Agent reads CandidateProfile + Application from CheckpointStore ✓
+- Multi-turn recruiter conversation works (interview Q&A) ✓
+- `record_interview_note` saves structured interview notes ✓
+- All builds pass ✓
+- Playwright E2E passes ✓
 
 ---
 
