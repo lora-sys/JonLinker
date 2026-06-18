@@ -1,0 +1,415 @@
+# Instincts generated from https://github.com/lora-sys/JonLinker
+# Generated: 2026-05-31T08:24:36.786Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: JonLinker-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Commit Length
+
+## Action
+
+Write moderate-length commit messages (~58 characters)
+
+## Evidence
+
+- Average commit message length: 58 chars
+- Based on 1 commits
+
+---
+id: JonLinker-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: JonLinker-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: JonLinker-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: JonLinker-arch-feature-based
+trigger: "when adding a new feature"
+confidence: 0.85
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Arch Feature Based
+
+## Action
+
+Create a new folder in src/features/ with all related code colocated
+
+## Evidence
+
+- Feature-based module organization detected
+- Structure: src/features/[feature-name]/
+
+---
+id: JonLinker-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Test Framework
+
+## Action
+
+Use playwright as the test framework
+
+## Evidence
+
+- Test framework detected: playwright
+- File pattern: *_test.go
+
+---
+id: JonLinker-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Test Naming
+
+## Action
+
+Name test files using the pattern: *_test.go
+
+## Evidence
+
+- File pattern: *_test.go
+- Consistent across test files
+
+---
+id: JonLinker-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/lora-sys/JonLinker
+---
+
+# JonLinker Test Types
+
+## Action
+
+Write unit, integration tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration
+- Coverage config: no
+
+---
+id: jonlinker-instinct-file-naming
+trigger: "When creating a new file in the repository"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct File Naming
+
+## Action
+
+Name the file using snake_case convention
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.files
+
+---
+id: jonlinker-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+
+---
+id: jonlinker-instinct-class-naming
+trigger: "When defining a new class or struct"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class or struct name
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+
+---
+id: jonlinker-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: jonlinker-instinct-import-style
+trigger: "When importing modules in Go code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+
+---
+id: jonlinker-instinct-export-style
+trigger: "When exporting functions or variables"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+
+---
+id: jonlinker-instinct-go-test-file-naming
+trigger: "When creating a Go test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Go Test File Naming
+
+## Action
+
+Name the file with the *_test.go suffix
+
+## Evidence
+
+- Pattern in testing.filePattern
+
+---
+id: jonlinker-instinct-test-framework
+trigger: "When writing end-to-end or UI tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Test Framework
+
+## Action
+
+Use Playwright as the testing framework
+
+## Evidence
+
+- Pattern in testing.framework
+- Presence of joblinker/frontend/playwright.config.ts
+
+---
+id: jonlinker-instinct-test-type
+trigger: "When organizing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Test Type
+
+## Action
+
+Include both unit and integration tests
+
+## Evidence
+
+- Pattern in testing.testTypes
+
+---
+id: jonlinker-instinct-test-location
+trigger: "When adding test files"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Test Location
+
+## Action
+
+Place test files mixed with source files rather than in a separate test folder
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+
+---
+id: jonlinker-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Commit Format
+
+## Action
+
+Use a freeform commit message without a required prefix
+
+## Evidence
+
+- Pattern in commits.type
+- Example commit: 'new commit ,refactor joblinker project , first mvp 1 phase'
+
+---
+id: jonlinker-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Commit Length
+
+## Action
+
+Write commit messages with an average length of about 58 characters
+
+## Evidence
+
+- Pattern in commits.averageLength
+
+---
+id: jonlinker-instinct-ci-config-location
+trigger: "When configuring CI workflows"
+confidence: 0.8
+domain: workflow
+source: repo-analysis
+source_repo: lora-sys/JonLinker
+---
+
+# Jonlinker Instinct Ci Config Location
+
+## Action
+
+Place CI configuration files in .github/workflows/ci.yml
+
+## Evidence
+
+- Presence of .github/workflows/ci.yml
+
